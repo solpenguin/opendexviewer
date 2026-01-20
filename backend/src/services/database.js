@@ -1,26 +1,56 @@
 const { Pool } = require('pg');
 
-// Connection pool configuration
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 20,                    // Maximum connections in pool
-  idleTimeoutMillis: 30000,   // Close idle connections after 30s
-  connectionTimeoutMillis: 5000 // Timeout for new connections
-});
-
-// Connection error handling
-pool.on('error', (err) => {
-  console.error('Unexpected database pool error:', err.message);
-});
+// Database state
+let pool = null;
+let isConnected = false;
+let connectionAttempts = 0;
+const MAX_CONNECTION_ATTEMPTS = 5;
+const RETRY_DELAY_MS = 5000;
 
 // Auto-approval threshold (submissions auto-approve when score reaches this)
-const AUTO_APPROVE_THRESHOLD = 5;
-const AUTO_REJECT_THRESHOLD = -5;
+const AUTO_APPROVE_THRESHOLD = parseInt(process.env.AUTO_APPROVE_THRESHOLD) || 5;
+const AUTO_REJECT_THRESHOLD = parseInt(process.env.AUTO_REJECT_THRESHOLD) || -5;
 
-// Initialize database tables
+// Create connection pool
+function createPool() {
+  if (!process.env.DATABASE_URL) {
+    console.warn('DATABASE_URL not set - database features disabled');
+    return null;
+  }
+
+  return new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 20,                    // Maximum connections in pool
+    idleTimeoutMillis: 30000,   // Close idle connections after 30s
+    connectionTimeoutMillis: 10000 // Timeout for new connections (increased)
+  });
+}
+
+// Initialize pool
+pool = createPool();
+
+// Connection error handling
+if (pool) {
+  pool.on('error', (err) => {
+    console.error('Unexpected database pool error:', err.message);
+    isConnected = false;
+  });
+}
+
+// Initialize database tables with retry logic
 async function initializeDatabase() {
-  const client = await pool.connect();
+  if (!pool) {
+    console.warn('No database pool available - skipping initialization');
+    return false;
+  }
+
+  connectionAttempts++;
+  console.log(`Database connection attempt ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS}...`);
+
+  let client;
+  try {
+    client = await pool.connect();
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS tokens (
