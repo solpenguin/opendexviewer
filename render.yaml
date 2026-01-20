@@ -1,6 +1,9 @@
 # Render Blueprint - OpenDexViewer
 # Deploy with: render blueprint apply
 # Documentation: https://render.com/docs/blueprint-spec
+#
+# NOTE: Static sites cannot be created via blueprint.
+# After deploying this blueprint, manually create the frontend static site.
 
 services:
   # =====================================================
@@ -15,8 +18,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
-    numInstances: 1
-    autoDeploy: true
     envVars:
       # Database connection (auto-populated from Render PostgreSQL)
       - key: DATABASE_URL
@@ -33,8 +34,6 @@ services:
       # Application settings
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "10000"
 
       # CORS - Update this to your actual frontend URL
       - key: CORS_ORIGIN
@@ -45,10 +44,6 @@ services:
         value: "60000"
       - key: RATE_LIMIT_MAX_REQUESTS
         value: "100"
-      - key: RATE_LIMIT_STRICT_MAX
-        value: "20"
-      - key: RATE_LIMIT_WALLET_MAX
-        value: "30"
 
       # Cache settings (seconds)
       - key: CACHE_TOKEN_TTL
@@ -62,50 +57,6 @@ services:
       - key: AUTO_REJECT_THRESHOLD
         value: "-5"
 
-  # =====================================================
-  # Frontend Static Site
-  # =====================================================
-  - type: static
-    name: opendex-frontend
-    rootDir: frontend
-    buildCommand: echo "Static HTML - no build needed"
-    staticPublishPath: .
-    pullRequestPreviewsEnabled: true
-    autoDeploy: true
-    headers:
-      # Default caching for HTML
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=300
-      # Longer cache for static assets
-      - path: /js/*
-        name: Cache-Control
-        value: public, max-age=86400
-      - path: /css/*
-        name: Cache-Control
-        value: public, max-age=86400
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=604800
-      # Security headers
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: X-Frame-Options
-        value: SAMEORIGIN
-      - path: /*
-        name: X-XSS-Protection
-        value: "1; mode=block"
-    routes:
-      # SPA-style routing - serve index.html for unknown paths
-      - type: rewrite
-        source: /token/*
-        destination: /token.html
-      - type: rewrite
-        source: /submit
-        destination: /submit.html
-
 # =====================================================
 # PostgreSQL Database
 # =====================================================
@@ -113,16 +64,21 @@ databases:
   - name: opendex-db
     plan: free
     region: oregon
-    postgresMajorVersion: "15"
-    ipAllowList: []  # Empty = allow all (required for Render services)
+    databaseName: opendex
+    user: opendex_user
 
 # =====================================================
-# Environment Groups (for sharing env vars)
+# MANUAL STEP REQUIRED:
+# After blueprint deployment, create a Static Site manually:
+#
+# 1. Go to Render Dashboard > New > Static Site
+# 2. Connect your GitHub repository
+# 3. Configure:
+#    - Name: opendex-frontend
+#    - Root Directory: frontend
+#    - Build Command: echo "No build needed"
+#    - Publish Directory: .
+# 4. Add these rewrite rules in Settings > Redirects/Rewrites:
+#    - Source: /token/*  -> Destination: /token.html (Rewrite)
+#    - Source: /submit   -> Destination: /submit.html (Rewrite)
 # =====================================================
-envVarGroups:
-  - name: opendex-shared
-    envVars:
-      - key: APP_NAME
-        value: OpenDexViewer
-      - key: APP_VERSION
-        value: "1.0.0"
