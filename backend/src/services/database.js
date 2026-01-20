@@ -94,6 +94,8 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_submissions_token ON submissions(token_mint);
       CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
       CREATE INDEX IF NOT EXISTS idx_votes_submission ON votes(submission_id);
+      CREATE INDEX IF NOT EXISTS idx_votes_wallet ON votes(voter_wallet);
+      CREATE INDEX IF NOT EXISTS idx_tokens_name_symbol ON tokens(LOWER(name), LOWER(symbol));
     `);
 
     isConnected = true;
@@ -242,15 +244,47 @@ async function getApprovedSubmissions(tokenMint) {
 
 // Vote operations
 async function createVote({ submissionId, voterWallet, voteType }) {
-  const result = await pool.query(
-    `INSERT INTO votes (submission_id, voter_wallet, vote_type)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [submissionId, voterWallet, voteType]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  await updateVoteTally(submissionId);
-  return result.rows[0];
+    // Use ON CONFLICT to handle race conditions gracefully
+    const result = await client.query(
+      `INSERT INTO votes (submission_id, voter_wallet, vote_type)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (submission_id, voter_wallet) DO UPDATE SET
+         vote_type = EXCLUDED.vote_type,
+         created_at = NOW()
+       RETURNING *`,
+      [submissionId, voterWallet, voteType]
+    );
+
+    // Update tally within the same transaction
+    await client.query(
+      `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, updated_at)
+       SELECT
+         $1,
+         COUNT(*) FILTER (WHERE vote_type = 'up'),
+         COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
+         NOW()
+       FROM votes WHERE submission_id = $1
+       ON CONFLICT (submission_id) DO UPDATE SET
+         upvotes = EXCLUDED.upvotes,
+         downvotes = EXCLUDED.downvotes,
+         score = EXCLUDED.score,
+         updated_at = NOW()`,
+      [submissionId]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function getVote(submissionId, voterWallet) {
@@ -259,6 +293,17 @@ async function getVote(submissionId, voterWallet) {
     [submissionId, voterWallet]
   );
   return result.rows[0];
+}
+
+async function getVotesBatch(submissionIds, voterWallet) {
+  if (!submissionIds || submissionIds.length === 0) {
+    return [];
+  }
+  const result = await pool.query(
+    'SELECT * FROM votes WHERE submission_id = ANY($1) AND voter_wallet = $2',
+    [submissionIds, voterWallet]
+  );
+  return result.rows;
 }
 
 async function updateVote(submissionId, voterWallet, voteType) {
@@ -417,6 +462,7 @@ module.exports = {
   updateSubmissionStatus,
   createVote,
   getVote,
+  getVotesBatch,
   updateVote,
   deleteVote,
   getVoteTally,

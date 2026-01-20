@@ -501,6 +501,11 @@ const submitPage = {
 
   // Show success modal
   showSuccessModal(submission) {
+    // SECURITY: Escape user-controlled data to prevent XSS
+    const safeSubmissionType = utils.escapeHtml(submission.submission_type);
+    const safeTokenSymbol = utils.escapeHtml(this.tokenData?.symbol || 'Unknown');
+    const safeTokenMint = encodeURIComponent(submission.token_mint);
+
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.innerHTML = `
@@ -511,7 +516,7 @@ const submitPage = {
           </svg>
         </div>
         <h3>Submission Received!</h3>
-        <p>Your <strong>${submission.submission_type}</strong> has been submitted for community review.</p>
+        <p>Your <strong>${safeSubmissionType}</strong> has been submitted for community review.</p>
         <div class="success-details">
           <div class="detail-row">
             <span class="label">Status:</span>
@@ -519,7 +524,7 @@ const submitPage = {
           </div>
           <div class="detail-row">
             <span class="label">Token:</span>
-            <span class="value">${this.tokenData?.symbol || 'Unknown'}</span>
+            <span class="value">${safeTokenSymbol}</span>
           </div>
         </div>
         <p class="success-note">The community will vote on your submission. Once it reaches +5 votes, it will be automatically approved.</p>
@@ -527,7 +532,7 @@ const submitPage = {
           <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
             Submit Another
           </button>
-          <a href="token.html?mint=${submission.token_mint}" class="btn btn-primary">
+          <a href="token.html?mint=${safeTokenMint}" class="btn btn-primary">
             View Token
           </a>
         </div>

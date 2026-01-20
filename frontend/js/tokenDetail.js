@@ -163,12 +163,15 @@ const tokenDetail = {
     }, 30000);
   },
 
-  // Refresh just the price
+  // Refresh just the price - uses lightweight price endpoint instead of full token data
   async refreshPrice() {
     try {
-      const data = await api.tokens.get(this.mint);
+      const data = await api.tokens.getPrice(this.mint);
       if (data && data.price) {
         this.token.price = data.price;
+        if (data.priceChange24h !== undefined) {
+          this.token.priceChange24h = data.priceChange24h;
+        }
         this.updatePriceDisplay();
       }
     } catch (error) {
@@ -252,13 +255,13 @@ const tokenDetail = {
     document.getElementById('stat-mcap').textContent = utils.formatNumber(token.marketCap);
     document.getElementById('stat-volume').textContent = utils.formatNumber(token.volume24h);
     document.getElementById('stat-liquidity').textContent = utils.formatNumber(token.liquidity);
-    document.getElementById('stat-holders').textContent = token.holders?.toLocaleString() || '--';
+    document.getElementById('stat-holders').textContent = token.holders?.toLocaleString() || 'N/A';
 
     const supplyEl = document.getElementById('stat-supply');
-    if (supplyEl) supplyEl.textContent = token.supply ? utils.formatNumber(token.supply) : '--';
+    if (supplyEl) supplyEl.textContent = token.supply ? utils.formatNumber(token.supply, '') : '--';
 
     const circulatingEl = document.getElementById('stat-circulating');
-    if (circulatingEl) circulatingEl.textContent = token.circulatingSupply ? utils.formatNumber(token.circulatingSupply) : '--';
+    if (circulatingEl) circulatingEl.textContent = token.circulatingSupply ? utils.formatNumber(token.circulatingSupply, '') : '--';
 
     // Trade links - Jupiter with proper URL format
     const jupiterLink = document.getElementById('jupiter-link');
@@ -299,10 +302,6 @@ const tokenDetail = {
               <div class="pool-stat">
                 <span class="label">24h Volume</span>
                 <span class="value">${utils.formatNumber(pool.volume24h)}</span>
-              </div>
-              <div class="pool-stat">
-                <span class="label">APR</span>
-                <span class="value ${pool.apr24h > 0 ? 'positive' : ''}">${pool.apr24h ? (pool.apr24h * 100).toFixed(2) + '%' : '--'}</span>
               </div>
             </div>
           </div>

@@ -7,6 +7,44 @@ const GECKO_API = 'https://api.geckoterminal.com/api/v2';
 const NETWORK = 'solana';
 
 /**
+ * In-flight request deduplication
+ * Prevents multiple concurrent requests for the same resource
+ */
+const inFlightRequests = new Map();
+
+/**
+ * Local cache for pool addresses (avoids repeated pool lookups for OHLCV)
+ * TTL: 5 minutes
+ */
+const poolAddressCache = new Map();
+const POOL_CACHE_TTL = 5 * 60 * 1000;
+
+/**
+ * Execute a deduplicated request - if the same key is already in flight,
+ * return the existing promise instead of making a new request
+ */
+async function deduplicatedRequest(key, requestFn) {
+  // Check if request is already in flight
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key);
+  }
+
+  // Create the request promise
+  const requestPromise = (async () => {
+    try {
+      return await rateLimitedRequest('geckoTerminal', requestFn);
+    } finally {
+      // Clean up after request completes (success or failure)
+      inFlightRequests.delete(key);
+    }
+  })();
+
+  // Store the promise for deduplication
+  inFlightRequests.set(key, requestPromise);
+  return requestPromise;
+}
+
+/**
  * Make a rate-limited request to GeckoTerminal API
  * Free tier: 30 requests/minute
  */
@@ -24,12 +62,13 @@ function getHeaders() {
 /**
  * Get token info by address
  * Endpoint: /networks/{network}/tokens/{address}
+ * Uses request deduplication to prevent concurrent calls for same token
  */
 async function getTokenInfo(mintAddress) {
   console.log(`[GeckoTerminal] getTokenInfo: ${mintAddress}`);
 
   try {
-    const response = await geckoRequest(() =>
+    const response = await deduplicatedRequest(`token:${mintAddress}`, () =>
       axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}`, {
         headers: getHeaders()
       })
@@ -116,25 +155,26 @@ async function getMultiTokenInfo(addresses) {
 
 /**
  * Get token overview with price and market data
- * Uses the token endpoint which includes price_usd
+ * Optimized: fetches token info and pools in parallel to reduce latency
  */
 async function getTokenOverview(mintAddress) {
   console.log(`[GeckoTerminal] getTokenOverview: ${mintAddress}`);
 
   try {
-    // Get token info
-    const tokenInfo = await getTokenInfo(mintAddress);
+    // Fetch token info and pools in parallel for better performance
+    const [tokenInfo, poolsResponse] = await Promise.all([
+      getTokenInfo(mintAddress),
+      deduplicatedRequest(`pools:${mintAddress}`, () =>
+        axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+          params: { page: 1 },
+          headers: getHeaders()
+        })
+      )
+    ]);
+
     if (!tokenInfo) {
       return null;
     }
-
-    // Get the top pool for this token to get price change data
-    const poolsResponse = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
-        params: { page: 1 },
-        headers: getHeaders()
-      })
-    );
 
     const pools = poolsResponse.data.data || [];
     let priceChange24h = 0;
@@ -443,6 +483,7 @@ async function searchTokens(query, limit = 20) {
  * Get OHLCV data for a token
  * First finds the top pool for the token, then fetches OHLCV
  * Endpoint: /networks/{network}/pools/{pool}/ohlcv/{timeframe}
+ * Optimized: caches pool address to avoid repeated pool lookups
  */
 async function getOHLCV(mintAddress, options = {}) {
   const { interval = '1h' } = options;
@@ -450,24 +491,40 @@ async function getOHLCV(mintAddress, options = {}) {
   console.log(`[GeckoTerminal] getOHLCV: ${mintAddress}, interval=${interval}`);
 
   try {
-    // First, get pools for this token to find a pool address
-    const poolsResponse = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
-        params: { page: 1 },
-        headers: getHeaders()
-      })
-    );
-
-    const pools = poolsResponse.data.data || [];
-    if (pools.length === 0) {
-      console.log('[GeckoTerminal] No pools found for token');
-      return { mintAddress, interval, data: [] };
+    // Check pool address cache first
+    let poolAddress = null;
+    const cached = poolAddressCache.get(mintAddress);
+    if (cached && Date.now() < cached.expiry) {
+      poolAddress = cached.address;
+      console.log(`[GeckoTerminal] Using cached pool address for ${mintAddress}`);
     }
 
-    // Use the first (most liquid) pool
-    const poolAddress = pools[0].attributes?.address;
+    // If not cached, fetch pools
     if (!poolAddress) {
-      return { mintAddress, interval, data: [] };
+      const poolsResponse = await deduplicatedRequest(`pools:${mintAddress}`, () =>
+        axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+          params: { page: 1 },
+          headers: getHeaders()
+        })
+      );
+
+      const pools = poolsResponse.data.data || [];
+      if (pools.length === 0) {
+        console.log('[GeckoTerminal] No pools found for token');
+        return { mintAddress, interval, data: [] };
+      }
+
+      // Use the first (most liquid) pool
+      poolAddress = pools[0].attributes?.address;
+      if (!poolAddress) {
+        return { mintAddress, interval, data: [] };
+      }
+
+      // Cache the pool address
+      poolAddressCache.set(mintAddress, {
+        address: poolAddress,
+        expiry: Date.now() + POOL_CACHE_TTL
+      });
     }
 
     // Map interval to GeckoTerminal timeframe
@@ -528,7 +585,7 @@ async function getOHLCV(mintAddress, options = {}) {
 
 /**
  * Get price history for charts
- * Uses OHLCV endpoint and extracts close prices
+ * Uses OHLCV endpoint and returns full OHLCV data
  */
 async function getPriceHistory(mintAddress, options = {}) {
   const { interval = '1h' } = options;
@@ -538,16 +595,11 @@ async function getPriceHistory(mintAddress, options = {}) {
   try {
     const ohlcv = await getOHLCV(mintAddress, { interval });
 
-    // Transform OHLCV to simple price history
-    const data = ohlcv.data.map(candle => ({
-      timestamp: candle.timestamp,
-      price: candle.close
-    }));
-
+    // Return full OHLCV data (includes timestamp, open, high, low, close, volume)
     return {
       mintAddress,
       interval,
-      data
+      data: ohlcv.data
     };
   } catch (error) {
     console.error('[GeckoTerminal] getPriceHistory error:', error.message);

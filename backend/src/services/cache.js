@@ -318,11 +318,14 @@ class RedisCache {
 
 /**
  * Cache service wrapper with automatic backend selection
+ * Includes stampede prevention for high-concurrency scenarios
  */
 class CacheService {
   constructor() {
     this.backend = null;
     this.backendType = 'none';
+    // In-flight fetch promises for stampede prevention
+    this.inFlightFetches = new Map();
     this.initialize();
   }
 
@@ -373,6 +376,8 @@ class CacheService {
 
   /**
    * Get or set - returns cached value or fetches and caches
+   * Includes stampede prevention: if multiple requests come in while fetching,
+   * they all wait for the same fetch instead of triggering multiple API calls
    * @param {string} key - Cache key
    * @param {Function} fetchFn - Async function to fetch value if not cached
    * @param {number} ttlMs - Time to live in milliseconds
@@ -384,9 +389,25 @@ class CacheService {
       return cached;
     }
 
-    const value = await fetchFn();
-    await this.set(key, value, ttlMs);
-    return value;
+    // Stampede prevention: check if fetch is already in progress
+    if (this.inFlightFetches.has(key)) {
+      return this.inFlightFetches.get(key);
+    }
+
+    // Create fetch promise and store it for deduplication
+    const fetchPromise = (async () => {
+      try {
+        const value = await fetchFn();
+        await this.set(key, value, ttlMs);
+        return value;
+      } finally {
+        // Clean up in-flight tracking
+        this.inFlightFetches.delete(key);
+      }
+    })();
+
+    this.inFlightFetches.set(key, fetchPromise);
+    return fetchPromise;
   }
 
   /**
@@ -451,6 +472,7 @@ class CacheService {
   /**
    * Get cached value if fresh enough, otherwise fetch new data
    * Used for price data with 5-minute cache but 1-minute freshness for token pages
+   * Includes stampede prevention for concurrent requests
    * @param {string} key - Cache key
    * @param {Function} fetchFn - Async function to fetch value
    * @param {boolean} requireFresh - If true, requires data to be < 1 minute old
@@ -464,10 +486,38 @@ class CacheService {
       return cached.value;
     }
 
-    // Need to fetch new data
-    const value = await fetchFn();
-    await this.setWithTimestamp(key, value, TTL.PRICE_DATA);
-    return value;
+    // Stampede prevention: check if fetch is already in progress
+    const freshnessKey = `fresh:${key}`;
+    if (this.inFlightFetches.has(freshnessKey)) {
+      // Wait for in-flight fetch, but return stale cached data if available and fetch fails
+      try {
+        return await this.inFlightFetches.get(freshnessKey);
+      } catch (error) {
+        if (cached) return cached.value;
+        throw error;
+      }
+    }
+
+    // Create fetch promise with stampede prevention
+    const fetchPromise = (async () => {
+      try {
+        const value = await fetchFn();
+        await this.setWithTimestamp(key, value, TTL.PRICE_DATA);
+        return value;
+      } finally {
+        this.inFlightFetches.delete(freshnessKey);
+      }
+    })();
+
+    this.inFlightFetches.set(freshnessKey, fetchPromise);
+
+    try {
+      return await fetchPromise;
+    } catch (error) {
+      // Return stale data as fallback if fetch fails
+      if (cached) return cached.value;
+      throw error;
+    }
   }
 
   getStats() {

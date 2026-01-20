@@ -18,13 +18,27 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // CORS configuration
+// SECURITY: Properly configure CORS to prevent credential leaks
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
+  : null;
+
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: corsOrigins && corsOrigins.length > 0
+    ? corsOrigins
+    : (process.env.NODE_ENV === 'production' ? false : '*'), // Deny in production if not configured
+  methods: ['GET', 'POST', 'OPTIONS'], // Only methods we actually use
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  // SECURITY: credentials should only be true when origin is not '*'
+  credentials: corsOrigins && corsOrigins.length > 0,
   maxAge: 86400 // 24 hours
 };
+
+// Warn if CORS is misconfigured in production
+if (process.env.NODE_ENV === 'production' && (!corsOrigins || corsOrigins.length === 0)) {
+  console.warn('[SECURITY WARNING] CORS_ORIGIN not configured in production. All cross-origin requests will be blocked.');
+}
+
 app.use(cors(corsOptions));
 
 // Parse JSON bodies
@@ -76,15 +90,37 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  // Log full error details server-side for debugging
   console.error('Error:', err.stack || err.message);
 
-  // Don't leak error details in production
-  const message = process.env.NODE_ENV === 'production'
-    ? 'Internal server error'
-    : err.message;
+  // SECURITY: Categorize errors with safe user-facing messages
+  // Don't leak internal error details in production
+  let statusCode = err.status || 500;
+  let userMessage = 'Internal server error';
 
-  res.status(err.status || 500).json({
-    error: message,
+  if (process.env.NODE_ENV !== 'production') {
+    // In development, show actual error
+    userMessage = err.message;
+  } else {
+    // In production, map known errors to safe messages
+    if (err.message?.includes('not found')) {
+      statusCode = 404;
+      userMessage = 'Resource not found';
+    } else if (err.message?.includes('validation') || err.message?.includes('invalid')) {
+      statusCode = 400;
+      userMessage = 'Invalid request';
+    } else if (err.message?.includes('rate limit') || err.message?.includes('too many')) {
+      statusCode = 429;
+      userMessage = 'Too many requests';
+    } else if (err.message?.includes('unauthorized') || err.message?.includes('permission')) {
+      statusCode = 403;
+      userMessage = 'Access denied';
+    }
+    // All other errors get generic message to prevent info leakage
+  }
+
+  res.status(statusCode).json({
+    error: userMessage,
     ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
   });
 });

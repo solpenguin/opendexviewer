@@ -60,7 +60,7 @@ router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
       downvotes: tally?.downvotes || 0,
       score: tally?.score || 0
     },
-    submissionStatus: updatedSubmission.status
+    submissionStatus: updatedSubmission?.status || 'unknown'
   });
 }));
 
@@ -107,8 +107,8 @@ router.get('/check', asyncHandler(async (req, res) => {
   });
 }));
 
-// GET /api/votes/bulk-check - Check multiple votes at once
-router.post('/bulk-check', asyncHandler(async (req, res) => {
+// POST /api/votes/bulk-check - Check multiple votes at once
+router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
   const { submissionIds, wallet } = req.body;
 
   if (!Array.isArray(submissionIds) || !wallet) {
@@ -123,10 +123,19 @@ router.post('/bulk-check', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 
-  const results = {};
+  // Validate all IDs are valid integers
+  const parsedIds = submissionIds.map(id => parseInt(id)).filter(id => !isNaN(id) && id > 0);
+  if (parsedIds.length === 0) {
+    return res.status(400).json({ error: 'No valid submission IDs provided' });
+  }
 
-  for (const id of submissionIds) {
-    const vote = await db.getVote(parseInt(id), wallet);
+  // Use batch query for efficiency
+  const votes = await db.getVotesBatch(parsedIds, wallet);
+
+  // Build results map
+  const results = {};
+  for (const id of parsedIds) {
+    const vote = votes.find(v => v.submission_id === id);
     results[id] = {
       hasVoted: !!vote,
       voteType: vote?.vote_type || null

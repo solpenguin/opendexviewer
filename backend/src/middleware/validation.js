@@ -190,9 +190,15 @@ function validateSearch(req, res, next) {
 }
 
 // Generic error handler wrapper
+// Handles both sync and async errors properly
 function asyncHandler(fn) {
   return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+    try {
+      Promise.resolve(fn(req, res, next)).catch(next);
+    } catch (error) {
+      // Catch synchronous errors thrown before async execution
+      next(error);
+    }
   };
 }
 

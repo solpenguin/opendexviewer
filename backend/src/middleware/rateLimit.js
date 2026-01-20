@@ -39,16 +39,17 @@ const searchLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Limiter by wallet address (for voting)
+// Limiter by IP for voting operations
+// SECURITY: Always use IP as key - wallet address is user-controlled and could be spoofed
 const walletLimiter = rateLimit({
   windowMs: 60000, // 1 minute
-  max: 20,         // 20 votes per minute per IP
+  max: 30,         // 30 vote operations per minute per IP
   message: { error: 'Voting too fast. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // Use wallet address if available, otherwise IP
-    return req.body?.voterWallet || req.ip;
+    // Always use IP to prevent spoofing attacks where attacker uses victim's wallet address
+    return req.ip;
   }
 });
 

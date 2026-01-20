@@ -5,7 +5,7 @@ const API_BASE_URL = (typeof config !== 'undefined' && config.api?.baseUrl)
 
 // API Client
 const api = {
-  // Generic fetch wrapper with retry logic
+  // Generic fetch wrapper with exponential backoff retry logic
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const maxRetries = options.retries || (typeof config !== 'undefined' ? config.api.retries : 2);
@@ -31,12 +31,18 @@ const api = {
       } catch (error) {
         lastError = error;
         if (attempt < maxRetries - 1) {
-          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          // Exponential backoff with jitter to prevent thundering herd
+          const baseDelay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
+          const jitter = Math.random() * 1000; // 0-1s random jitter
+          await new Promise(r => setTimeout(r, baseDelay + jitter));
         }
       }
     }
 
-    console.error(`API Error (${endpoint}):`, lastError.message);
+    // Don't log full error details in production console
+    if (typeof config !== 'undefined' && config.debug) {
+      console.error(`API Error (${endpoint}):`, lastError.message);
+    }
     throw lastError;
   },
 

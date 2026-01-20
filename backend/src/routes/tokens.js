@@ -29,37 +29,50 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   }
 
   let tokens;
+  let geckoError = null;
 
   try {
     // Use GeckoTerminal (free, no API key needed)
     console.log('[API /tokens] Using GeckoTerminal API');
-    switch (filter) {
-      case 'new':
-        tokens = await geckoService.getNewTokens(parseInt(limit));
-        break;
-      case 'gainers':
-        // Get trending and sort by price change
-        tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
-        tokens = tokens.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
-        break;
-      case 'losers':
-        // Get trending and sort by price change (ascending)
-        tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
-        tokens = tokens.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
-        break;
-      default: // trending
-        tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+    try {
+      switch (filter) {
+        case 'new':
+          tokens = await geckoService.getNewTokens(parseInt(limit));
+          break;
+        case 'gainers':
+          // Get trending and sort by price change
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+          tokens = tokens?.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
+          break;
+        case 'losers':
+          // Get trending and sort by price change (ascending)
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+          tokens = tokens?.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
+          break;
+        default: // trending
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+      }
+    } catch (err) {
+      geckoError = err;
+      console.error('[API /tokens] GeckoTerminal failed:', err.message);
     }
 
-    // If GeckoTerminal returns empty, fallback to Jupiter
+    // If GeckoTerminal returns empty or failed, fallback to Jupiter
     if (!tokens || tokens.length === 0) {
-      console.log('[API /tokens] GeckoTerminal returned empty, falling back to Jupiter');
-      tokens = await jupiterService.getTrendingTokens({
-        sort,
-        order,
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      });
+      console.log('[API /tokens] GeckoTerminal returned empty/failed, falling back to Jupiter');
+      try {
+        tokens = await jupiterService.getTrendingTokens({
+          sort,
+          order,
+          limit: parseInt(limit),
+          offset: parseInt(offset)
+        });
+      } catch (jupiterError) {
+        console.error('[API /tokens] Jupiter fallback also failed:', jupiterError.message);
+        // If both failed and we had a GeckoTerminal error, throw that
+        if (geckoError) throw geckoError;
+        throw jupiterError;
+      }
     }
 
     console.log(`[API /tokens] Received ${tokens?.length || 0} tokens from service`);
@@ -367,6 +380,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/tokens/:mint/chart - Get price history for charts
+// Uses getOrSet for automatic caching with stampede prevention
 router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { interval = '1h', limit = 100 } = req.query;
@@ -383,30 +397,26 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
   }
 
   const cacheKey = keys.tokenChart(mint, normalizedInterval);
-
-  // Try cache first
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
+  const cacheTTL = normalizedInterval.includes('m') ? TTL.SHORT : TTL.MEDIUM;
 
   try {
-    // Use GeckoTerminal for chart data
-    let chartData = await geckoService.getPriceHistory(mint, {
-      interval: normalizedInterval
-    });
-
-    // Fallback to Jupiter if GeckoTerminal fails
-    if (!chartData || !chartData.data || chartData.data.length === 0) {
-      chartData = await jupiterService.getPriceHistory(mint, {
-        interval: normalizedInterval,
-        limit: parseInt(limit)
+    // Use getOrSet for caching with stampede prevention
+    const chartData = await cache.getOrSet(cacheKey, async () => {
+      // Use GeckoTerminal for chart data
+      let data = await geckoService.getPriceHistory(mint, {
+        interval: normalizedInterval
       });
-    }
 
-    // Cache based on interval
-    const cacheTTL = normalizedInterval.includes('m') ? TTL.SHORT : TTL.MEDIUM;
-    await cache.set(cacheKey, chartData, cacheTTL);
+      // Fallback to Jupiter if GeckoTerminal fails
+      if (!data || !data.data || data.data.length === 0) {
+        data = await jupiterService.getPriceHistory(mint, {
+          interval: normalizedInterval,
+          limit: parseInt(limit)
+        });
+      }
+
+      return data;
+    }, cacheTTL);
 
     res.json(chartData);
   } catch (error) {
@@ -416,24 +426,18 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/tokens/:mint/ohlcv - Get OHLCV data for candlestick charts
+// Uses getOrSet for automatic caching with stampede prevention
 router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { interval = '1h' } = req.query;
 
   const cacheKey = `ohlcv:${mint}:${interval}`;
 
-  // Try cache first
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
-
   try {
-    // Use GeckoTerminal for OHLCV data (free, no API key needed)
-    const ohlcvData = await geckoService.getOHLCV(mint, { interval });
-
-    // Cache for 30 seconds
-    await cache.set(cacheKey, ohlcvData, TTL.SHORT);
+    // Use getOrSet for caching with stampede prevention
+    const ohlcvData = await cache.getOrSet(cacheKey, async () => {
+      return geckoService.getOHLCV(mint, { interval });
+    }, TTL.SHORT);
 
     res.json(ohlcvData);
   } catch (error) {
@@ -443,24 +447,18 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/tokens/:mint/pools - Get liquidity pools for a token
+// Uses getOrSet for automatic caching with stampede prevention
 router.get('/:mint/pools', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { limit = 10 } = req.query;
 
   const cacheKey = keys.pools(mint);
 
-  // Try cache first
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
-
   try {
-    // Use GeckoTerminal for pools data
-    const pools = await geckoService.getTokenPools(mint, { limit: parseInt(limit) });
-
-    // Cache for 1 minute
-    await cache.set(cacheKey, pools, TTL.MEDIUM);
+    // Use getOrSet for caching with stampede prevention
+    const pools = await cache.getOrSet(cacheKey, async () => {
+      return geckoService.getTokenPools(mint, { limit: parseInt(limit) });
+    }, TTL.MEDIUM);
 
     res.json(pools);
   } catch (error) {
