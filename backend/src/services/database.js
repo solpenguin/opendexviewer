@@ -147,6 +147,41 @@ async function getToken(mintAddress) {
   return result.rows[0];
 }
 
+// Search tokens by name, symbol, or mint address
+async function searchTokens(query, limit = 10) {
+  if (!pool) return [];
+
+  const searchPattern = `%${query.toLowerCase()}%`;
+
+  const result = await pool.query(
+    `SELECT mint_address, name, symbol, decimals, logo_uri, created_at
+     FROM tokens
+     WHERE LOWER(name) LIKE $1
+        OR LOWER(symbol) LIKE $1
+        OR mint_address LIKE $2
+     ORDER BY
+       CASE
+         WHEN LOWER(symbol) = $3 THEN 1
+         WHEN LOWER(name) = $3 THEN 2
+         WHEN LOWER(symbol) LIKE $4 THEN 3
+         WHEN LOWER(name) LIKE $4 THEN 4
+         ELSE 5
+       END,
+       created_at DESC
+     LIMIT $5`,
+    [searchPattern, `%${query}%`, query.toLowerCase(), `${query.toLowerCase()}%`, limit]
+  );
+
+  return result.rows.map(row => ({
+    address: row.mint_address,
+    name: row.name,
+    symbol: row.symbol,
+    decimals: row.decimals,
+    logoURI: row.logo_uri,
+    source: 'local'
+  }));
+}
+
 // Submission operations
 async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet }) {
   const result = await pool.query(
@@ -372,6 +407,7 @@ module.exports = {
   isReady,
   upsertToken,
   getToken,
+  searchTokens,
   createSubmission,
   getSubmission,
   getSubmissionsByToken,

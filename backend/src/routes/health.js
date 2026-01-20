@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const solanaService = require('../services/solana');
+const jupiterService = require('../services/jupiter');
 const { cache } = require('../services/cache');
 
 // GET /health - Basic health check
@@ -69,13 +70,32 @@ router.get('/detailed', async (req, res) => {
     // Cache errors don't degrade the service - we can fall back to memory
   }
 
+  // Check Jupiter API
+  try {
+    const jupiterHealth = await jupiterService.checkHealth();
+    health.checks.jupiter_api = {
+      status: jupiterHealth.healthy ? 'ok' : 'error',
+      configured: jupiterHealth.configured,
+      ...jupiterHealth
+    };
+    if (!jupiterHealth.healthy && jupiterHealth.configured) {
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.checks.jupiter_api = {
+      status: 'error',
+      error: error.message
+    };
+  }
+
   // Environment checks
   health.checks.environment = {
     node_env: process.env.NODE_ENV || 'development',
     has_database_url: !!process.env.DATABASE_URL,
     has_redis_url: !!process.env.REDIS_URL,
     has_helius_key: !!process.env.HELIUS_API_KEY,
-    has_birdeye_key: !!process.env.BIRDEYE_API_KEY
+    has_birdeye_key: !!process.env.BIRDEYE_API_KEY,
+    has_jupiter_key: !!process.env.JUPITER_API_KEY
   };
 
   // Set status code based on health
@@ -137,7 +157,8 @@ router.get('/stats', async (req, res) => {
       features: {
         redisEnabled: !!process.env.REDIS_URL,
         birdeyeEnabled: !!process.env.BIRDEYE_API_KEY,
-        heliusEnabled: !!process.env.HELIUS_API_KEY
+        heliusEnabled: !!process.env.HELIUS_API_KEY,
+        jupiterEnabled: jupiterService.isConfigured()
       }
     });
   } catch (error) {

@@ -75,10 +75,15 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   }
 }));
 
-// GET /api/tokens/search - Search tokens
+// Solana address regex for exact match detection
+const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const MIN_SEARCH_RESULTS = 5;
+
+// GET /api/tokens/search - Search tokens (hybrid local + external)
 router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, res) => {
   const { q } = req.query;
-  const cacheKey = keys.tokenSearch(q.toLowerCase());
+  const query = q.trim();
+  const cacheKey = keys.tokenSearch(query.toLowerCase());
 
   // Try cache first
   const cached = await cache.get(cacheKey);
@@ -86,17 +91,114 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
     return res.json(cached);
   }
 
-  let results;
-
   try {
-    // Use Birdeye search if available
-    if (process.env.BIRDEYE_API_KEY) {
-      results = await birdeyeService.searchTokens(q);
-    } else {
-      results = await jupiterService.searchTokens(q);
+    // Check if query is an exact contract address
+    const isExactAddress = SOLANA_ADDRESS_REGEX.test(query);
+
+    if (isExactAddress) {
+      // For exact addresses, fetch full token details directly
+      let tokenInfo = null;
+
+      // Try local database first
+      const localToken = await db.getToken(query);
+      if (localToken) {
+        tokenInfo = {
+          address: localToken.mint_address,
+          name: localToken.name,
+          symbol: localToken.symbol,
+          decimals: localToken.decimals,
+          logoURI: localToken.logo_uri,
+          source: 'local'
+        };
+      }
+
+      // If not in local DB, fetch from external API
+      if (!tokenInfo) {
+        try {
+          const externalInfo = await jupiterService.getTokenInfo(query);
+          if (externalInfo && externalInfo.name) {
+            tokenInfo = {
+              address: query,
+              name: externalInfo.name,
+              symbol: externalInfo.symbol,
+              decimals: externalInfo.decimals,
+              logoURI: externalInfo.logoUri,
+              source: 'external'
+            };
+
+            // Cache to local database for future lookups
+            db.upsertToken({
+              mintAddress: query,
+              name: externalInfo.name,
+              symbol: externalInfo.symbol,
+              decimals: externalInfo.decimals,
+              logoUri: externalInfo.logoUri
+            }).catch(err => console.error('Failed to cache token:', err.message));
+          }
+        } catch (err) {
+          console.error('External token lookup failed:', err.message);
+        }
+      }
+
+      const results = tokenInfo ? [tokenInfo] : [];
+      await cache.set(cacheKey, results, TTL.MEDIUM);
+      return res.json(results);
     }
 
-    // Cache for 1 minute
+    // For string searches, use hybrid approach
+    let results = [];
+    const seenAddresses = new Set();
+
+    // 1. Search local database first
+    if (db.isReady()) {
+      try {
+        const localResults = await db.searchTokens(query, MIN_SEARCH_RESULTS);
+        for (const token of localResults) {
+          if (!seenAddresses.has(token.address)) {
+            seenAddresses.add(token.address);
+            results.push(token);
+          }
+        }
+      } catch (err) {
+        console.error('Local search failed:', err.message);
+      }
+    }
+
+    // 2. If we have fewer than MIN_SEARCH_RESULTS, fetch from external API
+    if (results.length < MIN_SEARCH_RESULTS) {
+      try {
+        let externalResults = [];
+
+        if (process.env.BIRDEYE_API_KEY) {
+          externalResults = await birdeyeService.searchTokens(query);
+        } else {
+          externalResults = await jupiterService.searchTokens(query);
+        }
+
+        // Normalize external results and add unique ones
+        for (const token of externalResults) {
+          const address = token.address || token.mint;
+          if (!seenAddresses.has(address)) {
+            seenAddresses.add(address);
+            results.push({
+              address,
+              name: token.name,
+              symbol: token.symbol,
+              decimals: token.decimals,
+              logoURI: token.logoURI || token.logoUri || token.logo,
+              source: 'external'
+            });
+
+            // Stop once we have enough results
+            if (results.length >= MIN_SEARCH_RESULTS) break;
+          }
+        }
+      } catch (err) {
+        console.error('External search failed:', err.message);
+      }
+    }
+
+    // Cache results for 1 minute
     await cache.set(cacheKey, results, TTL.MEDIUM);
 
     res.json(results);
