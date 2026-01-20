@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jupiterService = require('../services/jupiter');
-const birdeyeService = require('../services/birdeye');
+const geckoService = require('../services/geckoTerminal');
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
 const { validateMint, validatePagination, validateSearch, asyncHandler } = require('../middleware/validation');
@@ -18,7 +18,6 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   } = req.query;
 
   console.log(`[API /tokens] Request: filter=${filter}, sort=${sort}, order=${order}, limit=${limit}, offset=${offset}`);
-  console.log(`[API /tokens] API Keys: BIRDEYE=${!!process.env.BIRDEYE_API_KEY}, JUPITER=${!!process.env.JUPITER_API_KEY}`);
 
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
@@ -32,37 +31,29 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   let tokens;
 
   try {
-    // Use Birdeye for richer data if available
-    if (process.env.BIRDEYE_API_KEY) {
-      console.log('[API /tokens] Using Birdeye API');
-      switch (filter) {
-        case 'new':
-          tokens = await birdeyeService.getNewTokens(parseInt(limit));
-          break;
-        case 'gainers':
-          tokens = await birdeyeService.getTrendingTokens({
-            limit: parseInt(limit),
-            sortBy: 'priceChange24hPercent',
-            sortOrder: 'desc'
-          });
-          break;
-        case 'losers':
-          tokens = await birdeyeService.getTrendingTokens({
-            limit: parseInt(limit),
-            sortBy: 'priceChange24hPercent',
-            sortOrder: 'asc'
-          });
-          break;
-        default: // trending
-          tokens = await birdeyeService.getTrendingTokens({
-            limit: parseInt(limit),
-            sortBy: sort === 'volume' ? 'v24hUSD' : sort,
-            sortOrder: order
-          });
-      }
-    } else {
-      // Fallback to Jupiter
-      console.log('[API /tokens] Using Jupiter API (no Birdeye key)');
+    // Use GeckoTerminal (free, no API key needed)
+    console.log('[API /tokens] Using GeckoTerminal API');
+    switch (filter) {
+      case 'new':
+        tokens = await geckoService.getNewTokens(parseInt(limit));
+        break;
+      case 'gainers':
+        // Get trending and sort by price change
+        tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+        tokens = tokens.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
+        break;
+      case 'losers':
+        // Get trending and sort by price change (ascending)
+        tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+        tokens = tokens.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
+        break;
+      default: // trending
+        tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+    }
+
+    // If GeckoTerminal returns empty, fallback to Jupiter
+    if (!tokens || tokens.length === 0) {
+      console.log('[API /tokens] GeckoTerminal returned empty, falling back to Jupiter');
       tokens = await jupiterService.getTrendingTokens({
         sort,
         order,
@@ -181,11 +172,11 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
     // 2. If we have fewer than MIN_SEARCH_RESULTS, fetch from external API
     if (results.length < MIN_SEARCH_RESULTS) {
       try {
-        let externalResults = [];
+        // Use GeckoTerminal for search (free, no API key)
+        let externalResults = await geckoService.searchTokens(query);
 
-        if (process.env.BIRDEYE_API_KEY) {
-          externalResults = await birdeyeService.searchTokens(query);
-        } else {
+        // Fallback to Jupiter if GeckoTerminal returns empty
+        if (!externalResults || externalResults.length === 0) {
           externalResults = await jupiterService.searchTokens(query);
         }
 
@@ -200,6 +191,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
               symbol: token.symbol,
               decimals: token.decimals,
               logoURI: token.logoURI || token.logoUri || token.logo,
+              price: token.price || 0,
               source: 'external'
             });
 
@@ -244,33 +236,34 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   }
 
   try {
-    // Fetch data in parallel
+    // Fetch data in parallel - use GeckoTerminal for market data
     console.log('[API /tokens/:mint] Fetching from APIs...');
-    const [tokenInfo, priceData, submissions, overview] = await Promise.all([
+    const [tokenInfo, geckoOverview, submissions] = await Promise.all([
       jupiterService.getTokenInfo(mint),
-      jupiterService.getTokenPrice(mint),
-      db.getApprovedSubmissions(mint).catch(() => []),
-      process.env.BIRDEYE_API_KEY ? birdeyeService.getTokenOverview(mint) : null
+      geckoService.getTokenOverview(mint),
+      db.getApprovedSubmissions(mint).catch(() => [])
     ]);
 
     console.log('[API /tokens/:mint] tokenInfo:', JSON.stringify(tokenInfo, null, 2));
-    console.log('[API /tokens/:mint] priceData:', JSON.stringify(priceData, null, 2));
-    console.log('[API /tokens/:mint] overview:', JSON.stringify(overview, null, 2));
+    console.log('[API /tokens/:mint] geckoOverview:', JSON.stringify(geckoOverview, null, 2));
 
-    // Get the price value - overview or priceData can be an object with price field
-    const priceSource = overview || priceData || {};
-    const priceValue = priceSource.price || priceSource.usdPrice || 0;
+    // Use GeckoTerminal data for prices, fallback to Jupiter tokenInfo
+    const overview = geckoOverview || {};
 
-    // Merge data - use direct price value, not nested object
+    // Merge data
     const result = {
       ...tokenInfo,
-      price: priceValue,
-      priceChange24h: overview?.priceChange24h || priceData?.priceChange24h || 0,
-      volume24h: overview?.volume24h || 0,
-      liquidity: overview?.liquidity || 0,
-      marketCap: overview?.marketCap || 0,
-      holders: overview?.holder || null,
-      supply: overview?.supply || null,
+      // Override with GeckoTerminal data if available
+      logoUri: overview.logoUri || tokenInfo?.logoUri,
+      logoURI: overview.logoURI || tokenInfo?.logoURI,
+      price: overview.price || 0,
+      priceChange24h: overview.priceChange24h || 0,
+      volume24h: overview.volume24h || 0,
+      liquidity: overview.liquidity || 0,
+      marketCap: overview.marketCap || overview.fdv || 0,
+      fdv: overview.fdv || 0,
+      holders: null, // GeckoTerminal doesn't provide holder count
+      supply: null,
       submissions: {
         banners: submissions.filter(s => s.submission_type === 'banner'),
         socials: submissions.filter(s => s.submission_type !== 'banner')
@@ -322,11 +315,11 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
   const staleCached = cachedMeta?.value;
 
   try {
-    let priceData;
+    // Use GeckoTerminal for price data
+    let priceData = await geckoService.getTokenOverview(mint);
 
-    if (process.env.BIRDEYE_API_KEY) {
-      priceData = await birdeyeService.getTokenOverview(mint);
-    } else {
+    // Fallback to Jupiter if GeckoTerminal fails
+    if (!priceData) {
       priceData = await jupiterService.getTokenPrice(mint);
     }
 
@@ -369,13 +362,13 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
   }
 
   try {
-    let chartData;
+    // Use GeckoTerminal for chart data
+    let chartData = await geckoService.getPriceHistory(mint, {
+      interval: normalizedInterval
+    });
 
-    if (process.env.BIRDEYE_API_KEY) {
-      chartData = await birdeyeService.getPriceHistory(mint, {
-        interval: normalizedInterval
-      });
-    } else {
+    // Fallback to Jupiter if GeckoTerminal fails
+    if (!chartData || !chartData.data || chartData.data.length === 0) {
       chartData = await jupiterService.getPriceHistory(mint, {
         interval: normalizedInterval,
         limit: parseInt(limit)
@@ -398,12 +391,6 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { interval = '1h' } = req.query;
 
-  if (!process.env.BIRDEYE_API_KEY) {
-    return res.status(503).json({
-      error: 'OHLCV data requires Birdeye API key'
-    });
-  }
-
   const cacheKey = `ohlcv:${mint}:${interval}`;
 
   // Try cache first
@@ -413,7 +400,8 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
   }
 
   try {
-    const ohlcvData = await birdeyeService.getOHLCV(mint, { interval });
+    // Use GeckoTerminal for OHLCV data (free, no API key needed)
+    const ohlcvData = await geckoService.getOHLCV(mint, { interval });
 
     // Cache for 30 seconds
     await cache.set(cacheKey, ohlcvData, TTL.SHORT);

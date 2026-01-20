@@ -54,6 +54,64 @@ async function getTokenPrice(mintAddress) {
   }
 }
 
+// Get multiple token prices in one request
+// Uses /defi/multi_price endpoint
+async function getMultiTokenPrices(addresses) {
+  if (!addresses || addresses.length === 0) {
+    return {};
+  }
+
+  console.log(`[Birdeye] getMultiTokenPrices: fetching ${addresses.length} tokens`);
+
+  try {
+    // Birdeye multi_price accepts comma-separated addresses (max 100)
+    const addressList = addresses.slice(0, 100).join(',');
+
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/multi_price`, {
+        params: {
+          list_address: addressList
+        },
+        headers: getHeaders()
+      })
+    );
+
+    console.log(`[Birdeye] multi_price response status: ${response.status}`);
+
+    // Response: { success: true, data: { "address1": { value, ... }, "address2": { value, ... } } }
+    const data = response.data.data || {};
+
+    // Log sample price data
+    const firstKey = Object.keys(data)[0];
+    if (firstKey) {
+      console.log(`[Birdeye] Sample multi_price data for ${firstKey}:`, JSON.stringify(data[firstKey], null, 2));
+    }
+
+    // Normalize the response to have consistent field names
+    const normalized = {};
+    for (const [address, priceData] of Object.entries(data)) {
+      normalized[address] = {
+        price: priceData.value || priceData.price || 0,
+        priceChange24h: priceData.priceChange24h || priceData.priceChange24hPercent || 0,
+        volume24h: priceData.volume24h || priceData.v24hUSD || 0,
+        liquidity: priceData.liquidity || 0,
+        mc: priceData.mc || priceData.marketCap || 0,
+        updateTime: priceData.updateUnixTime || Date.now() / 1000
+      };
+    }
+
+    console.log(`[Birdeye] Normalized ${Object.keys(normalized).length} token prices`);
+    return normalized;
+  } catch (error) {
+    console.error('[Birdeye] multi_price error:', error.message);
+    if (error.response) {
+      console.error('[Birdeye] Response status:', error.response.status);
+      console.error('[Birdeye] Response data:', JSON.stringify(error.response.data).slice(0, 500));
+    }
+    return {};
+  }
+}
+
 // Get token overview (includes volume, liquidity, etc.)
 async function getTokenOverview(mintAddress) {
   console.log(`[Birdeye] getTokenOverview: ${mintAddress}`);
@@ -248,6 +306,7 @@ async function getOHLCV(mintAddress, options = {}) {
 
 // Get trending tokens
 // Uses /defi/token_trending endpoint with sort_by: rank, liquidity, or volume24hUSD
+// Note: This endpoint only returns basic info - price data must be fetched separately
 async function getTrendingTokens(options = {}) {
   const { limit = 20, sortBy = 'volume24hUSD', sortOrder = 'desc' } = options;
 
@@ -274,9 +333,10 @@ async function getTrendingTokens(options = {}) {
 
     console.log(`[Birdeye] API response status: ${response.status}`);
     console.log(`[Birdeye] API response data keys: ${Object.keys(response.data || {}).join(', ')}`);
+    console.log(`[Birdeye] API response data.data keys: ${Object.keys(response.data?.data || {}).join(', ')}`);
 
-    // Response structure: { success: true, data: { items: [...] } }
-    const tokens = response.data.data?.items || response.data.data?.tokens || [];
+    // Response structure per docs: { success: true, data: { tokens: [...], total: number } }
+    const tokens = response.data.data?.tokens || response.data.data?.items || [];
     console.log(`[Birdeye] Received ${tokens.length} tokens from API`);
 
     // Log sample raw token data
@@ -284,19 +344,37 @@ async function getTrendingTokens(options = {}) {
       console.log('[Birdeye] Sample raw token:', JSON.stringify(tokens[0], null, 2));
     }
 
-    const mapped = tokens.map(token => ({
-      mintAddress: token.address,
-      address: token.address,
-      name: token.name || 'Unknown',
-      symbol: token.symbol || '???',
-      logoUri: token.logoURI || token.logo_uri || null,
-      logoURI: token.logoURI || token.logo_uri || null,
-      price: token.price || 0,
-      priceChange24h: token.priceChange24hPercent || token.price_change_24h_percent || 0,
-      volume24h: token.volume24hUSD || token.v24hUSD || 0,
-      liquidity: token.liquidity || 0,
-      marketCap: token.mc || token.market_cap || 0
-    }));
+    if (tokens.length === 0) {
+      console.log('[Birdeye] No tokens returned from trending endpoint');
+      return [];
+    }
+
+    // Trending endpoint returns: address, decimals, liquidity, logoURI, name, symbol, volume24hUSD, rank
+    // We need to fetch price data separately using multi-price endpoint
+    const addresses = tokens.map(t => t.address).filter(Boolean);
+    console.log(`[Birdeye] Fetching prices for ${addresses.length} tokens`);
+
+    // Fetch prices for all tokens in one batch call
+    const prices = await getMultiTokenPrices(addresses);
+
+    const mapped = tokens.map(token => {
+      const priceData = prices[token.address] || {};
+      return {
+        mintAddress: token.address,
+        address: token.address,
+        name: token.name || 'Unknown',
+        symbol: token.symbol || '???',
+        decimals: token.decimals || 9,
+        logoUri: token.logoURI || token.logo_uri || null,
+        logoURI: token.logoURI || token.logo_uri || null,
+        price: priceData.price || priceData.value || 0,
+        priceChange24h: priceData.priceChange24h || priceData.priceChange24hPercent || 0,
+        volume24h: token.volume24hUSD || token.v24hUSD || priceData.volume24h || 0,
+        liquidity: token.liquidity || priceData.liquidity || 0,
+        marketCap: priceData.mc || priceData.marketCap || 0,
+        rank: token.rank || 0
+      };
+    });
 
     // Log sample mapped token
     if (mapped.length > 0) {
@@ -333,29 +411,43 @@ async function getNewTokens(limit = 20) {
     );
 
     console.log(`[Birdeye] New tokens API response status: ${response.status}`);
+    console.log(`[Birdeye] New tokens response data.data keys: ${Object.keys(response.data?.data || {}).join(', ')}`);
 
-    // V3 response structure: { success: true, data: { items: [...] } }
+    // V3 response structure: { success: true, data: { items: [...] } or { tokens: [...] } }
     const tokens = response.data.data?.items || response.data.data?.tokens || [];
     console.log(`[Birdeye] New tokens received: ${tokens.length}`);
+
+    if (tokens.length === 0) {
+      console.log('[Birdeye] No new tokens returned, falling back to trending');
+      return getTrendingTokens({ limit, sortBy: 'volume24hUSD', sortOrder: 'desc' });
+    }
 
     if (tokens.length > 0) {
       console.log('[Birdeye] Sample new token:', JSON.stringify(tokens[0], null, 2));
     }
 
-    return tokens.map(token => ({
-      mintAddress: token.address,
-      address: token.address,
-      name: token.name || 'Unknown',
-      symbol: token.symbol || '???',
-      logoUri: token.logoURI || token.logo_uri || null,
-      logoURI: token.logoURI || token.logo_uri || null,
-      price: token.price || 0,
-      priceChange24h: token.priceChange24hPercent || token.price_change_24h_percent || 0,
-      volume24h: token.volume24hUSD || token.v24hUSD || 0,
-      liquidity: token.liquidity || 0,
-      marketCap: token.mc || token.market_cap || 0,
-      createdAt: token.listing_time || token.createdAt || null
-    }));
+    // Fetch prices for all tokens
+    const addresses = tokens.map(t => t.address).filter(Boolean);
+    const prices = await getMultiTokenPrices(addresses);
+
+    return tokens.map(token => {
+      const priceData = prices[token.address] || {};
+      return {
+        mintAddress: token.address,
+        address: token.address,
+        name: token.name || 'Unknown',
+        symbol: token.symbol || '???',
+        decimals: token.decimals || 9,
+        logoUri: token.logoURI || token.logo_uri || null,
+        logoURI: token.logoURI || token.logo_uri || null,
+        price: priceData.price || token.price || 0,
+        priceChange24h: priceData.priceChange24h || token.priceChange24hPercent || 0,
+        volume24h: priceData.volume24h || token.volume24hUSD || token.v24hUSD || 0,
+        liquidity: priceData.liquidity || token.liquidity || 0,
+        marketCap: priceData.mc || token.mc || token.market_cap || 0,
+        createdAt: token.listing_time || token.createdAt || null
+      };
+    });
   } catch (error) {
     console.error('[Birdeye] New tokens error:', error.message);
     if (error.response) {
@@ -371,6 +463,8 @@ async function getNewTokens(limit = 20) {
 
 // Search tokens
 async function searchTokens(query, limit = 20) {
+  console.log(`[Birdeye] searchTokens: query="${query}", limit=${limit}`);
+
   try {
     const response = await birdeyeRequest(() =>
       axios.get(`${BIRDEYE_API}/defi/v2/tokens/search`, {
@@ -382,18 +476,41 @@ async function searchTokens(query, limit = 20) {
       })
     );
 
-    const tokens = response.data.data?.items || [];
+    console.log(`[Birdeye] Search response status: ${response.status}`);
 
-    return tokens.map(token => ({
-      mintAddress: token.address,
-      name: token.name,
-      symbol: token.symbol,
-      logoUri: token.logoURI,
-      price: token.price || 0,
-      volume24h: token.v24hUSD || 0
-    }));
+    const tokens = response.data.data?.items || response.data.data?.tokens || [];
+    console.log(`[Birdeye] Search returned ${tokens.length} tokens`);
+
+    if (tokens.length === 0) {
+      return [];
+    }
+
+    // Fetch prices for all search results
+    const addresses = tokens.map(t => t.address).filter(Boolean);
+    const prices = await getMultiTokenPrices(addresses);
+
+    return tokens.map(token => {
+      const priceData = prices[token.address] || {};
+      return {
+        mintAddress: token.address,
+        address: token.address,
+        name: token.name || 'Unknown',
+        symbol: token.symbol || '???',
+        decimals: token.decimals || 9,
+        logoUri: token.logoURI || token.logo_uri || null,
+        logoURI: token.logoURI || token.logo_uri || null,
+        price: priceData.price || token.price || 0,
+        priceChange24h: priceData.priceChange24h || 0,
+        volume24h: priceData.volume24h || token.v24hUSD || 0,
+        liquidity: priceData.liquidity || token.liquidity || 0,
+        marketCap: priceData.mc || 0
+      };
+    });
   } catch (error) {
-    console.error('Birdeye search error:', error.message);
+    console.error('[Birdeye] Search error:', error.message);
+    if (error.response) {
+      console.error('[Birdeye] Response status:', error.response.status);
+    }
     return [];
   }
 }
@@ -405,6 +522,7 @@ function clearCache() {
 
 module.exports = {
   getTokenPrice,
+  getMultiTokenPrices,
   getTokenOverview,
   getPriceHistory,
   getOHLCV,

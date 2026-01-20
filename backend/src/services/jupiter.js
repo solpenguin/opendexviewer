@@ -69,6 +69,8 @@ const cache = {
 async function searchTokens(query) {
   const client = createClient();
 
+  console.log(`[Jupiter] searchTokens: query="${query}"`);
+
   try {
     // V2 search endpoint - searches by symbol, name, or mint
     const response = await jupiterRequest(() =>
@@ -78,9 +80,31 @@ async function searchTokens(query) {
     );
 
     const tokens = response.data || [];
-    return tokens.slice(0, 50).map(formatToken);
+    console.log(`[Jupiter] Search returned ${tokens.length} tokens`);
+
+    if (tokens.length === 0) {
+      return [];
+    }
+
+    // Get prices for the tokens
+    const tokenAddresses = tokens.slice(0, 50).map(t => t.address || t.mint).filter(Boolean);
+    const prices = await getTokenPrices(tokenAddresses);
+
+    // Combine token info with prices
+    return tokens.slice(0, 50).map(token => {
+      const address = token.address || token.mint;
+      const priceData = prices[address] || {};
+      return {
+        ...formatToken(token),
+        price: priceData.price || 0,
+        priceChange24h: priceData.priceChange24h || 0,
+        volume24h: priceData.volume24h || 0,
+        marketCap: priceData.marketCap || 0,
+        liquidity: priceData.liquidity || 0
+      };
+    });
   } catch (error) {
-    console.error('Jupiter search failed:', error.message);
+    console.error('[Jupiter] Search failed:', error.message);
 
     // If API key is missing or invalid, provide helpful message
     if (error.response?.status === 401 || error.response?.status === 403) {
@@ -291,14 +315,38 @@ async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, 
 async function getNewTokens(limit = 50) {
   const client = createClient();
 
+  console.log(`[Jupiter] getNewTokens: limit=${limit}`);
+
   try {
     const response = await jupiterRequest(() =>
       client.get(`/tokens/v2/recent`)
     );
     const tokens = response.data || [];
-    return tokens.slice(0, limit).map(formatToken);
+    console.log(`[Jupiter] New tokens returned ${tokens.length} tokens`);
+
+    if (tokens.length === 0) {
+      return [];
+    }
+
+    // Get prices for the tokens
+    const tokenAddresses = tokens.slice(0, limit).map(t => t.address || t.mint).filter(Boolean);
+    const prices = await getTokenPrices(tokenAddresses);
+
+    // Combine token info with prices
+    return tokens.slice(0, limit).map(token => {
+      const address = token.address || token.mint;
+      const priceData = prices[address] || {};
+      return {
+        ...formatToken(token),
+        price: priceData.price || 0,
+        priceChange24h: priceData.priceChange24h || 0,
+        volume24h: priceData.volume24h || 0,
+        marketCap: priceData.marketCap || 0,
+        liquidity: priceData.liquidity || 0
+      };
+    });
   } catch (error) {
-    console.error('Error fetching new tokens:', error.message);
+    console.error('[Jupiter] Error fetching new tokens:', error.message);
     return [];
   }
 }

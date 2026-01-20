@@ -20,6 +20,12 @@ const RATE_LIMITS = {
     burstLimit: 3,       // Allow up to 3 requests in quick succession
     burstWindow: 1000    // Within 1 second
   },
+  geckoTerminal: {
+    minInterval: 2000,   // Minimum 2s between requests (30 req/min = 0.5 req/sec)
+    maxJitter: 500,      // Add up to 500ms random jitter
+    burstLimit: 2,       // Allow up to 2 requests in quick succession
+    burstWindow: 2000    // Within 2 seconds
+  },
   jupiter: {
     minInterval: 100,    // Minimum 100ms between requests (10 req/sec max)
     maxJitter: 50,       // Add up to 50ms random jitter

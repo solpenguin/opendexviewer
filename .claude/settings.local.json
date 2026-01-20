@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(timeout 10 node:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout 15 node:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)"
     ]
   }
 }
