@@ -22,11 +22,11 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
-  // Try cache first
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    console.log(`[API /tokens] Returning ${cached.length} cached tokens`);
-    return res.json(cached);
+  // Try cache first - use getWithMeta since we store with setWithTimestamp
+  const cachedMeta = await cache.getWithMeta(cacheKey);
+  if (cachedMeta) {
+    console.log(`[API /tokens] Returning ${cachedMeta.value?.length || 0} cached tokens (age: ${Math.round(cachedMeta.age / 1000)}s)`);
+    return res.json(cachedMeta.value);
   }
 
   let tokens;

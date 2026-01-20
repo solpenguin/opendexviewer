@@ -401,21 +401,31 @@ class CacheService {
         return undefined;
       }
       const age = Date.now() - entry.createdAt;
+      // Check if value was stored with setWithTimestamp (has _data wrapper)
+      const actualValue = entry.value && entry.value._data !== undefined
+        ? entry.value._data
+        : entry.value;
+      const cachedAt = entry.value && entry.value._cachedAt
+        ? entry.value._cachedAt
+        : entry.createdAt;
+      const actualAge = Date.now() - cachedAt;
       return {
-        value: entry.value,
-        age,
-        fresh: age < TTL.PRICE_FRESH
+        value: actualValue,
+        age: actualAge,
+        fresh: actualAge < TTL.PRICE_FRESH
       };
     }
     // For Redis, we store timestamp in the value
     const data = await this.get(key);
     if (data === undefined) return undefined;
 
-    // If data has _cachedAt, use it for freshness
-    if (data && data._cachedAt) {
+    // If data has _cachedAt, use it for freshness (from setWithTimestamp)
+    if (data && data._cachedAt !== undefined) {
       const age = Date.now() - data._cachedAt;
+      // Extract actual value from _data wrapper
+      const actualValue = data._data !== undefined ? data._data : data;
       return {
-        value: data,
+        value: actualValue,
         age,
         fresh: age < TTL.PRICE_FRESH
       };
@@ -430,8 +440,9 @@ class CacheService {
    * @param {number} ttlMs - Time to live in milliseconds
    */
   async setWithTimestamp(key, value, ttlMs = TTL.PRICE_DATA) {
+    // Wrap value with metadata - handle arrays and objects differently
     const valueWithMeta = {
-      ...value,
+      _data: value,
       _cachedAt: Date.now()
     };
     return this.set(key, valueWithMeta, ttlMs);
