@@ -52,7 +52,7 @@ router.post('/', strictLimiter, validateSubmission, validateWallet, asyncHandler
   });
 
   // Clear cache for this token's submissions
-  cache.clearPattern(keys.submissions(tokenMint));
+  await cache.clearPattern(keys.submissions(tokenMint));
 
   res.status(201).json({
     ...submission,
@@ -69,7 +69,7 @@ router.get('/token/:mint', validateMint, asyncHandler(async (req, res) => {
   const cacheKey = `${keys.submissions(mint)}:${type || 'all'}:${status}`;
 
   // Try cache first
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -81,7 +81,7 @@ router.get('/token/:mint', validateMint, asyncHandler(async (req, res) => {
   const submissions = await db.getSubmissionsByToken(mint, options);
 
   // Cache for 30 seconds
-  cache.set(cacheKey, submissions, TTL.SHORT);
+  await cache.set(cacheKey, submissions, TTL.SHORT);
 
   res.json(submissions);
 }));

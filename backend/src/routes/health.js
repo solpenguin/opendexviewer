@@ -54,16 +54,26 @@ router.get('/detailed', async (req, res) => {
     health.status = 'degraded';
   }
 
-  // Cache status
-  health.checks.cache = {
-    status: 'ok',
-    ...cache.getStats()
-  };
+  // Check cache (Redis or in-memory)
+  try {
+    const cacheHealth = await cache.checkHealth();
+    health.checks.cache = {
+      status: cacheHealth.healthy ? 'ok' : 'error',
+      ...cacheHealth
+    };
+  } catch (error) {
+    health.checks.cache = {
+      status: 'error',
+      error: error.message
+    };
+    // Cache errors don't degrade the service - we can fall back to memory
+  }
 
   // Environment checks
   health.checks.environment = {
     node_env: process.env.NODE_ENV || 'development',
     has_database_url: !!process.env.DATABASE_URL,
+    has_redis_url: !!process.env.REDIS_URL,
     has_helius_key: !!process.env.HELIUS_API_KEY,
     has_birdeye_key: !!process.env.BIRDEYE_API_KEY
   };
@@ -109,13 +119,15 @@ router.get('/live', (req, res) => {
 router.get('/stats', async (req, res) => {
   try {
     const dbHealth = await db.checkHealth();
-    const cacheStats = cache.getStats();
+    const cacheStats = await cache.getStats();
 
     res.json({
       timestamp: new Date().toISOString(),
       cache: {
+        type: cacheStats.type,
         entries: cacheStats.size,
-        hitRate: cacheStats.hitRate
+        hitRate: cacheStats.hitRate,
+        connected: cacheStats.connected
       },
       database: {
         connected: dbHealth.healthy,
@@ -123,6 +135,7 @@ router.get('/stats', async (req, res) => {
         idleConnections: dbHealth.idleConnections
       },
       features: {
+        redisEnabled: !!process.env.REDIS_URL,
         birdeyeEnabled: !!process.env.BIRDEYE_API_KEY,
         heliusEnabled: !!process.env.HELIUS_API_KEY
       }

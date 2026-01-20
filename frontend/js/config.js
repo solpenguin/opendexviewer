@@ -13,18 +13,9 @@ const config = {
         return 'http://localhost:3000';
       }
 
-      // Render deployment - update this with your actual API URL
-      if (hostname.includes('onrender.com')) {
-        return 'https://opendex-api.onrender.com';
-      }
-
-      // Custom domain (update as needed)
-      // if (hostname === 'yourdomain.com') {
-      //   return 'https://api.yourdomain.com';
-      // }
-
-      // Default to relative path (same origin)
-      return '';
+      // Production API URL (Render deployment)
+      // Used for all non-local environments (GitHub Pages, custom domains, etc.)
+      return 'https://opendex-api.onrender.com';
     })(),
 
     // Request timeout in milliseconds

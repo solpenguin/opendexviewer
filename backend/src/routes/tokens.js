@@ -20,7 +20,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
   // Try cache first
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -66,7 +66,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     }
 
     // Cache for 30 seconds
-    cache.set(cacheKey, tokens, TTL.SHORT);
+    await cache.set(cacheKey, tokens, TTL.SHORT);
 
     res.json(tokens);
   } catch (error) {
@@ -81,7 +81,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
   const cacheKey = keys.tokenSearch(q.toLowerCase());
 
   // Try cache first
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -97,7 +97,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
     }
 
     // Cache for 1 minute
-    cache.set(cacheKey, results, TTL.MEDIUM);
+    await cache.set(cacheKey, results, TTL.MEDIUM);
 
     res.json(results);
   } catch (error) {
@@ -112,7 +112,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   const cacheKey = keys.tokenInfo(mint);
 
   // Try cache first
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -142,7 +142,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
     };
 
     // Cache for 30 seconds
-    cache.set(cacheKey, result, TTL.SHORT);
+    await cache.set(cacheKey, result, TTL.SHORT);
 
     // Also save to database for future reference
     db.upsertToken({
@@ -166,7 +166,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
   const cacheKey = keys.tokenPrice(mint);
 
   // Try cache first (short TTL for prices)
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -181,7 +181,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
     }
 
     // Cache for 10 seconds
-    cache.set(cacheKey, priceData, TTL.VERY_SHORT);
+    await cache.set(cacheKey, priceData, TTL.VERY_SHORT);
 
     res.json(priceData);
   } catch (error) {
@@ -209,7 +209,7 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
   const cacheKey = keys.tokenChart(mint, normalizedInterval);
 
   // Try cache first
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -230,7 +230,7 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
 
     // Cache based on interval
     const cacheTTL = normalizedInterval.includes('m') ? TTL.SHORT : TTL.MEDIUM;
-    cache.set(cacheKey, chartData, cacheTTL);
+    await cache.set(cacheKey, chartData, cacheTTL);
 
     res.json(chartData);
   } catch (error) {
@@ -253,7 +253,7 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
   const cacheKey = `ohlcv:${mint}:${interval}`;
 
   // Try cache first
-  const cached = cache.get(cacheKey);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
@@ -262,7 +262,7 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
     const ohlcvData = await birdeyeService.getOHLCV(mint, { interval });
 
     // Cache for 30 seconds
-    cache.set(cacheKey, ohlcvData, TTL.SHORT);
+    await cache.set(cacheKey, ohlcvData, TTL.SHORT);
 
     res.json(ohlcvData);
   } catch (error) {

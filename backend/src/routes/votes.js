@@ -45,7 +45,7 @@ router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
   }
 
   // Clear cache for this token's submissions
-  cache.clearPattern(keys.submissions(submission.token_mint));
+  await cache.clearPattern(keys.submissions(submission.token_mint));
 
   // Get updated tally
   const tally = await db.getVoteTally(parsedId);
