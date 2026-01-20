@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validateSubmission, validateWallet, asyncHandler } = require('../middleware/validation');
+const { validateMint, validateSubmission, validateWallet, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
+
+// All routes in this file require database access
+router.use(requireDatabase);
 
 // GET /api/submissions/:id - Get submission details
 router.get('/:id', asyncHandler(async (req, res) => {

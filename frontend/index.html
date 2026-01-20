@@ -3,24 +3,49 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenDex - Open Source Solana Token Viewer</title>
-  <meta name="description" content="Free, open-source Solana token viewer with community-driven banners and social links">
-  <meta name="theme-color" content="#0d0d0f">
+  <title>OpenDex - Open Source Solana Token Scanner</title>
+  <meta name="description" content="Free, open-source Solana token scanner with real-time prices, charts, and community-driven content">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header class="header">
     <div class="header-content">
       <a href="/" class="logo">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="url(#logo-gradient)"/>
+          <path d="M10 16L14 12L18 16L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 20L14 16L18 20L22 16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+          <defs>
+            <linearGradient id="logo-gradient" x1="0" y1="0" x2="32" y2="32">
+              <stop stop-color="#6366f1"/>
+              <stop offset="1" stop-color="#a855f7"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <span class="logo-text">OpenDex</span>
-        <span class="logo-badge">BETA</span>
+        <span class="logo-badge">Beta</span>
       </a>
+
       <nav class="nav">
         <a href="/" class="nav-link active">Tokens</a>
         <a href="submit.html" class="nav-link">Submit</a>
       </nav>
+
       <div class="header-actions">
-        <button id="connect-wallet" class="btn btn-primary">Connect Wallet</button>
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
       </div>
     </div>
   </header>
@@ -28,52 +53,82 @@
   <main class="main">
     <section class="hero">
       <h1>Solana Token Explorer</h1>
-      <p>Free, open-source, community-driven</p>
+      <p>Real-time prices, charts, and community-driven insights</p>
+
       <div class="search-container">
         <div class="search-input-wrapper">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
           </svg>
           <input
             type="text"
             id="search-input"
             class="search-input"
-            placeholder="Search by token name, symbol, or address..."
+            placeholder="Search by token name, symbol, or mint address..."
             autocomplete="off"
           >
-          <button id="search-clear" class="search-clear" style="display: none;">×</button>
+          <button id="search-clear" class="search-clear" style="display: none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
-        <button id="search-btn" class="btn btn-search">Search</button>
+        <button id="search-btn" class="btn btn-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          Search
+        </button>
+        <div id="search-results" class="search-results" style="display: none;"></div>
       </div>
-      <div id="search-results" class="search-results" style="display: none;"></div>
     </section>
 
     <section class="filters">
       <div class="filter-tabs">
         <button class="filter-tab active" data-filter="trending">
-          <span class="filter-icon">🔥</span>
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.66 11.2C17.43 10.9 17.15 10.64 16.89 10.38C16.22 9.78 15.46 9.35 14.82 8.72C13.33 7.26 13 4.85 13.95 3C13 3.23 12.17 3.75 11.46 4.32C8.87 6.4 7.85 10.07 9.07 13.22C9.11 13.32 9.15 13.42 9.15 13.55C9.15 13.77 9 13.97 8.8 14.05C8.57 14.15 8.33 14.09 8.14 13.93C8.08 13.88 8.04 13.83 8 13.76C6.87 12.33 6.69 10.28 7.45 8.64C5.78 10 4.87 12.3 5 14.47C5.06 14.97 5.12 15.47 5.29 15.97C5.43 16.57 5.7 17.17 6 17.7C7.08 19.43 8.95 20.67 10.96 20.92C13.1 21.19 15.39 20.8 17.03 19.32C18.86 17.66 19.5 15 18.56 12.72L18.43 12.46C18.22 12 17.66 11.2 17.66 11.2Z"/>
+            </svg>
+          </span>
           Trending
         </button>
         <button class="filter-tab" data-filter="new">
-          <span class="filter-icon">✨</span>
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+            </svg>
+          </span>
           New
         </button>
         <button class="filter-tab" data-filter="gainers">
-          <span class="filter-icon">📈</span>
-          Top Gainers
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+              <polyline points="16 7 22 7 22 13"/>
+            </svg>
+          </span>
+          Gainers
         </button>
         <button class="filter-tab" data-filter="losers">
-          <span class="filter-icon">📉</span>
-          Top Losers
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/>
+              <polyline points="16 17 22 17 22 11"/>
+            </svg>
+          </span>
+          Losers
         </button>
       </div>
+
       <div class="filter-info">
         <span id="result-count"></span>
-        <button id="refresh-btn" class="btn-icon" title="Refresh">
+        <button id="refresh-btn" class="btn-icon" title="Refresh data">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-            <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
-            <path d="M21 3v5h-5"></path>
+            <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
           </svg>
         </button>
       </div>
@@ -107,8 +162,10 @@
           <tbody id="token-list">
             <tr class="loading-row">
               <td colspan="6">
-                <div class="loading-spinner"></div>
-                <span>Loading tokens...</span>
+                <div class="loading-state">
+                  <div class="loading-spinner large"></div>
+                  <span>Loading tokens...</span>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -118,7 +175,7 @@
       <div class="pagination">
         <button id="prev-page" class="btn btn-secondary" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M15 18l-6-6 6-6"></path>
+            <path d="M15 18l-6-6 6-6"/>
           </svg>
           Previous
         </button>
@@ -129,15 +186,19 @@
         <button id="next-page" class="btn btn-secondary">
           Next
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M9 18l6-6-6-6"></path>
+            <path d="M9 18l6-6-6-6"/>
           </svg>
         </button>
       </div>
     </section>
 
-    <!-- API Status Banner (shown if API is down) -->
+    <!-- API Status Banner -->
     <div id="api-status" class="api-status" style="display: none;">
-      <span class="status-icon">⚠️</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
       <span class="status-message">Unable to connect to API. Retrying...</span>
     </div>
   </main>
@@ -145,11 +206,11 @@
   <footer class="footer">
     <div class="footer-content">
       <div class="footer-left">
-        <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
-        <p class="footer-tagline">Not affiliated with DexScreener</p>
+        <p>OpenDex - Open Source Token Scanner</p>
+        <p class="footer-tagline">Community-powered Solana analytics</p>
       </div>
       <div class="footer-links">
-        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
           </svg>

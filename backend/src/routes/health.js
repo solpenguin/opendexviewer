@@ -74,15 +74,27 @@ router.get('/detailed', async (req, res) => {
 });
 
 // GET /health/ready - Readiness probe (for k8s/render)
+// Returns ready if core services work, even if database is still connecting
 router.get('/ready', async (req, res) => {
   try {
-    const dbHealth = await db.checkHealth();
-
-    if (dbHealth.healthy) {
-      res.json({ ready: true });
-    } else {
-      res.status(503).json({ ready: false, reason: 'Database not healthy' });
+    // Check if database is configured but not ready yet (still connecting)
+    if (process.env.DATABASE_URL && !db.isReady()) {
+      // Return 503 only if database is required and not ready
+      // This gives Render time to wait for the database
+      const dbHealth = await db.checkHealth();
+      if (!dbHealth.healthy) {
+        return res.status(503).json({
+          ready: false,
+          reason: 'Database connecting...',
+          dbStatus: dbHealth
+        });
+      }
     }
+
+    // If we get here, either:
+    // 1. No database configured (database features disabled)
+    // 2. Database is healthy
+    res.json({ ready: true, databaseConfigured: !!process.env.DATABASE_URL });
   } catch (error) {
     res.status(503).json({ ready: false, reason: error.message });
   }

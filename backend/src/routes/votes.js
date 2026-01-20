@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const { cache, keys } = require('../services/cache');
-const { validateVote, asyncHandler } = require('../middleware/validation');
+const { validateVote, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
+
+// All routes in this file require database access
+router.use(requireDatabase);
 
 // POST /api/votes - Cast a vote
 router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {

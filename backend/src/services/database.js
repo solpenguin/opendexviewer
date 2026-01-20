@@ -51,7 +51,7 @@ async function initializeDatabase() {
   let client;
   try {
     client = await pool.connect();
-  try {
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS tokens (
         id SERIAL PRIMARY KEY,
@@ -95,11 +95,29 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
       CREATE INDEX IF NOT EXISTS idx_votes_submission ON votes(submission_id);
     `);
+
+    isConnected = true;
+    connectionAttempts = 0;
     console.log('Database initialized successfully');
+    return true;
+
   } catch (error) {
-    console.error('Database initialization error:', error.message);
+    console.error(`Database connection failed (attempt ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS}):`, error.message);
+    isConnected = false;
+
+    // Retry if we haven't exceeded max attempts
+    if (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
+      console.log(`Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
+      setTimeout(() => initializeDatabase(), RETRY_DELAY_MS);
+    } else {
+      console.error('Max database connection attempts reached. Database features will be unavailable.');
+    }
+    return false;
+
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 
@@ -309,8 +327,21 @@ async function getPendingSubmissions(limit = 50) {
   return result.rows;
 }
 
+// Check if database is ready for queries
+function isReady() {
+  return pool !== null && isConnected;
+}
+
 // Check database health
 async function checkHealth() {
+  if (!pool) {
+    return {
+      healthy: false,
+      error: 'Database pool not initialized',
+      isConnected: false
+    };
+  }
+
   try {
     const result = await pool.query('SELECT NOW() as time');
     return {
@@ -318,12 +349,14 @@ async function checkHealth() {
       timestamp: result.rows[0].time,
       poolSize: pool.totalCount,
       idleConnections: pool.idleCount,
-      waitingRequests: pool.waitingCount
+      waitingRequests: pool.waitingCount,
+      isConnected: true
     };
   } catch (error) {
     return {
       healthy: false,
-      error: error.message
+      error: error.message,
+      isConnected: false
     };
   }
 }
@@ -336,6 +369,7 @@ if (process.env.DATABASE_URL) {
 module.exports = {
   pool,
   initializeDatabase,
+  isReady,
   upsertToken,
   getToken,
   createSubmission,

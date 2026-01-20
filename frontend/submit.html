@@ -5,21 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Submit Content - OpenDex</title>
   <meta name="description" content="Submit banners and social links for tokens - completely free">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header class="header">
     <div class="header-content">
       <a href="/" class="logo">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="url(#logo-gradient)"/>
+          <path d="M10 16L14 12L18 16L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 20L14 16L18 20L22 16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+          <defs>
+            <linearGradient id="logo-gradient" x1="0" y1="0" x2="32" y2="32">
+              <stop stop-color="#6366f1"/>
+              <stop offset="1" stop-color="#a855f7"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <span class="logo-text">OpenDex</span>
-        <span class="logo-badge">BETA</span>
+        <span class="logo-badge">Beta</span>
       </a>
+
       <nav class="nav">
         <a href="/" class="nav-link">Tokens</a>
         <a href="submit.html" class="nav-link active">Submit</a>
       </nav>
+
       <div class="header-actions">
-        <button id="connect-wallet" class="btn btn-primary">Connect Wallet</button>
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
       </div>
     </div>
   </header>

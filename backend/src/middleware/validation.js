@@ -196,6 +196,20 @@ function asyncHandler(fn) {
   };
 }
 
+// Middleware to check if database is available
+// Use this for routes that require database access
+function requireDatabase(req, res, next) {
+  const db = require('../services/database');
+  if (!db.isReady()) {
+    return res.status(503).json({
+      error: 'Database temporarily unavailable',
+      message: 'The database is starting up. Please try again in a few moments.',
+      retryAfter: 5
+    });
+  }
+  next();
+}
+
 module.exports = {
   validateMint,
   validateWallet,
@@ -204,6 +218,7 @@ module.exports = {
   validatePagination,
   validateSearch,
   asyncHandler,
+  requireDatabase,
   sanitizeString,
   isValidUrl,
   SOLANA_ADDRESS_REGEX
