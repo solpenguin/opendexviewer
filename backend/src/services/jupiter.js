@@ -137,7 +137,8 @@ async function getTokenInfo(mintAddress) {
 
 /**
  * Get verified tokens list
- * Uses the tag endpoint with 'verified' tag
+ * Uses the tag endpoint: /tokens/v2/tag?query=verified
+ * Valid tags: lst, verified
  */
 async function getVerifiedTokens() {
   const now = Date.now();
@@ -149,6 +150,7 @@ async function getVerifiedTokens() {
   const client = createClient();
 
   try {
+    // Tag endpoint uses query param
     const response = await client.get(`/tokens/v2/tag`, {
       params: { query: 'verified' }
     });
@@ -167,23 +169,24 @@ async function getVerifiedTokens() {
 
 /**
  * Get trending tokens
- * Uses the category endpoint with 'toptrending' category
+ * Uses the category endpoint: /tokens/v2/toptrending/{interval}
+ * Valid intervals: 5m, 1h, 6h, 24h
  */
-async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, offset = 0 }) {
+async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, offset = 0, interval = '24h' }) {
   const client = createClient();
 
   try {
-    // Try trending category first
-    const response = await client.get(`/tokens/v2/category`, {
-      params: { query: 'toptrending' }
+    // V2 category endpoint uses URL path: /tokens/v2/toptrending/24h
+    const response = await client.get(`/tokens/v2/toptrending/${interval}`, {
+      params: { limit: Math.min(limit + offset, 100) }
     });
 
     let tokens = response.data || [];
 
     // If no trending data, fall back to top traded
     if (tokens.length === 0) {
-      const tradedResponse = await client.get(`/tokens/v2/category`, {
-        params: { query: 'toptraded' }
+      const tradedResponse = await client.get(`/tokens/v2/toptraded/${interval}`, {
+        params: { limit: Math.min(limit + offset, 100) }
       });
       tokens = tradedResponse.data || [];
     }

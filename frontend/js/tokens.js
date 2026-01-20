@@ -3,6 +3,7 @@ const tokenList = {
   tokens: [],
   currentPage: 1,
   pageSize: 50,
+  totalPages: 10, // Estimated total pages for pagination display
   currentFilter: 'trending',
   currentSort: 'volume',
   sortOrder: 'desc',
@@ -10,6 +11,7 @@ const tokenList = {
   isSearchMode: false,
   isLoading: false,
   autoRefreshInterval: null,
+  hasMorePages: true, // Track if there are more pages available
 
   // Initialize
   async init() {
@@ -24,11 +26,19 @@ const tokenList = {
     const filter = utils.getUrlParam('filter');
     const page = utils.getUrlParam('page');
     const search = utils.getUrlParam('q');
+    const rows = utils.getUrlParam('rows');
 
     if (filter && ['trending', 'new', 'gainers', 'losers'].includes(filter)) {
       this.currentFilter = filter;
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.filter === filter);
+      });
+    }
+
+    if (rows && [10, 25, 50].includes(parseInt(rows))) {
+      this.pageSize = parseInt(rows);
+      document.querySelectorAll('.rows-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.rows) === this.pageSize);
       });
     }
 
@@ -144,26 +154,55 @@ const tokenList = {
       });
     });
 
-    // Pagination
+    // Rows per page selector
+    document.querySelectorAll('.rows-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.isLoading) return;
+
+        const newPageSize = parseInt(btn.dataset.rows);
+        if (newPageSize === this.pageSize) return;
+
+        document.querySelectorAll('.rows-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        this.pageSize = newPageSize;
+        this.currentPage = 1; // Reset to first page
+        utils.setUrlParam('rows', newPageSize !== 50 ? newPageSize : null);
+        utils.setUrlParam('page', null);
+        this.loadTokens();
+      });
+    });
+
+    // Pagination arrows
     const prevBtn = document.getElementById('prev-page');
     const nextBtn = document.getElementById('next-page');
 
     if (prevBtn) {
       prevBtn.addEventListener('click', () => {
         if (this.currentPage > 1 && !this.isLoading) {
-          this.currentPage--;
-          utils.setUrlParam('page', this.currentPage > 1 ? this.currentPage : null);
-          this.loadTokens();
+          this.goToPage(this.currentPage - 1);
         }
       });
     }
 
     if (nextBtn) {
       nextBtn.addEventListener('click', () => {
-        if (!this.isLoading && this.tokens.length === this.pageSize) {
-          this.currentPage++;
-          utils.setUrlParam('page', this.currentPage);
-          this.loadTokens();
+        if (!this.isLoading && this.hasMorePages) {
+          this.goToPage(this.currentPage + 1);
+        }
+      });
+    }
+
+    // Page tabs click handler (using event delegation)
+    const pageTabs = document.getElementById('page-tabs');
+    if (pageTabs) {
+      pageTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.page-tab');
+        if (tab && !this.isLoading) {
+          const page = parseInt(tab.dataset.page);
+          if (page && page !== this.currentPage) {
+            this.goToPage(page);
+          }
         }
       });
     }
@@ -286,13 +325,17 @@ const tokenList = {
         dropdown.appendChild(noResults);
       } else {
         limitedResults.forEach(token => {
+          // Handle different property names from various API responses
+          const address = token.mintAddress || token.address || token.mint;
+          const logo = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
+
           const link = document.createElement('a');
-          link.href = `token.html?mint=${encodeURIComponent(token.mintAddress)}`;
+          link.href = `token.html?mint=${encodeURIComponent(address)}`;
           link.className = 'search-result-item';
 
           const img = document.createElement('img');
           img.className = 'search-result-logo';
-          img.src = token.logoUri || utils.getDefaultLogo();
+          img.src = logo;
           img.alt = utils.escapeHtml(token.symbol || '');
           img.onerror = function() { this.src = utils.getDefaultLogo(); };
 
@@ -357,8 +400,10 @@ const tokenList = {
       tbody.innerHTML = `
         <tr class="loading-row">
           <td colspan="6">
-            <div class="loading-spinner"></div>
-            <span>Loading tokens...</span>
+            <div class="loading-state">
+              <div class="loading-spinner"></div>
+              <span>Loading tokens...</span>
+            </div>
           </td>
         </tr>
       `;
@@ -433,17 +478,19 @@ const tokenList = {
       const rank = (this.currentPage - 1) * this.pageSize + index + 1;
       const change = token.priceChange24h || 0;
       const changeClass = change >= 0 ? 'change-positive' : 'change-negative';
-      const logo = token.logoUri || utils.getDefaultLogo();
+      // Handle different property names from various API responses
+      const address = token.mintAddress || token.address || token.mint;
+      const logo = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
 
       return `
-        <tr onclick="window.location.href='token.html?mint=${token.mintAddress}'" class="token-row">
+        <tr onclick="window.location.href='token.html?mint=${address}'" class="token-row">
           <td class="cell-rank">${rank}</td>
           <td>
             <div class="token-cell">
               <img
                 class="token-logo"
                 src="${logo}"
-                alt="${token.symbol}"
+                alt="${this.escapeHtml(token.symbol || '')}"
                 loading="lazy"
                 onerror="this.src='${utils.getDefaultLogo()}'"
               >
@@ -469,6 +516,72 @@ const tokenList = {
     return utils.escapeHtml(text);
   },
 
+  // Go to specific page
+  goToPage(page) {
+    if (page < 1 || this.isLoading) return;
+    this.currentPage = page;
+    utils.setUrlParam('page', page > 1 ? page : null);
+    this.loadTokens();
+  },
+
+  // Generate page tabs
+  generatePageTabs() {
+    const container = document.getElementById('page-tabs');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const current = this.currentPage;
+
+    // Determine visible pages (show up to 5 tabs with ellipsis)
+    let pages = [];
+    const maxVisible = 5;
+
+    if (this.totalPages <= maxVisible) {
+      // Show all pages
+      pages = Array.from({ length: this.totalPages }, (_, i) => i + 1);
+    } else {
+      // Complex pagination with ellipsis
+      pages.push(1); // Always show first page
+
+      if (current > 3) {
+        pages.push('...');
+      }
+
+      // Show pages around current
+      const start = Math.max(2, current - 1);
+      const end = Math.min(this.totalPages - 1, current + 1);
+
+      for (let i = start; i <= end; i++) {
+        if (!pages.includes(i)) pages.push(i);
+      }
+
+      if (current < this.totalPages - 2) {
+        pages.push('...');
+      }
+
+      // Always show last page
+      if (!pages.includes(this.totalPages)) {
+        pages.push(this.totalPages);
+      }
+    }
+
+    // Create tab elements
+    pages.forEach(page => {
+      if (page === '...') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'page-ellipsis';
+        ellipsis.textContent = '...';
+        container.appendChild(ellipsis);
+      } else {
+        const tab = document.createElement('button');
+        tab.className = `page-tab${page === current ? ' active' : ''}`;
+        tab.dataset.page = page;
+        tab.textContent = page;
+        container.appendChild(tab);
+      }
+    });
+  },
+
   // Update pagination controls
   updatePagination() {
     const prevBtn = document.getElementById('prev-page');
@@ -476,20 +589,35 @@ const tokenList = {
     const pageInfo = document.getElementById('page-info');
     const totalInfo = document.getElementById('total-info');
 
+    // Determine if there are more pages
+    this.hasMorePages = this.tokens.length === this.pageSize;
+
+    // Update total pages estimate based on response
+    if (this.hasMorePages && this.currentPage >= this.totalPages) {
+      this.totalPages = this.currentPage + 1;
+    }
+
     if (prevBtn) {
       prevBtn.disabled = this.currentPage <= 1;
     }
 
     if (nextBtn) {
-      nextBtn.disabled = this.tokens.length < this.pageSize;
+      nextBtn.disabled = !this.hasMorePages;
     }
 
+    // Generate page tabs
+    this.generatePageTabs();
+
     if (pageInfo) {
-      pageInfo.textContent = `Page ${this.currentPage}`;
+      const start = (this.currentPage - 1) * this.pageSize + 1;
+      const end = start + this.tokens.length - 1;
+      pageInfo.textContent = this.isSearchMode
+        ? `${this.tokens.length} results`
+        : `${start}-${end}`;
     }
 
     if (totalInfo) {
-      totalInfo.textContent = this.isSearchMode ? '' : `• ${this.tokens.length} tokens`;
+      totalInfo.textContent = this.isSearchMode ? '' : `• Page ${this.currentPage}`;
     }
   },
 

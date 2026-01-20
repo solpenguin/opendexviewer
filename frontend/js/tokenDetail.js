@@ -189,10 +189,10 @@ const tokenDetail = {
     // Update page title
     document.title = `${token.name} (${token.symbol}) - OpenDex`;
 
-    // Header info
+    // Header info - handle different property names from various API responses
     const logoEl = document.getElementById('token-logo');
     if (logoEl) {
-      logoEl.src = token.logoUri || utils.getDefaultLogo();
+      logoEl.src = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
       logoEl.onerror = function() {
         this.src = utils.getDefaultLogo();
       };

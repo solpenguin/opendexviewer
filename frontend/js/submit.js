@@ -188,9 +188,9 @@ const submitPage = {
       this.tokenData = token;
       this.tokenValid = true;
 
-      // Update preview
+      // Update preview - handle different property names from various API responses
       const logoEl = document.getElementById('preview-logo');
-      logoEl.src = token.logoUri || utils.getDefaultLogo();
+      logoEl.src = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
       logoEl.onerror = function() { this.src = utils.getDefaultLogo(); };
 
       document.getElementById('preview-name').textContent = token.name || 'Unknown Token';

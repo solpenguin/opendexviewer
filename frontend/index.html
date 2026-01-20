@@ -173,22 +173,35 @@
       </div>
 
       <div class="pagination">
-        <button id="prev-page" class="btn btn-secondary" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M15 18l-6-6 6-6"/>
-          </svg>
-          Previous
-        </button>
-        <div class="pagination-info">
-          <span id="page-info">Page 1</span>
+        <div class="pagination-left">
+          <span class="rows-label">Rows:</span>
+          <div class="rows-selector">
+            <button class="rows-btn" data-rows="10">10</button>
+            <button class="rows-btn" data-rows="25">25</button>
+            <button class="rows-btn active" data-rows="50">50</button>
+          </div>
+        </div>
+
+        <div class="pagination-center">
+          <button id="prev-page" class="pagination-arrow" disabled title="Previous page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+          <div id="page-tabs" class="page-tabs">
+            <button class="page-tab active" data-page="1">1</button>
+          </div>
+          <button id="next-page" class="pagination-arrow" title="Next page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="pagination-right">
+          <span id="page-info" class="page-info-text">Page 1</span>
           <span id="total-info" class="text-muted"></span>
         </div>
-        <button id="next-page" class="btn btn-secondary">
-          Next
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M9 18l6-6-6-6"/>
-          </svg>
-        </button>
       </div>
     </section>
 
