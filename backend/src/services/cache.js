@@ -26,7 +26,8 @@ const keys = {
   tokenList: (sort, page) => `list:${sort}:${page}`,
   tokenSearch: (query) => `search:${query}`,
   submissions: (mint) => `submissions:${mint}`,
-  pools: (mint) => `pools:${mint}`
+  pools: (mint) => `pools:${mint}`,
+  holderCount: (mint) => `holders:${mint}`
 };
 
 /**

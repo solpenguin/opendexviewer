@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jupiterService = require('../services/jupiter');
 const geckoService = require('../services/geckoTerminal');
+const solanaService = require('../services/solana');
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
 const { validateMint, validatePagination, validateSearch, asyncHandler } = require('../middleware/validation');
@@ -249,13 +250,38 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   }
 
   try {
+    // Fetch holder count from cache first (cached for 24 hours)
+    // This is a separate cache key so it doesn't get invalidated with price data
+    const holderCacheKey = keys.holderCount(mint);
+    let holders = await cache.get(holderCacheKey);
+
     // Fetch data in parallel - use GeckoTerminal for market data
     console.log('[API /tokens/:mint] Fetching from APIs...');
-    const [tokenInfo, geckoOverview, submissions] = await Promise.all([
+    const fetchPromises = [
       jupiterService.getTokenInfo(mint),
       geckoService.getTokenOverview(mint),
       db.getApprovedSubmissions(mint).catch(() => [])
-    ]);
+    ];
+
+    // If holder count not cached and Helius is configured, fetch it
+    if (holders === undefined && solanaService.isHeliusConfigured()) {
+      fetchPromises.push(
+        solanaService.getTokenHolderCount(mint).catch(err => {
+          console.error('[API /tokens/:mint] Holder count fetch failed:', err.message);
+          return null;
+        })
+      );
+    }
+
+    const results = await Promise.all(fetchPromises);
+    const [tokenInfo, geckoOverview, submissions, fetchedHolders] = results;
+
+    // Cache holder count for 24 hours if we fetched it
+    if (fetchedHolders !== undefined && fetchedHolders !== null) {
+      holders = fetchedHolders;
+      await cache.set(holderCacheKey, holders, TTL.DAY);
+      console.log(`[API /tokens/:mint] Cached holder count: ${holders} for 24 hours`);
+    }
 
     console.log('[API /tokens/:mint] tokenInfo:', JSON.stringify(tokenInfo, null, 2));
     console.log('[API /tokens/:mint] geckoOverview:', JSON.stringify(geckoOverview, null, 2));
@@ -297,8 +323,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       supply: supply,
       circulatingSupply: circulatingSupply,
       totalSupply: gecko.totalSupply || null,
-      // Holders not available from GeckoTerminal
-      holders: null,
+      // Holder count from Helius (cached daily)
+      holders: holders || null,
       // Additional metadata
       coingeckoId: gecko.coingeckoId || null,
       // Submissions
