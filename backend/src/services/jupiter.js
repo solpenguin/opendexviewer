@@ -1,19 +1,22 @@
 const axios = require('axios');
 
 /**
- * Jupiter API Service (V2 - 2026)
+ * Jupiter API Service (2026)
  *
  * API Key required - get one at https://portal.jup.ag/
  * Set JUPITER_API_KEY in environment variables
  *
  * Deprecation notice: lite-api.jup.ag deprecated as of Jan 31, 2026
  * All requests now go through api.jup.ag with x-api-key header
+ *
+ * Token API: V2 (/tokens/v2/*)
+ * Price API: V3 (/price/v3) - V2 is deprecated
  */
 
-// Jupiter API endpoints (V2)
+// Jupiter API endpoints
 const JUPITER_BASE_URL = 'https://api.jup.ag';
 const JUPITER_TOKEN_API = `${JUPITER_BASE_URL}/tokens/v2`;
-const JUPITER_PRICE_API = `${JUPITER_BASE_URL}/price/v2`;
+const JUPITER_PRICE_API = `${JUPITER_BASE_URL}/price/v3`;
 
 // Get API key from environment
 function getApiKey() {
@@ -101,9 +104,9 @@ async function getTokenInfo(mintAddress) {
     console.warn('Jupiter token lookup failed:', error.message);
   }
 
-  // Fallback: try to get basic info from price API
+  // Fallback: try to get basic info from price API V3
   try {
-    const priceResponse = await client.get(`/price/v2`, {
+    const priceResponse = await client.get(`/price/v3`, {
       params: { ids: mintAddress }
     });
 
@@ -112,9 +115,9 @@ async function getTokenInfo(mintAddress) {
       return {
         mintAddress,
         address: mintAddress,
-        name: priceData.mintSymbol || 'Unknown Token',
-        symbol: priceData.mintSymbol || 'UNKNOWN',
-        decimals: 9,
+        name: priceData.symbol || 'Unknown Token',
+        symbol: priceData.symbol || 'UNKNOWN',
+        decimals: priceData.decimals || 9,
         logoUri: null,
         logoURI: null
       };
@@ -243,7 +246,8 @@ async function getNewTokens(limit = 50) {
 }
 
 /**
- * Get token price from Jupiter
+ * Get token price from Jupiter Price API V3
+ * V3 returns usdPrice instead of price
  */
 async function getTokenPrice(mintAddress) {
   const cacheKey = mintAddress;
@@ -257,14 +261,15 @@ async function getTokenPrice(mintAddress) {
   const client = createClient();
 
   try {
-    const response = await client.get(`/price/v2`, {
+    const response = await client.get(`/price/v3`, {
       params: { ids: mintAddress }
     });
 
     const priceData = response.data?.data?.[mintAddress];
 
     const result = {
-      price: priceData?.price || 0,
+      price: priceData?.usdPrice || priceData?.price || 0,
+      priceChange24h: priceData?.priceChange24h || 0,
       mintAddress,
       timestamp: now
     };
@@ -282,7 +287,8 @@ async function getTokenPrice(mintAddress) {
 }
 
 /**
- * Get multiple token prices
+ * Get multiple token prices using Price API V3
+ * V3 returns usdPrice instead of price - normalize response
  */
 async function getTokenPrices(mintAddresses) {
   if (!mintAddresses || mintAddresses.length === 0) {
@@ -292,13 +298,24 @@ async function getTokenPrices(mintAddresses) {
   const client = createClient();
 
   try {
-    // Jupiter allows comma-separated mint addresses
-    const ids = mintAddresses.join(',');
-    const response = await client.get(`/price/v2`, {
+    // Jupiter allows comma-separated mint addresses (max 50)
+    const ids = mintAddresses.slice(0, 50).join(',');
+    const response = await client.get(`/price/v3`, {
       params: { ids }
     });
 
-    return response.data?.data || {};
+    const data = response.data?.data || {};
+
+    // Normalize V3 response to include 'price' field for backwards compatibility
+    const normalized = {};
+    for (const [address, priceData] of Object.entries(data)) {
+      normalized[address] = {
+        ...priceData,
+        price: priceData.usdPrice || priceData.price || 0
+      };
+    }
+
+    return normalized;
   } catch (error) {
     console.error('Error fetching prices:', error.message);
     return {};
@@ -360,8 +377,8 @@ async function checkHealth() {
 
   try {
     const start = Date.now();
-    // Use a simple search as health check
-    await client.get(`/price/v2`, {
+    // Use Price V3 endpoint for health check (SOL address)
+    await client.get(`/price/v3`, {
       params: { ids: 'So11111111111111111111111111111111111111112' } // SOL
     });
     const latency = Date.now() - start;
