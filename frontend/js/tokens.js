@@ -336,8 +336,8 @@ const tokenList = {
           const img = document.createElement('img');
           img.className = 'search-result-logo';
           img.src = logo;
-          img.alt = utils.escapeHtml(token.symbol || '');
-          img.onerror = function() { this.src = utils.getDefaultLogo(); };
+          img.alt = token.symbol || '';
+          img.onerror = function() { this.onerror = null; this.src = utils.getDefaultLogo(); };
 
           const info = document.createElement('div');
           info.className = 'search-result-info';
@@ -474,13 +474,17 @@ const tokenList = {
       return;
     }
 
+    const defaultLogo = utils.getDefaultLogo();
+
     tbody.innerHTML = this.tokens.map((token, index) => {
       const rank = (this.currentPage - 1) * this.pageSize + index + 1;
       const change = token.priceChange24h || 0;
       const changeClass = change >= 0 ? 'change-positive' : 'change-negative';
       // Handle different property names from various API responses
       const address = token.mintAddress || token.address || token.mint;
-      const logo = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
+      const logo = token.logoUri || token.logoURI || token.logo || defaultLogo;
+      // Escape the logo URL for safe use in HTML attributes
+      const safeLogo = this.escapeHtml(logo);
 
       return `
         <tr onclick="window.location.href='token.html?mint=${address}'" class="token-row">
@@ -489,10 +493,10 @@ const tokenList = {
             <div class="token-cell">
               <img
                 class="token-logo"
-                src="${logo}"
+                src="${safeLogo}"
                 alt="${this.escapeHtml(token.symbol || '')}"
                 loading="lazy"
-                onerror="this.src='${utils.getDefaultLogo()}'"
+                onerror="this.onerror=null;this.src='${defaultLogo}'"
               >
               <div class="token-info">
                 <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}</span>
