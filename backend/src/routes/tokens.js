@@ -413,6 +413,33 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
   }
 }));
 
+// GET /api/tokens/:mint/pools - Get liquidity pools for a token
+router.get('/:mint/pools', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+  const { limit = 10 } = req.query;
+
+  const cacheKey = keys.pools(mint);
+
+  // Try cache first
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
+  try {
+    // Use GeckoTerminal for pools data
+    const pools = await geckoService.getTokenPools(mint, { limit: parseInt(limit) });
+
+    // Cache for 1 minute
+    await cache.set(cacheKey, pools, TTL.MEDIUM);
+
+    res.json(pools);
+  } catch (error) {
+    console.error('Error fetching pools:', error.message);
+    res.status(500).json({ error: 'Failed to fetch pools data' });
+  }
+}));
+
 // GET /api/tokens/:mint/submissions - Get all submissions for a token
 router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;

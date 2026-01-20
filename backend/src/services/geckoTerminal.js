@@ -570,6 +570,55 @@ async function getTokenPrice(mintAddress) {
   };
 }
 
+/**
+ * Get liquidity pools for a token
+ * Endpoint: /networks/{network}/tokens/{address}/pools
+ */
+async function getTokenPools(mintAddress, options = {}) {
+  const { limit = 10 } = options;
+
+  console.log(`[GeckoTerminal] getTokenPools: ${mintAddress}, limit=${limit}`);
+
+  try {
+    const response = await geckoRequest(() =>
+      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+        params: { page: 1 },
+        headers: getHeaders()
+      })
+    );
+
+    const pools = response.data.data || [];
+    console.log(`[GeckoTerminal] Found ${pools.length} pools for token`);
+
+    return pools.slice(0, limit).map(pool => {
+      const attrs = pool.attributes || {};
+      const baseTokenId = pool.relationships?.base_token?.data?.id || '';
+      const quoteTokenId = pool.relationships?.quote_token?.data?.id || '';
+      const dexId = pool.relationships?.dex?.data?.id || '';
+
+      return {
+        address: attrs.address,
+        name: attrs.name,
+        dex: dexId,
+        baseToken: baseTokenId.replace('solana_', ''),
+        quoteToken: quoteTokenId.replace('solana_', ''),
+        priceUsd: parseFloat(attrs.base_token_price_usd) || 0,
+        priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
+        volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
+        liquidity: parseFloat(attrs.reserve_in_usd) || 0,
+        txns24h: {
+          buys: attrs.transactions?.h24?.buys || 0,
+          sells: attrs.transactions?.h24?.sells || 0
+        },
+        createdAt: attrs.pool_created_at
+      };
+    });
+  } catch (error) {
+    console.error('[GeckoTerminal] getTokenPools error:', error.message);
+    return [];
+  }
+}
+
 module.exports = {
   getTokenInfo,
   getTokenPrice,
@@ -579,5 +628,6 @@ module.exports = {
   getNewTokens,
   searchTokens,
   getOHLCV,
-  getPriceHistory
+  getPriceHistory,
+  getTokenPools
 };
