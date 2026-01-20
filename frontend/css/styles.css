@@ -1060,6 +1060,8 @@ a:hover {
   border-radius: var(--radius-full);
   background: var(--bg-tertiary);
   box-shadow: var(--shadow-md);
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .token-info-header {

@@ -81,6 +81,16 @@ const api = {
     async getSubmissions(mint, params = {}) {
       const query = new URLSearchParams(params).toString();
       return api.request(`/api/tokens/${mint}/submissions${query ? `?${query}` : ''}`);
+    },
+
+    async getPools(mint) {
+      // Pools endpoint - returns empty array if not available
+      try {
+        return await api.request(`/api/tokens/${mint}/pools`);
+      } catch (error) {
+        console.warn('Pools endpoint not available:', error.message);
+        return [];
+      }
     }
   },
 
