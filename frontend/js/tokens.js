@@ -256,11 +256,33 @@ const tokenList = {
         offset: (this.currentPage - 1) * this.pageSize
       };
 
+      console.log('[TokenList] Loading tokens with params:', params);
+
       this.tokens = await api.tokens.list(params);
+
+      console.log(`[TokenList] Received ${this.tokens?.length || 0} tokens`);
+
+      // Debug: log sample token data
+      if (this.tokens && this.tokens.length > 0) {
+        const sample = this.tokens[0];
+        console.log('[TokenList] Sample token:', {
+          name: sample.name,
+          symbol: sample.symbol,
+          price: sample.price,
+          priceChange24h: sample.priceChange24h,
+          volume24h: sample.volume24h,
+          marketCap: sample.marketCap,
+          mintAddress: sample.mintAddress,
+          address: sample.address,
+          logoUri: sample.logoUri,
+          logoURI: sample.logoURI
+        });
+      }
+
       this.render();
       this.hideApiError();
     } catch (error) {
-      console.error('Failed to load tokens:', error);
+      console.error('[TokenList] Failed to load tokens:', error);
       if (!silent) {
         this.showError('Failed to load tokens. Please try again.');
         this.showApiError();

@@ -17,11 +17,15 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     filter = 'trending'
   } = req.query;
 
+  console.log(`[API /tokens] Request: filter=${filter}, sort=${sort}, order=${order}, limit=${limit}, offset=${offset}`);
+  console.log(`[API /tokens] API Keys: BIRDEYE=${!!process.env.BIRDEYE_API_KEY}, JUPITER=${!!process.env.JUPITER_API_KEY}`);
+
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
   // Try cache first
   const cached = await cache.get(cacheKey);
   if (cached) {
+    console.log(`[API /tokens] Returning ${cached.length} cached tokens`);
     return res.json(cached);
   }
 
@@ -30,6 +34,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   try {
     // Use Birdeye for richer data if available
     if (process.env.BIRDEYE_API_KEY) {
+      console.log('[API /tokens] Using Birdeye API');
       switch (filter) {
         case 'new':
           tokens = await birdeyeService.getNewTokens(parseInt(limit));
@@ -57,6 +62,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       }
     } else {
       // Fallback to Jupiter
+      console.log('[API /tokens] Using Jupiter API (no Birdeye key)');
       tokens = await jupiterService.getTrendingTokens({
         sort,
         order,
@@ -65,13 +71,21 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       });
     }
 
+    console.log(`[API /tokens] Received ${tokens?.length || 0} tokens from service`);
+
+    // Log sample token for debugging
+    if (tokens && tokens.length > 0) {
+      console.log('[API /tokens] Sample token:', JSON.stringify(tokens[0], null, 2));
+    }
+
     // Cache for 30 seconds
     await cache.set(cacheKey, tokens, TTL.SHORT);
 
     res.json(tokens);
   } catch (error) {
-    console.error('Error fetching tokens:', error.message);
-    res.status(500).json({ error: 'Failed to fetch tokens' });
+    console.error('[API /tokens] Error fetching tokens:', error.message);
+    console.error('[API /tokens] Stack:', error.stack);
+    res.status(500).json({ error: 'Failed to fetch tokens', details: error.message });
   }
 }));
 
@@ -213,14 +227,18 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = keys.tokenInfo(mint);
 
+  console.log(`[API /tokens/:mint] Fetching token: ${mint}`);
+
   // Try cache first
   const cached = await cache.get(cacheKey);
   if (cached) {
+    console.log('[API /tokens/:mint] Returning cached data');
     return res.json(cached);
   }
 
   try {
     // Fetch data in parallel
+    console.log('[API /tokens/:mint] Fetching from APIs...');
     const [tokenInfo, priceData, submissions, overview] = await Promise.all([
       jupiterService.getTokenInfo(mint),
       jupiterService.getTokenPrice(mint),
@@ -228,20 +246,31 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       process.env.BIRDEYE_API_KEY ? birdeyeService.getTokenOverview(mint) : null
     ]);
 
-    // Merge data
+    console.log('[API /tokens/:mint] tokenInfo:', JSON.stringify(tokenInfo, null, 2));
+    console.log('[API /tokens/:mint] priceData:', JSON.stringify(priceData, null, 2));
+    console.log('[API /tokens/:mint] overview:', JSON.stringify(overview, null, 2));
+
+    // Get the price value - overview or priceData can be an object with price field
+    const priceSource = overview || priceData || {};
+    const priceValue = priceSource.price || priceSource.usdPrice || 0;
+
+    // Merge data - use direct price value, not nested object
     const result = {
       ...tokenInfo,
-      price: overview || priceData,
-      priceChange24h: overview?.priceChange24h || 0,
+      price: priceValue,
+      priceChange24h: overview?.priceChange24h || priceData?.priceChange24h || 0,
       volume24h: overview?.volume24h || 0,
       liquidity: overview?.liquidity || 0,
       marketCap: overview?.marketCap || 0,
       holders: overview?.holder || null,
+      supply: overview?.supply || null,
       submissions: {
         banners: submissions.filter(s => s.submission_type === 'banner'),
         socials: submissions.filter(s => s.submission_type !== 'banner')
       }
     };
+
+    console.log('[API /tokens/:mint] Final result:', JSON.stringify(result, null, 2));
 
     // Cache for 30 seconds
     await cache.set(cacheKey, result, TTL.SHORT);
@@ -257,7 +286,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error fetching token:', error.message);
+    console.error('[API /tokens/:mint] Error fetching token:', error.message);
+    console.error('[API /tokens/:mint] Stack:', error.stack);
     res.status(500).json({ error: 'Failed to fetch token details' });
   }
 }));
