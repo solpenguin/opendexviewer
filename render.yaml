@@ -1,0 +1,128 @@
+# Render Blueprint - OpenDexViewer
+# Deploy with: render blueprint apply
+# Documentation: https://render.com/docs/blueprint-spec
+
+services:
+  # =====================================================
+  # Backend API Service
+  # =====================================================
+  - type: web
+    name: opendex-api
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    numInstances: 1
+    autoDeploy: true
+    envVars:
+      # Database connection (auto-populated from Render PostgreSQL)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: opendex-db
+          property: connectionString
+
+      # API Keys (set these manually in Render dashboard)
+      - key: HELIUS_API_KEY
+        sync: false
+      - key: BIRDEYE_API_KEY
+        sync: false
+
+      # Application settings
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+
+      # CORS - Update this to your actual frontend URL
+      - key: CORS_ORIGIN
+        value: https://opendex-frontend.onrender.com
+
+      # Rate limiting configuration
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "100"
+      - key: RATE_LIMIT_STRICT_MAX
+        value: "20"
+      - key: RATE_LIMIT_WALLET_MAX
+        value: "30"
+
+      # Cache settings (seconds)
+      - key: CACHE_TOKEN_TTL
+        value: "300"
+      - key: CACHE_PRICE_TTL
+        value: "60"
+
+      # Auto-moderation thresholds
+      - key: AUTO_APPROVE_THRESHOLD
+        value: "5"
+      - key: AUTO_REJECT_THRESHOLD
+        value: "-5"
+
+  # =====================================================
+  # Frontend Static Site
+  # =====================================================
+  - type: static
+    name: opendex-frontend
+    rootDir: frontend
+    buildCommand: echo "Static HTML - no build needed"
+    staticPublishPath: .
+    pullRequestPreviewsEnabled: true
+    autoDeploy: true
+    headers:
+      # Default caching for HTML
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=300
+      # Longer cache for static assets
+      - path: /js/*
+        name: Cache-Control
+        value: public, max-age=86400
+      - path: /css/*
+        name: Cache-Control
+        value: public, max-age=86400
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=604800
+      # Security headers
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-XSS-Protection
+        value: "1; mode=block"
+    routes:
+      # SPA-style routing - serve index.html for unknown paths
+      - type: rewrite
+        source: /token/*
+        destination: /token.html
+      - type: rewrite
+        source: /submit
+        destination: /submit.html
+
+# =====================================================
+# PostgreSQL Database
+# =====================================================
+databases:
+  - name: opendex-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "15"
+    ipAllowList: []  # Empty = allow all (required for Render services)
+
+# =====================================================
+# Environment Groups (for sharing env vars)
+# =====================================================
+envVarGroups:
+  - name: opendex-shared
+    envVars:
+      - key: APP_NAME
+        value: OpenDexViewer
+      - key: APP_VERSION
+        value: "1.0.0"

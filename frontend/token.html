@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token Details - OpenDex</title>
+  <meta name="description" content="View token details, price charts, and community content">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">BETA</span>
+      </a>
+      <nav class="nav">
+        <a href="/" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+      </nav>
+      <div class="header-actions">
+        <button id="connect-wallet" class="btn btn-primary">Connect Wallet</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main token-page">
+    <!-- Loading State -->
+    <div id="loading-state" class="loading-state">
+      <div class="loading-spinner large"></div>
+      <p>Loading token data...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-state" class="error-state" style="display: none;">
+      <div class="error-icon">!</div>
+      <h2>Token Not Found</h2>
+      <p id="error-message">The requested token could not be found.</p>
+      <a href="/" class="btn btn-primary">Back to Tokens</a>
+    </div>
+
+    <!-- Token Content (hidden until loaded) -->
+    <div id="token-content" style="display: none;">
+      <!-- Token Header -->
+      <section class="token-header">
+        <div class="token-header-left">
+          <img id="token-logo" class="token-logo-large" src="" alt="Token Logo">
+          <div class="token-info-header">
+            <div class="token-name-row">
+              <h1 id="token-name">Loading...</h1>
+              <span id="token-symbol" class="token-symbol-badge">---</span>
+            </div>
+            <div class="token-address-row">
+              <span id="token-address" class="token-address" title="Click to copy">---</span>
+              <button id="copy-address" class="btn-icon" title="Copy address">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+              <a id="explorer-link" href="#" target="_blank" class="btn-icon" title="View on Solscan">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="token-header-right">
+          <div class="token-price-container">
+            <span id="token-price" class="token-price-large">$0.00</span>
+            <span id="price-change" class="price-change-badge">0%</span>
+          </div>
+          <div class="price-stats-mini">
+            <div class="price-stat-mini">
+              <span class="label">24h High</span>
+              <span id="price-high" class="value">--</span>
+            </div>
+            <div class="price-stat-mini">
+              <span class="label">24h Low</span>
+              <span id="price-low" class="value">--</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    <!-- Community Banner -->
+    <section id="banner-section" class="banner-section" style="display: none;">
+      <img id="community-banner" class="community-banner" src="" alt="Community Banner">
+      <div class="banner-voting">
+        <button class="vote-btn vote-up" data-vote="up">
+          <span class="vote-icon">▲</span>
+          <span class="vote-count" id="banner-upvotes">0</span>
+        </button>
+        <button class="vote-btn vote-down" data-vote="down">
+          <span class="vote-icon">▼</span>
+          <span class="vote-count" id="banner-downvotes">0</span>
+        </button>
+      </div>
+    </section>
+
+      <!-- Main Content Grid -->
+      <div class="token-content-grid">
+        <!-- Chart Section -->
+        <section class="chart-section">
+          <div class="chart-header">
+            <div class="chart-title-row">
+              <h2>Price Chart</h2>
+              <div class="chart-type-toggle">
+                <button class="chart-type-btn active" data-type="line" title="Line Chart">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                  </svg>
+                </button>
+                <button class="chart-type-btn" data-type="candle" title="Candlestick Chart">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="4" y="8" width="4" height="8"></rect>
+                    <line x1="6" y1="4" x2="6" y2="8"></line>
+                    <line x1="6" y1="16" x2="6" y2="20"></line>
+                    <rect x="16" y="6" width="4" height="10"></rect>
+                    <line x1="18" y1="2" x2="18" y2="6"></line>
+                    <line x1="18" y1="16" x2="18" y2="22"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="chart-timeframes">
+              <button class="timeframe-btn" data-interval="15m">15M</button>
+              <button class="timeframe-btn active" data-interval="1h">1H</button>
+              <button class="timeframe-btn" data-interval="4h">4H</button>
+              <button class="timeframe-btn" data-interval="1d">1D</button>
+              <button class="timeframe-btn" data-interval="1w">1W</button>
+            </div>
+          </div>
+          <div class="chart-container">
+            <div id="chart-loading" class="chart-loading">
+              <div class="loading-spinner"></div>
+            </div>
+            <canvas id="price-chart"></canvas>
+          </div>
+          <div class="chart-stats">
+            <div class="chart-stat">
+              <span class="label">Open</span>
+              <span id="chart-open" class="value">--</span>
+            </div>
+            <div class="chart-stat">
+              <span class="label">High</span>
+              <span id="chart-high" class="value">--</span>
+            </div>
+            <div class="chart-stat">
+              <span class="label">Low</span>
+              <span id="chart-low" class="value">--</span>
+            </div>
+            <div class="chart-stat">
+              <span class="label">Close</span>
+              <span id="chart-close" class="value">--</span>
+            </div>
+            <div class="chart-stat">
+              <span class="label">Volume</span>
+              <span id="chart-volume" class="value">--</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Stats Section -->
+        <section class="stats-section">
+          <h2>Token Statistics</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-label">Market Cap</span>
+              <span id="stat-mcap" class="stat-value">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">24h Volume</span>
+              <span id="stat-volume" class="stat-value">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Total Liquidity</span>
+              <span id="stat-liquidity" class="stat-value">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Holders</span>
+              <span id="stat-holders" class="stat-value">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Total Supply</span>
+              <span id="stat-supply" class="stat-value">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Circulating</span>
+              <span id="stat-circulating" class="stat-value">--</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Pools Section -->
+        <section class="pools-section">
+          <h2>Liquidity Pools</h2>
+          <div id="pools-loading" class="pools-loading">
+            <div class="loading-spinner"></div>
+            <span>Loading pools...</span>
+          </div>
+          <div id="pools-list" class="pools-list" style="display: none;"></div>
+          <p id="pools-empty" class="pools-empty" style="display: none;">No liquidity pools found for this token.</p>
+        </section>
+
+        <!-- Trade Section -->
+        <section class="trade-section">
+          <h2>Trade</h2>
+          <div class="trade-links">
+            <a id="jupiter-link" href="#" target="_blank" class="trade-btn jupiter">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+              Trade on Jupiter
+            </a>
+            <a id="raydium-link" href="#" target="_blank" class="trade-btn raydium">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+              Trade on Raydium
+            </a>
+          </div>
+        </section>
+
+        <!-- Social Links Section -->
+        <section class="social-section">
+          <h2>Community Links</h2>
+          <div id="social-links" class="social-links">
+            <p class="no-links">No community links submitted yet.</p>
+          </div>
+          <a id="submit-link" href="submit.html" class="btn btn-secondary btn-block">Submit Links</a>
+        </section>
+      </div>
+
+      <!-- All Submissions Section -->
+      <section class="submissions-section">
+        <div class="submissions-header">
+          <h2>Community Submissions</h2>
+          <span id="submissions-count" class="submissions-count">0 submissions</span>
+        </div>
+        <div class="submissions-tabs">
+          <button class="submissions-tab active" data-type="banner">Banners</button>
+          <button class="submissions-tab" data-type="social">Social Links</button>
+        </div>
+        <div id="submissions-list" class="submissions-list">
+          <p class="no-submissions">No submissions yet. Be the first to contribute!</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank">GitHub</a>
+        <span class="separator">|</span>
+        <a href="docs/API.md" target="_blank">API Docs</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/voting.js"></script>
+  <script src="js/tokenDetail.js"></script>
+</body>
+</html>
