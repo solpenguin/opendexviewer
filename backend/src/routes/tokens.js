@@ -247,23 +247,48 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
     console.log('[API /tokens/:mint] tokenInfo:', JSON.stringify(tokenInfo, null, 2));
     console.log('[API /tokens/:mint] geckoOverview:', JSON.stringify(geckoOverview, null, 2));
 
-    // Use GeckoTerminal data for prices, fallback to Jupiter tokenInfo
-    const overview = geckoOverview || {};
+    // Prefer GeckoTerminal data (has price, volume, name, symbol, supply)
+    // Fall back to Jupiter for basic token info
+    const gecko = geckoOverview || {};
+    const jupiter = tokenInfo || {};
 
-    // Merge data
+    // Calculate supply from totalSupply string (GeckoTerminal returns raw amount)
+    let supply = null;
+    let circulatingSupply = null;
+    if (gecko.totalSupply) {
+      const decimals = gecko.decimals || jupiter.decimals || 9;
+      const rawSupply = parseFloat(gecko.totalSupply);
+      supply = rawSupply / Math.pow(10, decimals);
+      // For now, assume circulating = total (GeckoTerminal doesn't provide circulating)
+      circulatingSupply = supply;
+    }
+
+    // Merge data - prioritize GeckoTerminal for most fields
     const result = {
-      ...tokenInfo,
-      // Override with GeckoTerminal data if available
-      logoUri: overview.logoUri || tokenInfo?.logoUri,
-      logoURI: overview.logoURI || tokenInfo?.logoURI,
-      price: overview.price || 0,
-      priceChange24h: overview.priceChange24h || 0,
-      volume24h: overview.volume24h || 0,
-      liquidity: overview.liquidity || 0,
-      marketCap: overview.marketCap || overview.fdv || 0,
-      fdv: overview.fdv || 0,
-      holders: null, // GeckoTerminal doesn't provide holder count
-      supply: null,
+      mintAddress: mint,
+      address: mint,
+      // Use GeckoTerminal name/symbol first, fallback to Jupiter
+      name: gecko.name || jupiter.name || 'Unknown Token',
+      symbol: gecko.symbol || jupiter.symbol || '???',
+      decimals: gecko.decimals || jupiter.decimals || 9,
+      logoUri: gecko.logoUri || jupiter.logoUri || null,
+      logoURI: gecko.logoURI || jupiter.logoURI || null,
+      // Price data from GeckoTerminal
+      price: gecko.price || 0,
+      priceChange24h: gecko.priceChange24h || 0,
+      volume24h: gecko.volume24h || 0,
+      liquidity: gecko.liquidity || 0,
+      marketCap: gecko.marketCap || gecko.fdv || 0,
+      fdv: gecko.fdv || 0,
+      // Supply data
+      supply: supply,
+      circulatingSupply: circulatingSupply,
+      totalSupply: gecko.totalSupply || null,
+      // Holders not available from GeckoTerminal
+      holders: null,
+      // Additional metadata
+      coingeckoId: gecko.coingeckoId || null,
+      // Submissions
       submissions: {
         banners: submissions.filter(s => s.submission_type === 'banner'),
         socials: submissions.filter(s => s.submission_type !== 'banner')
@@ -276,13 +301,17 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
     await cache.setWithTimestamp(cacheKey, result, TTL.PRICE_DATA);
 
     // Also save to database for future reference
-    db.upsertToken({
-      mintAddress: mint,
-      name: tokenInfo.name,
-      symbol: tokenInfo.symbol,
-      decimals: tokenInfo.decimals,
-      logoUri: tokenInfo.logoUri
-    }).catch(err => console.error('Failed to cache token:', err.message));
+    const tokenName = gecko.name || jupiter.name;
+    const tokenSymbol = gecko.symbol || jupiter.symbol;
+    if (tokenName && tokenSymbol) {
+      db.upsertToken({
+        mintAddress: mint,
+        name: tokenName,
+        symbol: tokenSymbol,
+        decimals: gecko.decimals || jupiter.decimals || 9,
+        logoUri: gecko.logoUri || jupiter.logoUri
+      }).catch(err => console.error('Failed to cache token:', err.message));
+    }
 
     res.json(result);
   } catch (error) {

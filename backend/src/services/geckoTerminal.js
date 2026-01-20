@@ -596,9 +596,23 @@ async function getTokenPools(mintAddress, options = {}) {
       const quoteTokenId = pool.relationships?.quote_token?.data?.id || '';
       const dexId = pool.relationships?.dex?.data?.id || '';
 
+      // Parse pool name to get symbols (format: "TOKEN_A / TOKEN_B")
+      const poolName = attrs.name || '';
+      const [symbolA, symbolB] = poolName.split(' / ').map(s => s.trim());
+
+      // Format DEX name nicely
+      const dexName = dexId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
       return {
         address: attrs.address,
         name: attrs.name,
+        // Frontend-expected fields
+        symbolA: symbolA || '?',
+        symbolB: symbolB || '?',
+        type: dexName || 'AMM',
+        tvl: parseFloat(attrs.reserve_in_usd) || 0,
+        apr24h: null, // GeckoTerminal doesn't provide APR
+        // Additional data
         dex: dexId,
         baseToken: baseTokenId.replace('solana_', ''),
         quoteToken: quoteTokenId.replace('solana_', ''),

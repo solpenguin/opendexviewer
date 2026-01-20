@@ -135,23 +135,29 @@
         <section class="chart-section">
           <div class="chart-header">
             <div class="chart-title-row">
-              <h2>Price Chart</h2>
-              <div class="chart-type-toggle">
-                <button class="chart-type-btn active" data-type="line" title="Line Chart">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                  </svg>
-                </button>
-                <button class="chart-type-btn" data-type="candle" title="Candlestick Chart">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="4" y="8" width="4" height="8"></rect>
-                    <line x1="6" y1="4" x2="6" y2="8"></line>
-                    <line x1="6" y1="16" x2="6" y2="20"></line>
-                    <rect x="16" y="6" width="4" height="10"></rect>
-                    <line x1="18" y1="2" x2="18" y2="6"></line>
-                    <line x1="18" y1="16" x2="18" y2="22"></line>
-                  </svg>
-                </button>
+              <h2 id="chart-title">Price Chart</h2>
+              <div class="chart-controls">
+                <div class="chart-metric-toggle">
+                  <button class="chart-metric-btn active" data-metric="price" title="Price">Price</button>
+                  <button class="chart-metric-btn" data-metric="mcap" title="Market Cap">MCap</button>
+                </div>
+                <div class="chart-type-toggle">
+                  <button class="chart-type-btn active" data-type="line" title="Line Chart">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                  </button>
+                  <button class="chart-type-btn" data-type="candle" title="Candlestick Chart">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="4" y="8" width="4" height="8"></rect>
+                      <line x1="6" y1="4" x2="6" y2="8"></line>
+                      <line x1="6" y1="16" x2="6" y2="20"></line>
+                      <rect x="16" y="6" width="4" height="10"></rect>
+                      <line x1="18" y1="2" x2="18" y2="6"></line>
+                      <line x1="18" y1="16" x2="18" y2="22"></line>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="chart-timeframes">
@@ -243,12 +249,6 @@
                 <circle cx="12" cy="12" r="10"/>
               </svg>
               Trade on Jupiter
-            </a>
-            <a id="raydium-link" href="#" target="_blank" class="trade-btn raydium">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-              </svg>
-              Trade on Raydium
             </a>
           </div>
         </section>

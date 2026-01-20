@@ -4,6 +4,7 @@ const tokenDetail = {
   token: null,
   chart: null,
   chartType: 'line',
+  chartMetric: 'price', // 'price' or 'mcap'
   currentInterval: '1h',
   chartData: null,
   pools: [],
@@ -97,7 +98,7 @@ const tokenDetail = {
       });
     }
 
-    // Chart type toggle
+    // Chart type toggle (line/candle)
     document.querySelectorAll('.chart-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
@@ -105,6 +106,24 @@ const tokenDetail = {
         this.chartType = btn.dataset.type;
         if (this.chartData) {
           this.renderChart(this.chartData);
+        }
+      });
+    });
+
+    // Chart metric toggle (price/mcap)
+    document.querySelectorAll('.chart-metric-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.chart-metric-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.chartMetric = btn.dataset.metric;
+        // Update chart title
+        const titleEl = document.getElementById('chart-title');
+        if (titleEl) {
+          titleEl.textContent = this.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
+        }
+        if (this.chartData) {
+          this.renderChart(this.chartData);
+          this.updateChartStats(this.chartData);
         }
       });
     });
@@ -241,9 +260,11 @@ const tokenDetail = {
     const circulatingEl = document.getElementById('stat-circulating');
     if (circulatingEl) circulatingEl.textContent = token.circulatingSupply ? utils.formatNumber(token.circulatingSupply) : '--';
 
-    // Trade links
-    document.getElementById('jupiter-link').href = `https://jup.ag/swap/SOL-${this.mint}`;
-    document.getElementById('raydium-link').href = `https://raydium.io/swap/?inputCurrency=sol&outputCurrency=${this.mint}`;
+    // Trade links - Jupiter with proper URL format
+    const jupiterLink = document.getElementById('jupiter-link');
+    if (jupiterLink) {
+      jupiterLink.href = `https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&buy=${this.mint}`;
+    }
   },
 
   // Load pools
@@ -333,16 +354,30 @@ const tokenDetail = {
 
     const lastCandle = data.data[data.data.length - 1];
     const allData = data.data;
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
     // Calculate period high/low
-    const high = Math.max(...allData.map(d => d.high || d.price));
-    const low = Math.min(...allData.map(d => d.low || d.price));
+    let high = Math.max(...allData.map(d => d.high || d.price));
+    let low = Math.min(...allData.map(d => d.low || d.price));
+    let open = allData[0].open || allData[0].price;
+    let close = lastCandle.close || lastCandle.price;
     const totalVolume = allData.reduce((sum, d) => sum + (d.volume || 0), 0);
 
-    document.getElementById('chart-open').textContent = utils.formatPrice(allData[0].open || allData[0].price);
-    document.getElementById('chart-high').textContent = utils.formatPrice(high);
-    document.getElementById('chart-low').textContent = utils.formatPrice(low);
-    document.getElementById('chart-close').textContent = utils.formatPrice(lastCandle.close || lastCandle.price);
+    // Convert to MCAP values if needed
+    if (isMcap && supply > 0) {
+      high *= supply;
+      low *= supply;
+      open *= supply;
+      close *= supply;
+    }
+
+    const formatFn = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
+
+    document.getElementById('chart-open').textContent = formatFn(open);
+    document.getElementById('chart-high').textContent = formatFn(high);
+    document.getElementById('chart-low').textContent = formatFn(low);
+    document.getElementById('chart-close').textContent = formatFn(close);
     document.getElementById('chart-volume').textContent = utils.formatNumber(totalVolume);
   },
 
@@ -374,45 +409,79 @@ const tokenDetail = {
   // Render line chart
   renderLineChart(ctx, data) {
     const labels = data.map(d => new Date(d.timestamp || d.time));
-    const prices = data.map(d => d.close || d.price);
 
-    // Determine if price went up or down overall
-    const isPositive = prices[prices.length - 1] >= prices[0];
+    // Get values based on selected metric
+    const isMcap = this.chartMetric === 'mcap';
+    let values;
+
+    if (isMcap) {
+      // Calculate market cap from price * supply (if available)
+      const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+      if (supply > 0) {
+        values = data.map(d => (d.close || d.price) * supply);
+      } else {
+        // Fallback: use price if no supply data
+        values = data.map(d => d.close || d.price);
+      }
+    } else {
+      values = data.map(d => d.close || d.price);
+    }
+
+    // Determine if values went up or down overall
+    const isPositive = values[values.length - 1] >= values[0];
     const lineColor = isPositive ? '#22c55e' : '#ef4444';
     const fillColor = isPositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+
+    const metricLabel = isMcap ? 'Market Cap' : 'Price';
+    const formatValue = isMcap
+      ? (value) => utils.formatNumber(value)
+      : (value) => utils.formatPrice(value);
 
     this.chart = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
         datasets: [{
-          label: 'Price',
-          data: prices,
+          label: metricLabel,
+          data: values,
           borderColor: lineColor,
           backgroundColor: fillColor,
           fill: true,
-          tension: 0.1,
+          tension: 0.2,
           pointRadius: 0,
-          pointHoverRadius: 4,
+          pointHoverRadius: 5,
           pointHoverBackgroundColor: lineColor,
+          pointHoverBorderColor: '#fff',
+          pointHoverBorderWidth: 2,
           borderWidth: 2
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          duration: 300
+        },
         plugins: {
           legend: { display: false },
           tooltip: {
             mode: 'index',
             intersect: false,
-            backgroundColor: '#1c1c21',
+            backgroundColor: 'rgba(28, 28, 33, 0.95)',
             titleColor: '#ffffff',
             bodyColor: '#9ca3af',
-            borderColor: '#2a2a30',
+            borderColor: '#3a3a45',
             borderWidth: 1,
-            padding: 12,
+            padding: 14,
             displayColors: false,
+            titleFont: {
+              size: 13,
+              weight: '600'
+            },
+            bodyFont: {
+              size: 14,
+              weight: '500'
+            },
             callbacks: {
               title: (items) => {
                 if (items.length) {
@@ -421,7 +490,7 @@ const tokenDetail = {
                 return '';
               },
               label: (context) => {
-                return `Price: ${utils.formatPrice(context.parsed.y)}`;
+                return `${metricLabel}: ${formatValue(context.parsed.y)}`;
               }
             }
           }
@@ -437,17 +506,25 @@ const tokenDetail = {
               color: '#6b6b73',
               maxRotation: 0,
               autoSkip: true,
-              maxTicksLimit: 6
+              maxTicksLimit: 6,
+              font: {
+                size: 11
+              }
             }
           },
           y: {
             position: 'right',
             grid: {
-              color: 'rgba(255, 255, 255, 0.05)'
+              color: 'rgba(255, 255, 255, 0.04)',
+              drawBorder: false
             },
             ticks: {
               color: '#6b6b73',
-              callback: value => utils.formatPrice(value)
+              callback: value => formatValue(value),
+              font: {
+                size: 11
+              },
+              maxTicksLimit: 6
             }
           }
         },

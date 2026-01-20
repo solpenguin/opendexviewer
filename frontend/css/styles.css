@@ -1246,6 +1246,43 @@ a:hover {
   gap: 1rem;
 }
 
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chart-metric-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--bg-tertiary);
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.chart-metric-btn {
+  padding: 0.375rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.chart-metric-btn:hover {
+  color: var(--text-primary);
+}
+
+.chart-metric-btn.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
 .chart-type-toggle {
   display: flex;
   gap: 0.25rem;
