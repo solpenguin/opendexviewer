@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { rateLimitedRequest } = require('./rateLimiter');
 
 // Birdeye API - Free tier available at https://birdeye.so
 const BIRDEYE_API = 'https://public-api.birdeye.so';
@@ -7,10 +8,20 @@ const BIRDEYE_API = 'https://public-api.birdeye.so';
 const historyCache = new Map();
 const CACHE_DURATION = 60000; // 1 minute
 
+/**
+ * Make a rate-limited request to Birdeye API
+ * @param {Function} requestFn - Function that returns an axios promise
+ * @returns {Promise<any>}
+ */
+async function birdeyeRequest(requestFn) {
+  return rateLimitedRequest('birdeye', requestFn);
+}
+
 // Get API headers
 function getHeaders() {
   const headers = {
-    'Accept': 'application/json'
+    'Accept': 'application/json',
+    'x-chain': 'solana'  // Required header for Birdeye API
   };
 
   // Add API key if available (increases rate limits)
@@ -24,12 +35,14 @@ function getHeaders() {
 // Get token price with additional data
 async function getTokenPrice(mintAddress) {
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/price`, {
-      params: {
-        address: mintAddress
-      },
-      headers: getHeaders()
-    });
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/price`, {
+        params: {
+          address: mintAddress
+        },
+        headers: getHeaders()
+      })
+    );
 
     return {
       price: response.data.data?.value || 0,
@@ -46,12 +59,14 @@ async function getTokenOverview(mintAddress) {
   console.log(`[Birdeye] getTokenOverview: ${mintAddress}`);
 
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/token_overview`, {
-      params: {
-        address: mintAddress
-      },
-      headers: getHeaders()
-    });
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/token_overview`, {
+        params: {
+          address: mintAddress
+        },
+        headers: getHeaders()
+      })
+    );
 
     console.log(`[Birdeye] Overview response status: ${response.status}`);
     const data = response.data.data;
@@ -129,16 +144,18 @@ async function getPriceHistory(mintAddress, options = {}) {
   }
 
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/history_price`, {
-      params: {
-        address: mintAddress,
-        address_type: 'token',
-        type: birdeyeInterval,
-        time_from: timeFrom || defaultTimeFrom,
-        time_to: timeTo || now
-      },
-      headers: getHeaders()
-    });
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/history_price`, {
+        params: {
+          address: mintAddress,
+          address_type: 'token',
+          type: birdeyeInterval,
+          time_from: timeFrom || defaultTimeFrom,
+          time_to: timeTo || now
+        },
+        headers: getHeaders()
+      })
+    );
 
     const items = response.data.data?.items || [];
 
@@ -192,15 +209,17 @@ async function getOHLCV(mintAddress, options = {}) {
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/ohlcv`, {
-      params: {
-        address: mintAddress,
-        type: birdeyeInterval,
-        time_from: timeFrom || now - 86400,
-        time_to: timeTo || now
-      },
-      headers: getHeaders()
-    });
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/ohlcv`, {
+        params: {
+          address: mintAddress,
+          type: birdeyeInterval,
+          time_from: timeFrom || now - 86400,
+          time_to: timeTo || now
+        },
+        headers: getHeaders()
+      })
+    );
 
     const items = response.data.data?.items || [];
 
@@ -228,26 +247,36 @@ async function getOHLCV(mintAddress, options = {}) {
 }
 
 // Get trending tokens
+// Uses /defi/token_trending endpoint with sort_by: rank, liquidity, or volume24hUSD
 async function getTrendingTokens(options = {}) {
-  const { limit = 20, sortBy = 'v24hUSD', sortOrder = 'desc' } = options;
+  const { limit = 20, sortBy = 'volume24hUSD', sortOrder = 'desc' } = options;
 
-  console.log(`[Birdeye] getTrendingTokens: limit=${limit}, sortBy=${sortBy}, sortOrder=${sortOrder}`);
+  // Map our sort params to Birdeye's expected values
+  const birdeyeSortBy = sortBy === 'v24hUSD' ? 'volume24hUSD' :
+                        sortBy === 'priceChange24hPercent' ? 'rank' :
+                        sortBy;
+
+  console.log(`[Birdeye] getTrendingTokens: limit=${limit}, sortBy=${birdeyeSortBy}, sortOrder=${sortOrder}`);
 
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/tokenlist`, {
-      params: {
-        sort_by: sortBy,
-        sort_type: sortOrder,
-        offset: 0,
-        limit
-      },
-      headers: getHeaders()
-    });
+    // Use the correct trending endpoint
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/token_trending`, {
+        params: {
+          sort_by: birdeyeSortBy,
+          sort_type: sortOrder,
+          offset: 0,
+          limit: Math.min(limit, 20) // Birdeye limits to 20 max
+        },
+        headers: getHeaders()
+      })
+    );
 
     console.log(`[Birdeye] API response status: ${response.status}`);
     console.log(`[Birdeye] API response data keys: ${Object.keys(response.data || {}).join(', ')}`);
 
-    const tokens = response.data.data?.tokens || [];
+    // Response structure: { success: true, data: { items: [...] } }
+    const tokens = response.data.data?.items || response.data.data?.tokens || [];
     console.log(`[Birdeye] Received ${tokens.length} tokens from API`);
 
     // Log sample raw token data
@@ -257,16 +286,16 @@ async function getTrendingTokens(options = {}) {
 
     const mapped = tokens.map(token => ({
       mintAddress: token.address,
-      address: token.address, // Include both for compatibility
-      name: token.name,
-      symbol: token.symbol,
-      logoUri: token.logoURI,
-      logoURI: token.logoURI, // Include both for compatibility
+      address: token.address,
+      name: token.name || 'Unknown',
+      symbol: token.symbol || '???',
+      logoUri: token.logoURI || token.logo_uri || null,
+      logoURI: token.logoURI || token.logo_uri || null,
       price: token.price || 0,
-      priceChange24h: token.priceChange24hPercent || 0,
-      volume24h: token.v24hUSD || 0,
+      priceChange24h: token.priceChange24hPercent || token.price_change_24h_percent || 0,
+      volume24h: token.volume24hUSD || token.v24hUSD || 0,
       liquidity: token.liquidity || 0,
-      marketCap: token.mc || 0
+      marketCap: token.mc || token.market_cap || 0
     }));
 
     // Log sample mapped token
@@ -285,57 +314,73 @@ async function getTrendingTokens(options = {}) {
   }
 }
 
-// Get new tokens
+// Get new tokens using V3 token list API
 async function getNewTokens(limit = 20) {
   console.log(`[Birdeye] getNewTokens: limit=${limit}`);
 
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/tokenlist`, {
-      params: {
-        sort_by: 'createdAt',
-        sort_type: 'desc',
-        offset: 0,
-        limit
-      },
-      headers: getHeaders()
-    });
+    // Try V3 endpoint first - sort by listing time
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/v3/token/list`, {
+        params: {
+          sort_by: 'listing_time',
+          sort_type: 'desc',
+          offset: 0,
+          limit: Math.min(limit, 50)
+        },
+        headers: getHeaders()
+      })
+    );
 
-    const tokens = response.data.data?.tokens || [];
+    console.log(`[Birdeye] New tokens API response status: ${response.status}`);
+
+    // V3 response structure: { success: true, data: { items: [...] } }
+    const tokens = response.data.data?.items || response.data.data?.tokens || [];
     console.log(`[Birdeye] New tokens received: ${tokens.length}`);
+
+    if (tokens.length > 0) {
+      console.log('[Birdeye] Sample new token:', JSON.stringify(tokens[0], null, 2));
+    }
 
     return tokens.map(token => ({
       mintAddress: token.address,
       address: token.address,
-      name: token.name,
-      symbol: token.symbol,
-      logoUri: token.logoURI,
-      logoURI: token.logoURI,
+      name: token.name || 'Unknown',
+      symbol: token.symbol || '???',
+      logoUri: token.logoURI || token.logo_uri || null,
+      logoURI: token.logoURI || token.logo_uri || null,
       price: token.price || 0,
-      priceChange24h: token.priceChange24hPercent || 0,
-      volume24h: token.v24hUSD || 0,
+      priceChange24h: token.priceChange24hPercent || token.price_change_24h_percent || 0,
+      volume24h: token.volume24hUSD || token.v24hUSD || 0,
       liquidity: token.liquidity || 0,
-      marketCap: token.mc || 0,
-      createdAt: token.createdAt
+      marketCap: token.mc || token.market_cap || 0,
+      createdAt: token.listing_time || token.createdAt || null
     }));
   } catch (error) {
     console.error('[Birdeye] New tokens error:', error.message);
     if (error.response) {
       console.error('[Birdeye] Response status:', error.response.status);
+      console.error('[Birdeye] Response data:', JSON.stringify(error.response.data).slice(0, 500));
     }
-    return [];
+
+    // Fallback: return trending tokens as a substitute
+    console.log('[Birdeye] Falling back to trending tokens for new tokens');
+    return getTrendingTokens({ limit, sortBy: 'volume24hUSD', sortOrder: 'desc' });
   }
 }
 
 // Search tokens
 async function searchTokens(query, limit = 20) {
   try {
-    const response = await axios.get(`${BIRDEYE_API}/defi/v2/tokens/search`, {
-      params: {
-        keyword: query,
-        limit
-      },
-      headers: getHeaders()
-    });
+    const response = await birdeyeRequest(() =>
+      axios.get(`${BIRDEYE_API}/defi/v2/tokens/search`, {
+        params: {
+          keyword: query,
+          limit
+        },
+        headers: getHeaders()
+      })
+    );
 
     const tokens = response.data.data?.items || [];
 

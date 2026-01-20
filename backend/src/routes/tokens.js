@@ -78,8 +78,8 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       console.log('[API /tokens] Sample token:', JSON.stringify(tokens[0], null, 2));
     }
 
-    // Cache for 30 seconds
-    await cache.set(cacheKey, tokens, TTL.SHORT);
+    // Cache for 5 minutes (rolling cache for list views)
+    await cache.setWithTimestamp(cacheKey, tokens, TTL.PRICE_DATA);
 
     res.json(tokens);
   } catch (error) {
@@ -223,17 +223,24 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
 }));
 
 // GET /api/tokens/:mint - Get single token details
+// Uses 5-minute cache but requires data < 1 minute old (fresh) for individual token views
 router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = keys.tokenInfo(mint);
 
   console.log(`[API /tokens/:mint] Fetching token: ${mint}`);
 
-  // Try cache first
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    console.log('[API /tokens/:mint] Returning cached data');
-    return res.json(cached);
+  // Check cache with freshness - individual token pages need fresh data (< 1 minute old)
+  const cachedMeta = await cache.getWithMeta(cacheKey);
+  if (cachedMeta && cachedMeta.fresh) {
+    console.log(`[API /tokens/:mint] Returning fresh cached data (age: ${Math.round(cachedMeta.age / 1000)}s)`);
+    return res.json(cachedMeta.value);
+  }
+
+  // If we have stale cached data, we might still use it if the API fetch fails
+  const staleCached = cachedMeta?.value;
+  if (staleCached) {
+    console.log(`[API /tokens/:mint] Cache exists but stale (age: ${Math.round(cachedMeta.age / 1000)}s), fetching fresh data`);
   }
 
   try {
@@ -272,8 +279,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
 
     console.log('[API /tokens/:mint] Final result:', JSON.stringify(result, null, 2));
 
-    // Cache for 30 seconds
-    await cache.set(cacheKey, result, TTL.SHORT);
+    // Cache for 5 minutes with timestamp for freshness tracking
+    await cache.setWithTimestamp(cacheKey, result, TTL.PRICE_DATA);
 
     // Also save to database for future reference
     db.upsertToken({
@@ -288,20 +295,31 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   } catch (error) {
     console.error('[API /tokens/:mint] Error fetching token:', error.message);
     console.error('[API /tokens/:mint] Stack:', error.stack);
+
+    // If we have stale cached data, return it as fallback
+    if (staleCached) {
+      console.log('[API /tokens/:mint] Returning stale cached data as fallback');
+      return res.json(staleCached);
+    }
+
     res.status(500).json({ error: 'Failed to fetch token details' });
   }
 }));
 
 // GET /api/tokens/:mint/price - Get price data only
+// Uses 5-minute cache with 1-minute freshness for individual views
 router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = keys.tokenPrice(mint);
 
-  // Try cache first (short TTL for prices)
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
+  // Check cache with freshness - price endpoints need fresh data (< 1 minute old)
+  const cachedMeta = await cache.getWithMeta(cacheKey);
+  if (cachedMeta && cachedMeta.fresh) {
+    return res.json(cachedMeta.value);
   }
+
+  // Keep stale data as fallback
+  const staleCached = cachedMeta?.value;
 
   try {
     let priceData;
@@ -312,11 +330,15 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
       priceData = await jupiterService.getTokenPrice(mint);
     }
 
-    // Cache for 10 seconds
-    await cache.set(cacheKey, priceData, TTL.VERY_SHORT);
+    // Cache for 5 minutes with timestamp for freshness tracking
+    await cache.setWithTimestamp(cacheKey, priceData, TTL.PRICE_DATA);
 
     res.json(priceData);
   } catch (error) {
+    // Return stale data if available
+    if (staleCached) {
+      return res.json(staleCached);
+    }
     console.error('Error fetching price:', error.message);
     res.status(500).json({ error: 'Failed to fetch price data' });
   }

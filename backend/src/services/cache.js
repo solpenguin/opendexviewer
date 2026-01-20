@@ -10,6 +10,8 @@ const TTL = {
   VERY_SHORT: 10000,    // 10 seconds - for real-time data
   SHORT: 30000,         // 30 seconds
   MEDIUM: 60000,        // 1 minute
+  PRICE_DATA: 300000,   // 5 minutes - for price/volume data (rolling cache)
+  PRICE_FRESH: 60000,   // 1 minute - freshness threshold for individual token views
   LONG: 300000,         // 5 minutes
   VERY_LONG: 900000,    // 15 minutes
   HOUR: 3600000,        // 1 hour
@@ -384,6 +386,76 @@ class CacheService {
 
     const value = await fetchFn();
     await this.set(key, value, ttlMs);
+    return value;
+  }
+
+  /**
+   * Get cached value with metadata (for freshness checking)
+   * @param {string} key - Cache key
+   * @returns {Promise<{value: any, age: number, fresh: boolean} | undefined>}
+   */
+  async getWithMeta(key) {
+    if (this.backendType === 'memory') {
+      const entry = this.backend.cache.get(key);
+      if (!entry || Date.now() > entry.expiry) {
+        return undefined;
+      }
+      const age = Date.now() - entry.createdAt;
+      return {
+        value: entry.value,
+        age,
+        fresh: age < TTL.PRICE_FRESH
+      };
+    }
+    // For Redis, we store timestamp in the value
+    const data = await this.get(key);
+    if (data === undefined) return undefined;
+
+    // If data has _cachedAt, use it for freshness
+    if (data && data._cachedAt) {
+      const age = Date.now() - data._cachedAt;
+      return {
+        value: data,
+        age,
+        fresh: age < TTL.PRICE_FRESH
+      };
+    }
+    return { value: data, age: 0, fresh: true };
+  }
+
+  /**
+   * Set value with timestamp for freshness tracking
+   * @param {string} key - Cache key
+   * @param {any} value - Value to cache
+   * @param {number} ttlMs - Time to live in milliseconds
+   */
+  async setWithTimestamp(key, value, ttlMs = TTL.PRICE_DATA) {
+    const valueWithMeta = {
+      ...value,
+      _cachedAt: Date.now()
+    };
+    return this.set(key, valueWithMeta, ttlMs);
+  }
+
+  /**
+   * Get cached value if fresh enough, otherwise fetch new data
+   * Used for price data with 5-minute cache but 1-minute freshness for token pages
+   * @param {string} key - Cache key
+   * @param {Function} fetchFn - Async function to fetch value
+   * @param {boolean} requireFresh - If true, requires data to be < 1 minute old
+   * @returns {Promise<any>}
+   */
+  async getOrSetWithFreshness(key, fetchFn, requireFresh = false) {
+    const cached = await this.getWithMeta(key);
+
+    // If cached and either we don't require fresh data or it is fresh
+    if (cached && (!requireFresh || cached.fresh)) {
+      return cached.value;
+    }
+
+    // Need to fetch new data
+    const value = await fetchFn();
+    await this.setWithTimestamp(key, value, TTL.PRICE_DATA);
     return value;
   }
 

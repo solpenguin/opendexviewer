@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { rateLimitedRequest } = require('./rateLimiter');
 
 /**
  * Jupiter API Service (2026)
@@ -42,6 +43,15 @@ function createClient() {
   });
 }
 
+/**
+ * Make a rate-limited request to Jupiter API
+ * @param {Function} requestFn - Function that returns an axios promise
+ * @returns {Promise<any>}
+ */
+async function jupiterRequest(requestFn) {
+  return rateLimitedRequest('jupiter', requestFn);
+}
+
 // Cache for token data
 const cache = {
   tokens: null,
@@ -61,9 +71,11 @@ async function searchTokens(query) {
 
   try {
     // V2 search endpoint - searches by symbol, name, or mint
-    const response = await client.get(`/tokens/v2/search`, {
-      params: { query }
-    });
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/search`, {
+        params: { query }
+      })
+    );
 
     const tokens = response.data || [];
     return tokens.slice(0, 50).map(formatToken);
@@ -87,9 +99,11 @@ async function getTokenInfo(mintAddress) {
 
   try {
     // Search for specific mint address
-    const response = await client.get(`/tokens/v2/search`, {
-      params: { query: mintAddress }
-    });
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/search`, {
+        params: { query: mintAddress }
+      })
+    );
 
     const tokens = response.data || [];
     const token = tokens.find(t =>
@@ -106,9 +120,11 @@ async function getTokenInfo(mintAddress) {
 
   // Fallback: try to get basic info from price API V3
   try {
-    const priceResponse = await client.get(`/price/v3`, {
-      params: { ids: mintAddress }
-    });
+    const priceResponse = await jupiterRequest(() =>
+      client.get(`/price/v3`, {
+        params: { ids: mintAddress }
+      })
+    );
 
     const priceData = priceResponse.data?.data?.[mintAddress];
     if (priceData) {
@@ -154,9 +170,11 @@ async function getVerifiedTokens() {
 
   try {
     // Tag endpoint uses query param
-    const response = await client.get(`/tokens/v2/tag`, {
-      params: { query: 'verified' }
-    });
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/tag`, {
+        params: { query: 'verified' }
+      })
+    );
 
     const tokens = response.data || [];
     cache.verifiedTokens = tokens;
@@ -182,9 +200,11 @@ async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, 
 
   try {
     // V2 category endpoint uses URL path: /tokens/v2/toptrending/24h
-    const response = await client.get(`/tokens/v2/toptrending/${interval}`, {
-      params: { limit: Math.min(limit + offset, 100) }
-    });
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/toptrending/${interval}`, {
+        params: { limit: Math.min(limit + offset, 100) }
+      })
+    );
 
     let tokens = response.data || [];
     console.log(`[Jupiter] Trending endpoint returned ${tokens.length} tokens`);
@@ -192,9 +212,11 @@ async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, 
     // If no trending data, fall back to top traded
     if (tokens.length === 0) {
       console.log('[Jupiter] No trending data, trying toptraded endpoint...');
-      const tradedResponse = await client.get(`/tokens/v2/toptraded/${interval}`, {
-        params: { limit: Math.min(limit + offset, 100) }
-      });
+      const tradedResponse = await jupiterRequest(() =>
+        client.get(`/tokens/v2/toptraded/${interval}`, {
+          params: { limit: Math.min(limit + offset, 100) }
+        })
+      );
       tokens = tradedResponse.data || [];
       console.log(`[Jupiter] Toptraded endpoint returned ${tokens.length} tokens`);
     }
@@ -270,7 +292,9 @@ async function getNewTokens(limit = 50) {
   const client = createClient();
 
   try {
-    const response = await client.get(`/tokens/v2/recent`);
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/recent`)
+    );
     const tokens = response.data || [];
     return tokens.slice(0, limit).map(formatToken);
   } catch (error) {
@@ -295,9 +319,11 @@ async function getTokenPrice(mintAddress) {
   const client = createClient();
 
   try {
-    const response = await client.get(`/price/v3`, {
-      params: { ids: mintAddress }
-    });
+    const response = await jupiterRequest(() =>
+      client.get(`/price/v3`, {
+        params: { ids: mintAddress }
+      })
+    );
 
     const priceData = response.data?.data?.[mintAddress];
 
@@ -337,9 +363,11 @@ async function getTokenPrices(mintAddresses) {
     const ids = mintAddresses.slice(0, 50).join(',');
     console.log(`[Jupiter] Fetching prices from /price/v3 for ${mintAddresses.length} tokens`);
 
-    const response = await client.get(`/price/v3`, {
-      params: { ids }
-    });
+    const response = await jupiterRequest(() =>
+      client.get(`/price/v3`, {
+        params: { ids }
+      })
+    );
 
     const data = response.data?.data || {};
     console.log(`[Jupiter] Price API V3 response keys:`, Object.keys(response.data || {}));
@@ -426,9 +454,11 @@ async function checkHealth() {
   try {
     const start = Date.now();
     // Use Price V3 endpoint for health check (SOL address)
-    await client.get(`/price/v3`, {
-      params: { ids: 'So11111111111111111111111111111111111111112' } // SOL
-    });
+    await jupiterRequest(() =>
+      client.get(`/price/v3`, {
+        params: { ids: 'So11111111111111111111111111111111111111112' } // SOL
+      })
+    );
     const latency = Date.now() - start;
 
     return {
