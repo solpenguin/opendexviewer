@@ -173,6 +173,13 @@ a:hover {
   text-transform: uppercase;
 }
 
+.logo-img {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
 .nav {
   display: flex;
   gap: 0.5rem;
@@ -635,6 +642,68 @@ a:hover {
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
+}
+
+/* Data Freshness Indicator */
+.data-freshness {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0.25rem 0.625rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.data-freshness .freshness-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.data-freshness.stale .freshness-dot {
+  background: var(--yellow);
+  animation: none;
+}
+
+.data-freshness .freshness-text {
+  white-space: nowrap;
+}
+
+.data-freshness .countdown {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Token detail price freshness */
+.price-freshness {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.price-freshness .freshness-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.price-freshness.stale .freshness-dot {
+  background: var(--yellow);
 }
 
 /* =============================================

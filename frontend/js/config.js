@@ -44,12 +44,6 @@ const config = {
 
   // UI Configuration
   ui: {
-    // Token list refresh interval (ms)
-    refreshInterval: 30000,
-
-    // Price refresh interval (ms)
-    priceRefreshInterval: 15000,
-
     // Chart default settings
     chart: {
       defaultInterval: '1h',
@@ -61,6 +55,50 @@ const config = {
 
     // Toast notifications
     toastDuration: 4000
+  },
+
+  // Cache & Refresh Configuration
+  // Adjust these values to balance between data freshness and API load
+  // Lower values = fresher data but more API calls
+  // Higher values = less API load but staler data
+  cache: {
+    // === AUTO-REFRESH INTERVALS (when to fetch new data from server) ===
+    // Token list page auto-refresh (ms) - how often the token list reloads
+    tokenListRefresh: 120000,      // 2 minutes (default)
+
+    // Token detail page price refresh (ms) - how often price updates on token page
+    priceRefresh: 300000,          // 5 minutes (default)
+
+    // === FRONTEND CACHE TTLs (how long to keep data in browser memory) ===
+    // These reduce redundant API calls when navigating between pages
+
+    // Token list data cache (ms)
+    tokenListTTL: 120000,          // 2 minutes
+
+    // Individual token detail cache (ms)
+    tokenDetailTTL: 300000,        // 5 minutes
+
+    // Price-only endpoint cache (ms)
+    priceTTL: 300000,              // 5 minutes
+
+    // Search results cache (ms)
+    searchTTL: 120000,             // 2 minutes
+
+    // Chart/OHLCV data cache (ms)
+    chartTTL: 300000,              // 5 minutes
+
+    // Pool data cache (ms)
+    poolsTTL: 300000,              // 5 minutes
+
+    // Community submissions cache (ms) - kept shorter since this is primary content
+    submissionsTTL: 30000,         // 30 seconds
+
+    // === FRESHNESS THRESHOLDS (when to show "stale" indicator) ===
+    // Token list "stale" threshold (ms) - when the dot turns yellow
+    tokenListStaleThreshold: 60000,   // 1 minute
+
+    // Price "stale" threshold (ms)
+    priceStaleThreshold: 120000       // 2 minutes
   },
 
   // External links
@@ -92,6 +130,7 @@ Object.freeze(config.api);
 Object.freeze(config.app);
 Object.freeze(config.features);
 Object.freeze(config.ui);
+Object.freeze(config.cache);
 Object.freeze(config.links);
 Object.freeze(config.solana);
 Object.freeze(config.storageKeys);

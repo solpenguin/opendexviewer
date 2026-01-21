@@ -3,6 +3,104 @@ const API_BASE_URL = (typeof config !== 'undefined' && config.api?.baseUrl)
   ? config.api.baseUrl
   : (window.location.hostname === 'localhost' ? 'http://localhost:3000' : '');
 
+// Frontend Cache - reduces API calls and improves responsiveness
+// TTLs are configurable via config.js (config.cache.*)
+const apiCache = {
+  cache: new Map(),
+
+  // Cache TTLs in milliseconds - pulled from config.js with fallback defaults
+  // Priority: Community updates (submissions) are primary, price/volume is secondary
+  get TTL() {
+    const c = (typeof config !== 'undefined' && config.cache) ? config.cache : {};
+    return {
+      tokenList: c.tokenListTTL || 120000,
+      tokenDetail: c.tokenDetailTTL || 300000,
+      search: c.searchTTL || 120000,
+      chart: c.chartTTL || 300000,
+      pools: c.poolsTTL || 300000,
+      submissions: c.submissionsTTL || 30000,
+      price: c.priceTTL || 300000
+    };
+  },
+
+  // Generate cache key
+  key(endpoint, params = {}) {
+    const paramStr = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
+    return `${endpoint}${paramStr ? '?' + paramStr : ''}`;
+  },
+
+  // Get cached value if fresh
+  get(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    const age = Date.now() - entry.timestamp;
+    if (age > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return {
+      data: entry.data,
+      age: age,
+      fresh: age < entry.ttl / 2 // Consider "fresh" if less than half TTL
+    };
+  },
+
+  // Set cache entry
+  set(key, data, ttl) {
+    this.cache.set(key, {
+      data: data,
+      timestamp: Date.now(),
+      ttl: ttl
+    });
+
+    // Limit cache size (LRU-style cleanup)
+    if (this.cache.size > 100) {
+      const oldest = this.cache.keys().next().value;
+      this.cache.delete(oldest);
+    }
+  },
+
+  // Get or fetch with stale-while-revalidate pattern
+  async getOrFetch(key, fetchFn, ttl, allowStale = true) {
+    const cached = this.get(key);
+
+    // Return fresh cache immediately
+    if (cached && cached.fresh) {
+      return cached.data;
+    }
+
+    // If stale cache exists and allowStale, return it and refresh in background
+    if (cached && allowStale) {
+      // Background refresh (fire and forget)
+      fetchFn().then(data => {
+        if (data) this.set(key, data, ttl);
+      }).catch(() => {});
+      return cached.data;
+    }
+
+    // No cache or stale not allowed, fetch fresh
+    const data = await fetchFn();
+    if (data) this.set(key, data, ttl);
+    return data;
+  },
+
+  // Clear specific cache entries by pattern
+  clearPattern(pattern) {
+    for (const key of this.cache.keys()) {
+      if (key.includes(pattern)) {
+        this.cache.delete(key);
+      }
+    }
+  },
+
+  // Clear all cache
+  clear() {
+    this.cache.clear();
+  }
+};
+
 // API Client
 const api = {
   // Generic fetch wrapper with exponential backoff retry logic
@@ -55,53 +153,120 @@ const api = {
     return this.request('/health/detailed');
   },
 
-  // Token endpoints
+  // Token endpoints - with frontend caching for responsiveness
   tokens: {
     async list(params = {}) {
       const query = new URLSearchParams(params).toString();
-      return api.request(`/api/tokens${query ? `?${query}` : ''}`);
+      const endpoint = `/api/tokens${query ? `?${query}` : ''}`;
+      const cacheKey = apiCache.key('tokens:list', params);
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(endpoint),
+        apiCache.TTL.tokenList,
+        true // Allow stale-while-revalidate
+      );
     },
 
-    async get(mint) {
-      return api.request(`/api/tokens/${mint}`);
+    async get(mint, options = {}) {
+      const cacheKey = `tokens:detail:${mint}`;
+      const skipCache = options.fresh === true;
+
+      if (!skipCache) {
+        const cached = apiCache.get(cacheKey);
+        if (cached) return cached.data;
+      }
+
+      const data = await api.request(`/api/tokens/${mint}`);
+      apiCache.set(cacheKey, data, apiCache.TTL.tokenDetail);
+      return data;
     },
 
     async getPrice(mint) {
-      return api.request(`/api/tokens/${mint}/price`);
+      const cacheKey = `tokens:price:${mint}`;
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/${mint}/price`),
+        apiCache.TTL.price,
+        true
+      );
     },
 
     async getChart(mint, params = {}) {
       const query = new URLSearchParams(params).toString();
-      return api.request(`/api/tokens/${mint}/chart${query ? `?${query}` : ''}`);
+      const cacheKey = apiCache.key(`tokens:chart:${mint}`, params);
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/${mint}/chart${query ? `?${query}` : ''}`),
+        apiCache.TTL.chart,
+        true
+      );
     },
 
     async getOHLCV(mint, params = {}) {
       const query = new URLSearchParams(params).toString();
-      return api.request(`/api/tokens/${mint}/ohlcv${query ? `?${query}` : ''}`);
+      const cacheKey = apiCache.key(`tokens:ohlcv:${mint}`, params);
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/${mint}/ohlcv${query ? `?${query}` : ''}`),
+        apiCache.TTL.chart,
+        true
+      );
     },
 
     async search(query) {
-      return api.request(`/api/tokens/search?q=${encodeURIComponent(query)}`);
+      const cacheKey = `tokens:search:${query.toLowerCase()}`;
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/search?q=${encodeURIComponent(query)}`),
+        apiCache.TTL.search,
+        true
+      );
     },
 
     async getSubmissions(mint, params = {}) {
       const query = new URLSearchParams(params).toString();
-      return api.request(`/api/tokens/${mint}/submissions${query ? `?${query}` : ''}`);
+      const cacheKey = apiCache.key(`tokens:submissions:${mint}`, params);
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/${mint}/submissions${query ? `?${query}` : ''}`),
+        apiCache.TTL.submissions,
+        true
+      );
     },
 
     async getPools(mint) {
-      // Pools endpoint - returns empty array if not available
-      try {
-        return await api.request(`/api/tokens/${mint}/pools`);
-      } catch (error) {
-        console.warn('Pools endpoint not available:', error.message);
-        return [];
-      }
+      const cacheKey = `tokens:pools:${mint}`;
+
+      return apiCache.getOrFetch(
+        cacheKey,
+        async () => {
+          try {
+            return await api.request(`/api/tokens/${mint}/pools`);
+          } catch (error) {
+            console.warn('Pools endpoint not available:', error.message);
+            return [];
+          }
+        },
+        apiCache.TTL.pools,
+        true
+      );
     },
 
     async getHolderBalance(mint, wallet) {
-      // Get wallet's balance of a specific token
+      // Don't cache holder balances - need fresh data for voting
       return api.request(`/api/tokens/${mint}/holder/${wallet}`);
+    },
+
+    // Invalidate cache for a specific token (after submission/vote)
+    invalidateCache(mint) {
+      apiCache.clearPattern(`tokens:detail:${mint}`);
+      apiCache.clearPattern(`tokens:submissions:${mint}`);
     }
   },
 
@@ -500,5 +665,5 @@ const loading = {
 
 // Export for modules (if using)
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { api, utils, toast, loading };
+  module.exports = { api, apiCache, utils, toast, loading };
 }

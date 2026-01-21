@@ -11,7 +11,19 @@ const tokenList = {
   isSearchMode: false,
   isLoading: false,
   autoRefreshInterval: null,
+  freshnessInterval: null,
+  lastUpdateTime: null,
   hasMorePages: true, // Track if there are more pages available
+
+  // Get refresh interval from config (with fallback)
+  get refreshIntervalMs() {
+    return (typeof config !== 'undefined' && config.cache?.tokenListRefresh) || 120000;
+  },
+
+  // Get stale threshold from config (with fallback)
+  get staleThresholdMs() {
+    return (typeof config !== 'undefined' && config.cache?.tokenListStaleThreshold) || 60000;
+  },
 
   // Initialize
   async init() {
@@ -19,6 +31,7 @@ const tokenList = {
     this.restoreState();
     await this.loadTokens();
     this.startAutoRefresh();
+    this.startFreshnessTimer();
   },
 
   // Restore state from URL params
@@ -239,14 +252,13 @@ const tokenList = {
     });
   },
 
-  // Start auto-refresh
+  // Start auto-refresh (configurable via config.cache.tokenListRefresh)
   startAutoRefresh() {
-    // Refresh every 30 seconds if not searching
     this.autoRefreshInterval = setInterval(() => {
       if (!this.isSearchMode && !this.isLoading && document.visibilityState === 'visible') {
-        this.loadTokens(true); // silent refresh
+        this.loadTokens(true); // silent refresh (uses stale-while-revalidate cache)
       }
-    }, 30000);
+    }, this.refreshIntervalMs);
   },
 
   // Load tokens
@@ -298,6 +310,8 @@ const tokenList = {
 
       this.render();
       this.hideApiError();
+      this.lastUpdateTime = Date.now();
+      this.updateFreshnessDisplay();
     } catch (error) {
       console.error('[TokenList] Failed to load tokens:', error);
       if (!silent) {
@@ -860,10 +874,58 @@ const tokenList = {
     }
   },
 
+  // Start freshness display timer (updates every second)
+  startFreshnessTimer() {
+    this.freshnessInterval = setInterval(() => {
+      this.updateFreshnessDisplay();
+    }, 1000);
+  },
+
+  // Update the data freshness display
+  updateFreshnessDisplay() {
+    const container = document.getElementById('data-freshness');
+    if (!container || !this.lastUpdateTime) return;
+
+    const age = Date.now() - this.lastUpdateTime;
+    const timeUntilRefresh = Math.max(0, this.refreshIntervalMs - age);
+    const isStale = age > this.staleThresholdMs;
+
+    // Update stale class
+    container.classList.toggle('stale', isStale);
+
+    // Format "Updated X ago" text
+    const freshnessText = container.querySelector('.freshness-text');
+    if (freshnessText) {
+      if (age < 5000) {
+        freshnessText.textContent = 'Updated just now';
+      } else if (age < 60000) {
+        freshnessText.textContent = `Updated ${Math.floor(age / 1000)}s ago`;
+      } else {
+        const mins = Math.floor(age / 60000);
+        freshnessText.textContent = `Updated ${mins}m ago`;
+      }
+    }
+
+    // Format countdown to next refresh
+    const countdown = container.querySelector('.countdown');
+    if (countdown) {
+      if (timeUntilRefresh > 0) {
+        const mins = Math.floor(timeUntilRefresh / 60000);
+        const secs = Math.floor((timeUntilRefresh % 60000) / 1000);
+        countdown.textContent = mins > 0 ? `(${mins}m ${secs}s)` : `(${secs}s)`;
+      } else {
+        countdown.textContent = '(refreshing...)';
+      }
+    }
+  },
+
   // Cleanup on page unload
   destroy() {
     if (this.autoRefreshInterval) {
       clearInterval(this.autoRefreshInterval);
+    }
+    if (this.freshnessInterval) {
+      clearInterval(this.freshnessInterval);
     }
   }
 };

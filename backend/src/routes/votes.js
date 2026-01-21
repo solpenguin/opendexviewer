@@ -68,8 +68,8 @@ async function verifyHolderStatus(wallet, tokenMint) {
       verifiedAt: Date.now()
     };
 
-    // Cache for 30 seconds (short TTL since we need fresh data for voting)
-    await cache.set(cacheKey, result, 30);
+    // Cache for 60 seconds - balances don't change that often, reduces RPC calls
+    await cache.set(cacheKey, result, TTL.MEDIUM);
 
     return result;
   } catch (error) {
