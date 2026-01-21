@@ -462,6 +462,49 @@ async function getPriceHistory(mintAddress, { interval = '1h', limit = 100 }) {
 }
 
 /**
+ * Get token holder count from Jupiter V2 search API
+ * The search response includes holderCount field
+ * @param {string} mintAddress - Token mint address
+ * @returns {Promise<number|null>} - Holder count or null if unavailable
+ */
+async function getTokenHolderCount(mintAddress) {
+  const client = createClient();
+
+  console.log(`[Jupiter] Getting holder count for ${mintAddress}`);
+
+  try {
+    // Search for specific mint address - response includes holderCount
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/search`, {
+        params: { query: mintAddress }
+      })
+    );
+
+    const tokens = response.data || [];
+    const token = tokens.find(t =>
+      t.address === mintAddress ||
+      t.mint === mintAddress ||
+      t.id === mintAddress
+    );
+
+    if (token) {
+      const holderCount = token.holderCount;
+      console.log(`[Jupiter] Holder count for ${mintAddress}: ${holderCount}`);
+
+      if (typeof holderCount === 'number' && holderCount >= 0) {
+        return holderCount;
+      }
+    }
+
+    console.log(`[Jupiter] No holder count found for ${mintAddress}`);
+    return null;
+  } catch (error) {
+    console.error('[Jupiter] getTokenHolderCount error:', error.message);
+    return null;
+  }
+}
+
+/**
  * Format token for consistent API response
  */
 function formatToken(token) {
@@ -474,7 +517,8 @@ function formatToken(token) {
     decimals: token.decimals || 9,
     logoUri: token.logoURI || token.logoUri || token.logo || null,
     logoURI: token.logoURI || token.logoUri || token.logo || null,
-    tags: token.tags || []
+    tags: token.tags || [],
+    holderCount: token.holderCount || null
   };
 }
 
@@ -531,6 +575,7 @@ module.exports = {
   getNewTokens,
   getTokenPrice,
   getTokenPrices,
+  getTokenHolderCount,
   getPriceHistory,
   isConfigured,
   checkHealth

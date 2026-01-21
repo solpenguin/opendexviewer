@@ -3,8 +3,70 @@ const voting = {
   // Track vote state for optimistic updates
   pendingVotes: new Set(),
   voteStates: new Map(),
+  holderCache: new Map(), // Cache holder status per token
+  holderCacheMaxSize: 100, // Maximum cache entries to prevent memory leak
 
-  // Cast a vote
+  // Voting requirements (loaded from server)
+  requirements: {
+    minVoteBalancePercent: 0.001,
+    approvalThreshold: 10,
+    rejectThreshold: -10,
+    minReviewMinutes: 5,
+    voteWeightTiers: []
+  },
+
+  // Get the token mint for a submission
+  getTokenMintForSubmission(submissionId) {
+    // Try to get from tokenDetail if available
+    if (typeof tokenDetail !== 'undefined' && tokenDetail.mint) {
+      return tokenDetail.mint;
+    }
+    // Try to get from DOM
+    const container = document.querySelector(`[data-submission-id="${submissionId}"]`);
+    if (container && container.dataset.tokenMint) {
+      return container.dataset.tokenMint;
+    }
+    // Fallback: get from submission data
+    if (typeof tokenDetail !== 'undefined' && tokenDetail.submissions) {
+      const sub = tokenDetail.submissions.find(s => s.id === submissionId);
+      if (sub) return sub.token_mint;
+    }
+    return null;
+  },
+
+  // Check if wallet holds the token
+  // forceRefresh: true to bypass cache and get fresh data (used before voting)
+  async checkHolderStatus(tokenMint, forceRefresh = false) {
+    if (!wallet.connected || !tokenMint) return null;
+
+    const cacheKey = `${tokenMint}:${wallet.address}`;
+
+    // Check cache first (valid for 2 minutes) unless force refresh
+    if (!forceRefresh) {
+      const cached = this.holderCache.get(cacheKey);
+      if (cached && (Date.now() - cached.timestamp) < 120000) {
+        return cached.data;
+      }
+    }
+
+    try {
+      const holderData = await api.tokens.getHolderBalance(tokenMint, wallet.address);
+
+      // Evict oldest entries if cache is full (LRU-style eviction)
+      if (this.holderCache.size >= this.holderCacheMaxSize) {
+        const oldestKey = this.holderCache.keys().next().value;
+        this.holderCache.delete(oldestKey);
+      }
+
+      this.holderCache.set(cacheKey, { data: holderData, timestamp: Date.now() });
+      return holderData;
+    } catch (error) {
+      console.error('Failed to check holder status:', error);
+      return null;
+    }
+  },
+
+  // Cast a vote (now with holder verification)
   async vote(submissionId, voteType) {
     // Prevent double-voting while a vote is pending
     if (this.pendingVotes.has(submissionId)) {
@@ -20,6 +82,29 @@ const voting = {
       }
     }
 
+    // Get token mint for this submission
+    const tokenMint = this.getTokenMintForSubmission(submissionId);
+    if (!tokenMint) {
+      toast.error('Unable to verify token - please refresh the page');
+      return;
+    }
+
+    // Check holder status BEFORE voting - force refresh to get current balance
+    const holderData = await this.checkHolderStatus(tokenMint, true);
+
+    if (!holderData || !holderData.holdsToken) {
+      toast.error('You must hold this token to vote');
+      this.showHolderRequiredModal(tokenMint);
+      return;
+    }
+
+    // Check minimum balance requirement
+    if (holderData.percentageHeld < this.requirements.minVoteBalancePercent) {
+      toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
+      this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
+      return;
+    }
+
     // Get current vote state
     const currentVote = this.voteStates.get(submissionId);
     const isSameVote = currentVote === voteType;
@@ -32,7 +117,8 @@ const voting = {
       const result = await api.votes.cast({
         submissionId,
         voterWallet: wallet.address,
-        voteType
+        voteType,
+        holderData // Pass holder data to backend for verification
       });
 
       // Update the vote state
@@ -42,11 +128,12 @@ const voting = {
         this.voteStates.set(submissionId, voteType);
       }
 
-      // Show success feedback
+      // Show success feedback with vote weight
       this.showVoteFeedback(result);
 
       // Update the vote counts from the response
-      this.updateVoteCounts(submissionId, result.upvotes, result.downvotes, result.score);
+      const tally = result.tally || {};
+      this.updateVoteCounts(submissionId, tally.upvotes, tally.downvotes, tally.score, tally.weightedScore);
 
     } catch (error) {
       console.error('Vote failed:', error);
@@ -54,11 +141,79 @@ const voting = {
       // Revert optimistic update
       this.updateVoteUI(submissionId, currentVote, false);
 
-      // Show error
-      toast.error('Failed to cast vote. Please try again.');
+      // Handle specific error codes
+      if (error.message && error.message.includes('NOT_HOLDER')) {
+        toast.error('You must hold this token to vote');
+      } else if (error.message && error.message.includes('INSUFFICIENT_BALANCE')) {
+        toast.error('Insufficient token balance to vote');
+      } else {
+        toast.error('Failed to cast vote. Please try again.');
+      }
     } finally {
       this.pendingVotes.delete(submissionId);
     }
+  },
+
+  // Show modal explaining holder requirement
+  showHolderRequiredModal(tokenMint) {
+    const modal = document.createElement('div');
+    modal.className = 'voting-modal-overlay';
+    modal.innerHTML = `
+      <div class="voting-modal">
+        <div class="voting-modal-icon error">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <h3>Token Holder Required</h3>
+        <p>You must hold this token to vote on community submissions. This ensures only genuine stakeholders can influence content decisions.</p>
+        <div class="voting-modal-actions">
+          <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  },
+
+  // Show modal for insufficient balance
+  showInsufficientBalanceModal(holderData, required) {
+    const modal = document.createElement('div');
+    modal.className = 'voting-modal-overlay';
+    modal.innerHTML = `
+      <div class="voting-modal">
+        <div class="voting-modal-icon warning">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <h3>Insufficient Balance</h3>
+        <p>You need at least <strong>${required}%</strong> of the token supply to vote.</p>
+        <div class="holder-balance-info">
+          <div class="balance-row">
+            <span>Your balance:</span>
+            <span>${holderData.balance?.toLocaleString() || 0} tokens</span>
+          </div>
+          <div class="balance-row">
+            <span>Your share:</span>
+            <span>${(holderData.percentageHeld || 0).toFixed(6)}%</span>
+          </div>
+          <div class="balance-row required">
+            <span>Required:</span>
+            <span>${required}%</span>
+          </div>
+        </div>
+        <div class="voting-modal-actions">
+          <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
   },
 
   // Update vote UI (buttons and counts)
@@ -97,11 +252,12 @@ const voting = {
   },
 
   // Update vote counts in the UI
-  updateVoteCounts(submissionId, upvotes, downvotes, score) {
+  updateVoteCounts(submissionId, upvotes, downvotes, score, weightedScore = null) {
     // Find all elements displaying vote counts for this submission
     const upCountEls = document.querySelectorAll(`[data-upvotes="${submissionId}"]`);
     const downCountEls = document.querySelectorAll(`[data-downvotes="${submissionId}"]`);
     const scoreEls = document.querySelectorAll(`[data-score="${submissionId}"]`);
+    const weightedScoreEls = document.querySelectorAll(`[data-weighted-score="${submissionId}"]`);
 
     upCountEls.forEach(el => {
       el.textContent = upvotes;
@@ -119,6 +275,16 @@ const voting = {
       el.classList.toggle('negative', score < 0);
       this.animateCount(el);
     });
+
+    // Update weighted score displays
+    if (weightedScore !== null) {
+      weightedScoreEls.forEach(el => {
+        el.textContent = weightedScore.toFixed(1);
+        el.classList.toggle('positive', weightedScore >= 0);
+        el.classList.toggle('negative', weightedScore < 0);
+        this.animateCount(el);
+      });
+    }
 
     // Also update banner voting if present
     const bannerUpvotes = document.getElementById('banner-upvotes');
@@ -142,6 +308,9 @@ const voting = {
         submission.upvotes = upvotes;
         submission.downvotes = downvotes;
         submission.score = score;
+        if (weightedScore !== null) {
+          submission.weighted_score = weightedScore;
+        }
       }
     }
   },
@@ -154,14 +323,17 @@ const voting = {
 
   // Show vote feedback using toast system
   showVoteFeedback(result) {
+    const weight = result.voteWeight || 1;
+    const weightText = weight > 1 ? ` (${weight}x weight)` : '';
+
     const messages = {
       created: {
-        up: 'Upvoted!',
-        down: 'Downvoted!'
+        up: `Upvoted!${weightText}`,
+        down: `Downvoted!${weightText}`
       },
       updated: {
-        up: 'Changed to upvote',
-        down: 'Changed to downvote'
+        up: `Changed to upvote${weightText}`,
+        down: `Changed to downvote${weightText}`
       },
       removed: 'Vote removed'
     };
@@ -175,7 +347,7 @@ const voting = {
 
     const icon = result.action === 'removed' ? '' : result.voteType === 'up' ? '+1' : '-1';
 
-    toast.show(icon ? `${icon} ${message}` : message, result.voteType === 'up' ? 'success' : result.voteType === 'down' ? 'error' : 'info', 2000);
+    toast.show(icon ? `${icon} ${message}` : message, result.voteType === 'up' ? 'success' : result.voteType === 'down' ? 'error' : 'info', 2500);
   },
 
   // Check user's vote status for a submission
@@ -235,6 +407,9 @@ const voting = {
 
   // Initialize voting for a page
   async initForPage() {
+    // Load voting requirements from server
+    await this.loadRequirements();
+
     if (!wallet.connected) return;
 
     // Find all submissions on the page
@@ -246,10 +421,78 @@ const voting = {
     }
   },
 
+  // Load voting requirements from server
+  async loadRequirements() {
+    try {
+      const reqs = await api.votes.getRequirements();
+      this.requirements = {
+        minVoteBalancePercent: reqs.minVoteBalancePercent || 0.001,
+        approvalThreshold: reqs.approvalThreshold || 10,
+        rejectThreshold: reqs.rejectThreshold || -10,
+        minReviewMinutes: reqs.minReviewMinutes || 5,
+        voteWeightTiers: reqs.voteWeightTiers || []
+      };
+    } catch (error) {
+      // Use defaults if fetch fails
+      console.warn('Failed to load voting requirements, using defaults:', error.message);
+    }
+  },
+
+  // Show voting info modal (explains how voting works)
+  showVotingInfoModal() {
+    const tiers = this.requirements.voteWeightTiers || [];
+    const tiersHtml = tiers.map(t =>
+      `<div class="tier-row">
+        <span>≥${t.minPercent}% holdings</span>
+        <span>${t.weight}x vote weight</span>
+      </div>`
+    ).join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'voting-modal-overlay';
+    modal.innerHTML = `
+      <div class="voting-modal" style="max-width: 450px;">
+        <div class="voting-modal-icon success">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </div>
+        <h3>How Voting Works</h3>
+        <div class="voting-info-content">
+          <div class="voting-rule">
+            <strong>Holder Verification</strong>
+            <p>You must hold the token to vote on its community submissions.</p>
+          </div>
+          <div class="voting-rule">
+            <strong>Minimum Balance</strong>
+            <p>At least ${this.requirements.minVoteBalancePercent}% of supply required to vote.</p>
+          </div>
+          <div class="voting-rule">
+            <strong>Vote Weight</strong>
+            <p>Larger holders have more voting power:</p>
+            <div class="vote-tiers">${tiersHtml}</div>
+          </div>
+          <div class="voting-rule">
+            <strong>Auto-Moderation</strong>
+            <p>Submissions are auto-approved at +${this.requirements.approvalThreshold} weighted score (requires ~10% of supply) after ${this.requirements.minReviewMinutes} minute(s) of review.</p>
+          </div>
+        </div>
+        <div class="voting-modal-actions">
+          <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  },
+
   // Reset all vote states (e.g., on wallet disconnect)
   reset() {
     this.voteStates.clear();
     this.pendingVotes.clear();
+    this.holderCache.clear();
 
     // Remove all voted classes
     document.querySelectorAll('.vote-btn.voted').forEach(btn => {

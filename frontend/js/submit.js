@@ -2,13 +2,51 @@
 const submitPage = {
   tokenValid: false,
   urlValid: false,
+  holderVerified: false,
   tokenData: null,
+  holderData: null,
   mySubmissions: [],
+  walletConnected: false,
 
   // Initialize
   init() {
     this.bindEvents();
+    this.updateWalletUI();
     this.restoreFromUrl();
+    this.updateFormState();
+  },
+
+  // Update wallet UI based on current state
+  updateWalletUI() {
+    const connectSection = document.getElementById('wallet-connect-section');
+    const connectedSection = document.getElementById('wallet-connected-section');
+    const walletInput = document.getElementById('submitter-wallet');
+    const addressDisplay = document.getElementById('connected-wallet-address');
+
+    if (wallet.connected && wallet.address) {
+      this.walletConnected = true;
+      if (connectSection) connectSection.style.display = 'none';
+      if (connectedSection) connectedSection.style.display = 'block';
+      if (walletInput) walletInput.value = wallet.address;
+      if (addressDisplay) addressDisplay.textContent = utils.truncateAddress(wallet.address);
+
+      // Load user's submissions
+      this.loadMySubmissions(wallet.address);
+
+      // If we already have a valid token, check holder status
+      if (this.tokenValid && this.tokenData) {
+        this.checkHolderStatus(this.tokenData.mintAddress || this.tokenData.address);
+      }
+    } else {
+      this.walletConnected = false;
+      if (connectSection) connectSection.style.display = 'block';
+      if (connectedSection) connectedSection.style.display = 'none';
+      if (walletInput) walletInput.value = '';
+      this.holderVerified = false;
+      this.holderData = null;
+      this.hideHolderVerification();
+    }
+
     this.updateFormState();
   },
 
@@ -30,6 +68,18 @@ const submitPage = {
     const tokenMintInput = document.getElementById('token-mint');
     const contentUrlInput = document.getElementById('content-url');
     const typeRadios = document.querySelectorAll('input[name="submissionType"]');
+
+    // Main connect wallet button
+    const connectMain = document.getElementById('connect-wallet-main');
+    if (connectMain) {
+      connectMain.addEventListener('click', () => wallet.connect());
+    }
+
+    // Disconnect button
+    const disconnectBtn = document.getElementById('disconnect-wallet-btn');
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener('click', () => wallet.disconnect());
+    }
 
     // Token mint lookup
     if (tokenMintInput) {
@@ -78,70 +128,209 @@ const submitPage = {
       });
     }
 
-    // Wallet connection buttons
-    const connectInline = document.getElementById('connect-wallet-inline');
+    // Imgur help button
+    const imgurHelpBtn = document.getElementById('imgur-help-btn');
+    if (imgurHelpBtn) {
+      imgurHelpBtn.addEventListener('click', () => this.showImgurHelpModal());
+    }
+
+    // Wallet connection buttons for submissions section
     const connectSubmissions = document.getElementById('connect-wallet-submissions');
-
-    if (connectInline) {
-      connectInline.addEventListener('click', () => {
-        wallet.connect();
-      });
-    }
-
     if (connectSubmissions) {
-      connectSubmissions.addEventListener('click', () => {
-        wallet.connect();
-      });
+      connectSubmissions.addEventListener('click', () => wallet.connect());
     }
 
-    // Update wallet field when connected
+    // Wallet events
     window.addEventListener('walletConnected', (e) => {
-      const walletInput = document.getElementById('submitter-wallet');
-      const connectInline = document.getElementById('connect-wallet-inline');
-
-      if (walletInput) {
-        walletInput.value = e.detail.address;
-      }
-
-      if (connectInline) {
-        connectInline.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          Connected
-        `;
-        connectInline.disabled = true;
-        connectInline.classList.add('connected');
-      }
-
-      // Load user's submissions
-      this.loadMySubmissions(e.detail.address);
+      this.updateWalletUI();
     });
 
-    // Handle wallet disconnect
     window.addEventListener('walletDisconnected', () => {
-      const walletInput = document.getElementById('submitter-wallet');
-      const connectInline = document.getElementById('connect-wallet-inline');
-
-      if (walletInput) {
-        walletInput.value = '';
-      }
-
-      if (connectInline) {
-        connectInline.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
-            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
-            <path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>
-          </svg>
-          Connect
-        `;
-        connectInline.disabled = false;
-        connectInline.classList.remove('connected');
-      }
-
+      this.walletConnected = false;
+      this.holderVerified = false;
+      this.holderData = null;
+      this.updateWalletUI();
       this.resetMySubmissions();
+      this.updateFormState();
     });
+  },
+
+  // Check if connected wallet holds the token
+  async checkHolderStatus(mint) {
+    if (!this.walletConnected || !wallet.address || !mint) {
+      this.holderVerified = false;
+      this.holderData = null;
+      this.hideHolderVerification();
+      return;
+    }
+
+    const holderSection = document.getElementById('holder-verification');
+    const loadingEl = document.getElementById('holder-loading');
+    const resultEl = document.getElementById('holder-result');
+
+    // Show loading state
+    if (holderSection) holderSection.style.display = 'block';
+    if (loadingEl) loadingEl.style.display = 'flex';
+    if (resultEl) resultEl.style.display = 'none';
+
+    try {
+      const holderInfo = await api.tokens.getHolderBalance(mint, wallet.address);
+      this.holderData = holderInfo;
+      this.holderVerified = holderInfo.holdsToken;
+
+      // Update UI
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (resultEl) resultEl.style.display = 'block';
+
+      const statusIcon = document.getElementById('holder-status-icon');
+      const statusText = document.getElementById('holder-status-text');
+      const statusDiv = document.getElementById('holder-status');
+      const balanceInfo = document.getElementById('holder-balance-info');
+      const balanceEl = document.getElementById('holder-balance');
+      const percentageEl = document.getElementById('holder-percentage');
+
+      if (holderInfo.holdsToken) {
+        statusDiv.className = 'holder-status verified';
+        statusIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+        statusText.textContent = 'You hold this token';
+        balanceInfo.style.display = 'block';
+
+        // Format balance
+        const formattedBalance = holderInfo.balance >= 1000000
+          ? utils.formatNumber(holderInfo.balance, '')
+          : holderInfo.balance.toLocaleString(undefined, { maximumFractionDigits: 4 });
+        balanceEl.textContent = `${formattedBalance} ${this.tokenData?.symbol || ''}`;
+
+        // Format percentage
+        if (holderInfo.percentageHeld !== null && holderInfo.percentageHeld !== undefined) {
+          const pct = holderInfo.percentageHeld;
+          percentageEl.textContent = pct < 0.0001 ? '<0.0001%' : `${pct.toFixed(4)}%`;
+        } else {
+          percentageEl.textContent = 'N/A';
+        }
+      } else {
+        statusDiv.className = 'holder-status not-holder';
+        statusIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        statusText.textContent = 'You do not hold this token';
+        balanceInfo.style.display = 'none';
+      }
+
+      this.updateFormState();
+
+    } catch (error) {
+      console.error('Failed to check holder status:', error);
+      if (loadingEl) loadingEl.style.display = 'none';
+      this.holderVerified = false;
+      this.holderData = null;
+      // Don't block on verification errors - just hide the section
+      this.hideHolderVerification();
+      this.updateFormState();
+    }
+  },
+
+  // Hide holder verification section
+  hideHolderVerification() {
+    const holderSection = document.getElementById('holder-verification');
+    if (holderSection) holderSection.style.display = 'none';
+  },
+
+  // Show Imgur upload help modal
+  showImgurHelpModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content imgur-help-modal">
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="modal-header">
+          <div class="imgur-logo">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="#1BB76E">
+              <path d="M21.84,9.25c-.29-1.38-.81-2.66-1.52-3.84-.71-1.18-1.61-2.23-2.66-3.1-1.05-.87-2.24-1.57-3.54-2.05S11.61,0,10.22.07c-1.39.07-2.72.39-3.95.92S4.04,2.16,3.07,2.99c-.97.83-1.78,1.82-2.39,2.93-.61,1.11-1.03,2.33-1.24,3.61-.21,1.28-.19,2.6.03,3.89.22,1.29.66,2.52,1.3,3.66.64,1.14,1.46,2.16,2.44,3.01.98.85,2.1,1.52,3.32,1.98s2.54.72,3.92.72c1.39,0,2.72-.26,3.94-.73s2.35-1.15,3.33-2c.98-.85,1.8-1.86,2.44-3,.64-1.14,1.08-2.38,1.3-3.67.22-1.29.24-2.6.04-3.88l-.06-.06ZM12,18c-3.31,0-6-2.69-6-6s2.69-6,6-6,6,2.69,6,6-2.69,6-6,6Z"/>
+            </svg>
+          </div>
+          <h3>How to Upload Your Banner to Imgur</h3>
+        </div>
+        <div class="imgur-steps">
+          <div class="imgur-step">
+            <span class="step-number">1</span>
+            <div class="step-content">
+              <h4>Create Your Banner</h4>
+              <p>Design a banner image with recommended dimensions of <strong>1200 x 300 pixels</strong>. PNG or JPG format works best.</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">2</span>
+            <div class="step-content">
+              <h4>Go to Imgur</h4>
+              <p>Visit <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="link">imgur.com/upload</a> (no account required)</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">3</span>
+            <div class="step-content">
+              <h4>Upload Your Image</h4>
+              <p>Drag and drop your banner image or click to browse and select your file.</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">4</span>
+            <div class="step-content">
+              <h4>Copy the Direct Link</h4>
+              <p>After upload, right-click the image and select <strong>"Copy image address"</strong>, or click the share button and copy the <strong>Direct Link</strong> (ends in .png or .jpg).</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">5</span>
+            <div class="step-content">
+              <h4>Paste the URL</h4>
+              <p>Paste the direct image URL into the Content URL field above. Make sure it looks like: <code>https://i.imgur.com/xxxxx.png</code></p>
+            </div>
+          </div>
+        </div>
+        <div class="imgur-tips">
+          <h4>Tips for Great Banners</h4>
+          <ul>
+            <li>Use high-quality images (minimum 800px wide)</li>
+            <li>Keep text readable and not too small</li>
+            <li>Include your token logo and name</li>
+            <li>Avoid misleading or inappropriate content</li>
+          </ul>
+        </div>
+        <div class="modal-actions">
+          <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            Open Imgur
+          </a>
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+            Got it
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+
+    // Close on Escape
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        modal.remove();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
   },
 
   // Update progress step indicators
@@ -188,7 +377,7 @@ const submitPage = {
       this.tokenData = token;
       this.tokenValid = true;
 
-      // Update preview - handle different property names from various API responses
+      // Update preview
       const logoEl = document.getElementById('preview-logo');
       logoEl.src = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
       logoEl.onerror = function() { this.src = utils.getDefaultLogo(); };
@@ -200,6 +389,11 @@ const submitPage = {
       status.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
       status.className = 'input-status success';
 
+      // Check if wallet is connected and verify holder status
+      if (this.walletConnected) {
+        this.checkHolderStatus(mint);
+      }
+
       this.updateProgressStep(2);
       this.updateFormState();
 
@@ -207,7 +401,10 @@ const submitPage = {
       console.error('Token lookup failed:', error);
       this.tokenValid = false;
       this.tokenData = null;
+      this.holderVerified = false;
+      this.holderData = null;
       preview.style.display = 'none';
+      this.hideHolderVerification();
 
       status.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
       status.className = 'input-status error';
@@ -221,6 +418,8 @@ const submitPage = {
   resetTokenPreview() {
     this.tokenValid = false;
     this.tokenData = null;
+    this.holderVerified = false;
+    this.holderData = null;
 
     const preview = document.getElementById('token-preview');
     const status = document.getElementById('token-status');
@@ -233,6 +432,7 @@ const submitPage = {
     }
     if (errorEl) errorEl.style.display = 'none';
 
+    this.hideHolderVerification();
     this.updateFormState();
   },
 
@@ -348,25 +548,25 @@ const submitPage = {
 
   // Update URL hint based on submission type
   updateUrlHint(type) {
-    const hint = document.getElementById('url-hint');
-    if (!hint) return;
+    const hintText = document.getElementById('url-hint-text');
+    const helpBtn = document.getElementById('imgur-help-btn');
 
     const hints = {
-      banner: 'For banners: Direct image URL (PNG, JPG, GIF, WebP). Recommended size: 1200x300px.',
+      banner: 'Direct image URL (PNG, JPG, GIF, WebP). Recommended size: 1200x300px.',
       twitter: 'Enter the full Twitter/X profile URL (e.g., https://twitter.com/yourtoken)',
       telegram: 'Enter the Telegram group/channel URL (e.g., https://t.me/yourtoken)',
       discord: 'Enter the Discord invite URL (e.g., https://discord.gg/yourtoken)',
       website: 'Enter the official website URL (e.g., https://yourtoken.com)'
     };
 
-    hint.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="16" x2="12" y2="12"/>
-        <line x1="12" y1="8" x2="12.01" y2="8"/>
-      </svg>
-      ${hints[type] || ''}
-    `;
+    if (hintText) {
+      hintText.textContent = hints[type] || '';
+    }
+
+    // Show/hide Imgur help button based on type
+    if (helpBtn) {
+      helpBtn.style.display = type === 'banner' ? 'inline-flex' : 'none';
+    }
   },
 
   // Show banner preview
@@ -417,17 +617,20 @@ const submitPage = {
     const submitBtn = document.getElementById('submit-btn');
     const formStatus = document.getElementById('form-status');
 
-    const canSubmit = this.tokenValid && this.urlValid;
+    // Requirements: wallet connected, token valid, URL valid, and must hold the token
+    const canSubmit = this.walletConnected && this.tokenValid && this.urlValid && this.holderVerified;
 
     if (submitBtn) {
       submitBtn.disabled = !canSubmit;
     }
 
     if (formStatus) {
-      if (!this.tokenValid && !this.urlValid) {
-        formStatus.textContent = 'Enter a valid token address and content URL to continue';
+      if (!this.walletConnected) {
+        formStatus.textContent = 'Connect your wallet to submit content';
       } else if (!this.tokenValid) {
         formStatus.textContent = 'Enter a valid token address to continue';
+      } else if (!this.holderVerified) {
+        formStatus.textContent = 'You must hold this token to submit content for it';
       } else if (!this.urlValid) {
         formStatus.textContent = 'Enter a valid content URL to continue';
       } else {
@@ -438,6 +641,16 @@ const submitPage = {
 
   // Submit form
   async submitForm() {
+    if (!this.walletConnected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!this.holderVerified) {
+      toast.error('You must hold this token to submit content for it');
+      return;
+    }
+
     if (!this.tokenValid || !this.urlValid) {
       toast.error('Please fill in all required fields correctly');
       return;
@@ -451,7 +664,7 @@ const submitPage = {
       tokenMint: formData.get('tokenMint')?.trim(),
       submissionType: formData.get('submissionType'),
       contentUrl: formData.get('contentUrl')?.trim(),
-      submitterWallet: formData.get('submitterWallet') || null
+      submitterWallet: wallet.address
     };
 
     // Disable button during submission
@@ -468,19 +681,17 @@ const submitPage = {
       toast.success('Submission received! It will be reviewed by the community.');
       this.showSuccessModal(result);
 
-      // Clear form
-      form.reset();
+      // Clear form (but keep wallet connected)
+      document.getElementById('token-mint').value = '';
+      document.getElementById('content-url').value = '';
       this.resetTokenPreview();
       this.hideBannerPreview();
       this.urlValid = false;
       this.updateFormState();
       this.updateProgressStep(1);
 
-      // Reload submissions if wallet connected
-      const walletAddress = document.getElementById('submitter-wallet')?.value;
-      if (walletAddress) {
-        this.loadMySubmissions(walletAddress);
-      }
+      // Reload user's submissions
+      this.loadMySubmissions(wallet.address);
 
     } catch (error) {
       console.error('Submission failed:', error);
@@ -501,7 +712,6 @@ const submitPage = {
 
   // Show success modal
   showSuccessModal(submission) {
-    // SECURITY: Escape user-controlled data to prevent XSS
     const safeSubmissionType = utils.escapeHtml(submission.submission_type);
     const safeTokenSymbol = utils.escapeHtml(this.tokenData?.symbol || 'Unknown');
     const safeTokenMint = encodeURIComponent(submission.token_mint);
@@ -541,14 +751,10 @@ const submitPage = {
 
     document.body.appendChild(modal);
 
-    // Close on backdrop click
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.remove();
-      }
+      if (e.target === modal) modal.remove();
     });
 
-    // Close on Escape
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         modal.remove();
@@ -584,24 +790,22 @@ const submitPage = {
               <line x1="8" y1="12" x2="16" y2="12"/>
             </svg>
             <p>You haven't submitted anything yet</p>
-            <p class="hint">Use the form above to submit banners or social links for tokens</p>
+            <p class="hint">Use the form above to submit banners or social links for tokens you hold</p>
           </div>
         `;
         return;
       }
 
-      // SECURITY: Build submission cards safely to prevent XSS
+      // Build submission cards safely
       container.innerHTML = '';
       this.mySubmissions.forEach(s => {
         const card = document.createElement('div');
         card.className = 'my-submission-card';
 
-        // Type icon (safe - from our predefined icons)
         const iconDiv = document.createElement('div');
         iconDiv.className = 'submission-type-icon';
         iconDiv.innerHTML = this.getTypeIcon(s.submission_type);
 
-        // Submission info
         const infoDiv = document.createElement('div');
         infoDiv.className = 'submission-info';
 
@@ -610,7 +814,7 @@ const submitPage = {
 
         const typeLabel = document.createElement('span');
         typeLabel.className = 'type-label';
-        typeLabel.textContent = s.submission_type; // Safe: textContent escapes HTML
+        typeLabel.textContent = s.submission_type;
 
         const tokenLink = document.createElement('a');
         tokenLink.className = 'token-link';
@@ -630,12 +834,10 @@ const submitPage = {
         infoDiv.appendChild(titleDiv);
         infoDiv.appendChild(contentLink);
 
-        // Status badge
         const statusBadge = document.createElement('div');
         statusBadge.className = `submission-status-badge status-${utils.escapeHtml(s.status)}`;
         statusBadge.textContent = s.status;
 
-        // Score
         const scoreDiv = document.createElement('div');
         const score = s.score || 0;
         scoreDiv.className = `submission-score ${score >= 0 ? 'positive' : 'negative'}`;
@@ -651,7 +853,6 @@ const submitPage = {
 
     } catch (error) {
       console.error('Failed to load submissions:', error);
-      // SECURITY: Build error UI safely without inline wallet address
       container.innerHTML = '';
       const errorDiv = document.createElement('div');
       errorDiv.className = 'empty-submissions error';

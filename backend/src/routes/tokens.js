@@ -291,11 +291,13 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         db.getApprovedSubmissions(mint).catch(() => [])
       ];
 
-      // If holder count not cached and Helius is configured, fetch it
-      if (holders === undefined && solanaService.isHeliusConfigured()) {
+      // If holder count not cached, fetch it
+      // Priority: Jupiter (more reliable holderCount field) > Helius (getTokenAccounts total)
+      if (holders === undefined) {
         fetchPromises.push(
-          solanaService.getTokenHolderCount(mint).catch(err => {
-            console.error('[API /tokens/:mint] Holder count fetch failed:', err.message);
+          // Try Jupiter first (has holderCount in search response)
+          jupiterService.getTokenHolderCount(mint).catch(err => {
+            console.error('[API /tokens/:mint] Jupiter holder count failed:', err.message);
             return null;
           })
         );
@@ -304,14 +306,29 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       const results = await Promise.all(fetchPromises);
       const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
-      // Cache holder count for 24 hours if we fetched it
-      // Only cache values that seem reasonable (>= 1, as even new tokens have at least 1 holder)
-      // If the API returns a suspiciously low value (like 1), don't cache it as long
-      if (fetchedHolders !== undefined && fetchedHolders !== null) {
-        holders = fetchedHolders;
-        // If holder count is suspiciously low (1), cache for only 1 hour
-        // This allows for corrections while still preventing repeated API calls
-        const holderTTL = fetchedHolders <= 1 ? TTL.HOUR : TTL.DAY;
+      // Process holder count - try fallback if Jupiter didn't return a valid count
+      let finalHolders = fetchedHolders;
+
+      // If Jupiter didn't return a valid holder count (or returned a suspicious value), try Helius
+      if ((finalHolders === null || finalHolders === undefined || finalHolders <= 1) && solanaService.isHeliusConfigured()) {
+        console.log('[API /tokens/:mint] Jupiter holder count unavailable or suspicious, trying Helius fallback');
+        const heliusHolders = await solanaService.getTokenHolderCount(mint).catch(err => {
+          console.error('[API /tokens/:mint] Helius holder count failed:', err.message);
+          return null;
+        });
+
+        // Use Helius count if it's better than Jupiter's
+        if (heliusHolders !== null && heliusHolders > (finalHolders || 0)) {
+          finalHolders = heliusHolders;
+          console.log(`[API /tokens/:mint] Using Helius holder count: ${heliusHolders}`);
+        }
+      }
+
+      // Cache holder count for 24 hours if we have a valid count
+      // If the count is suspiciously low (<=1), cache for only 1 hour
+      if (finalHolders !== undefined && finalHolders !== null) {
+        holders = finalHolders;
+        const holderTTL = finalHolders <= 1 ? TTL.HOUR : TTL.DAY;
         await cache.set(holderCacheKey, holders, holderTTL);
         console.log(`[API /tokens/:mint] Cached holder count: ${holders} for ${holderTTL === TTL.HOUR ? '1 hour' : '24 hours'}`);
       }
@@ -546,6 +563,96 @@ router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => 
   } catch (error) {
     console.error('Error fetching submissions:', error.message);
     res.status(500).json({ error: 'Failed to fetch submissions' });
+  }
+}));
+
+// GET /api/tokens/:mint/holder/:wallet - Check if wallet holds token and get balance info
+// Used to verify submitter holds the token they want to update
+router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) => {
+  const { mint, wallet } = req.params;
+
+  // Basic wallet address validation
+  if (!wallet || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const cacheKey = `holder:${mint}:${wallet}`;
+
+  try {
+    // Check cache first (short TTL since balances change)
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    // Get token accounts for this wallet that hold the specific token
+    const tokenAccounts = await solanaService.getTokenAccountsByOwner(wallet, mint);
+
+    let balance = 0;
+    let decimals = 9;
+
+    if (tokenAccounts && tokenAccounts.value && tokenAccounts.value.length > 0) {
+      // Sum all token accounts for this mint (usually just one)
+      for (const account of tokenAccounts.value) {
+        const info = account.account?.data?.parsed?.info;
+        if (info && info.mint === mint) {
+          balance += parseFloat(info.tokenAmount?.uiAmount || 0);
+          decimals = info.tokenAmount?.decimals || 9;
+        }
+      }
+    }
+
+    // Get token supply for percentage calculation
+    let totalSupply = null;
+    let liquidity = null;
+    let circulatingSupply = null;
+    let percentageHeld = null;
+
+    // Try to get token info for supply data
+    const tokenInfo = await cache.get(keys.token(mint));
+    if (tokenInfo) {
+      totalSupply = tokenInfo.supply || tokenInfo.totalSupply;
+      liquidity = tokenInfo.liquidity;
+      // Estimate circulating supply (total - liquidity locked)
+      // This is a rough approximation
+      if (totalSupply && liquidity && tokenInfo.price) {
+        const liquidityTokens = liquidity / tokenInfo.price;
+        circulatingSupply = Math.max(0, totalSupply - liquidityTokens);
+      } else {
+        circulatingSupply = totalSupply;
+      }
+    }
+
+    // Calculate percentage if we have supply data
+    if (balance > 0 && circulatingSupply && circulatingSupply > 0) {
+      percentageHeld = (balance / circulatingSupply) * 100;
+    }
+
+    const result = {
+      wallet,
+      mint,
+      balance,
+      decimals,
+      holdsToken: balance > 0,
+      totalSupply,
+      circulatingSupply,
+      percentageHeld: percentageHeld !== null ? parseFloat(percentageHeld.toFixed(6)) : null
+    };
+
+    // Cache for 1 minute (balances change frequently)
+    await cache.set(cacheKey, result, 60);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error checking holder balance:', error.message);
+    // Return a valid response even on error - just no balance data
+    res.json({
+      wallet,
+      mint,
+      balance: 0,
+      holdsToken: false,
+      error: 'Unable to verify balance'
+    });
   }
 }));
 

@@ -298,37 +298,67 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 ---
 
-## Phase 5: Security & Anti-Abuse
+## Phase 5: Security & Anti-Abuse ✅ COMPLETED
 
 ### 5.1 Vote Manipulation Prevention
-- [ ] Wallet signature verification for votes
-- [ ] One vote per wallet per submission
-- [ ] Optional: Token holder verification
-- [ ] Rate limiting on voting endpoints
+- [x] Wallet signature verification for votes
+- [x] One vote per wallet per submission
+- [x] Token holder verification (required to vote)
+- [x] Vote weighting by token holdings (1x-3x multiplier)
+- [x] Minimum balance requirement (0.001% of supply)
+- [x] Rate limiting on voting endpoints
 
 ### 5.2 Submission Moderation
-- [ ] Basic content validation
-- [ ] URL sanitization
-- [ ] Image size/format restrictions
+- [x] Basic content validation
+- [x] URL sanitization
+- [x] Image size/format restrictions
+- [x] Auto-moderation with weighted voting (+10/-10 thresholds)
+- [x] 5-minute minimum review period
 - [ ] Community flagging system (future)
 
 ### 5.3 API Security
-- [ ] CORS configuration
-- [ ] Rate limiting
-- [ ] Input validation
-- [ ] SQL injection prevention (parameterized queries)
+- [x] CORS configuration
+- [x] Rate limiting
+- [x] Input validation
+- [x] SQL injection prevention (parameterized queries)
+- [x] XSS prevention
 
 ---
 
 ## Phase 6: Future Enhancements
 
-### 6.1 Near-term
-- [ ] WebSocket support for real-time prices
-- [ ] Token watchlist feature
-- [ ] Portfolio tracking
-- [ ] Mobile-responsive improvements
+### 6.1 Mobile-Responsive Improvements ✅ COMPLETED
+- [x] Touch targets - minimum 44x44px for all interactive elements
+- [x] Form inputs - 16px font to prevent iOS zoom
+- [x] Intermediate breakpoints (360px, 480px, 600px, 768px, 900px)
+- [x] Modals - mobile-friendly with max-height and overflow
+- [x] Token table - horizontal scroll on mobile
+- [x] Search dropdown - mobile height constraints
+- [x] Safe area support for notch devices (iPhone X+)
+- [x] Header/logo optimization for mobile
+- [x] Footer responsive layout
+- [x] Submission cards mobile layout
+- [x] Stats grid - 1 column on small screens
+- [x] Landscape orientation support
+- [x] Reduced motion preference support
+- [x] High contrast mode support
 
-### 6.2 Long-term
+### 6.2 Token Watchlist ✅ COMPLETED
+- [x] Watchlist database table with wallet-token associations
+- [x] Backend API endpoints (add/remove/list/check/batch-check)
+- [x] Frontend watchlist manager with local caching
+- [x] Star button on token list rows
+- [x] Star button on token detail page header
+- [x] "Watchlist" filter tab on homepage
+- [x] Empty state with call-to-action
+- [x] Max 100 tokens per wallet limit
+- [x] Persisted across sessions via wallet address
+
+### 6.3 Near-term (TODO)
+- [ ] WebSocket support for real-time prices
+- [ ] Portfolio tracking
+
+### 6.4 Long-term
 - [ ] Multi-chain support (Ethereum, Base, etc.)
 - [ ] Advanced charting (TradingView integration)
 - [ ] Token alerts
@@ -383,6 +413,6 @@ npm run dev
 
 ---
 
-*Document Version: 1.0*
+*Document Version: 1.2*
 *Created: January 19, 2026*
-*Last Updated: January 19, 2026*
+*Last Updated: January 21, 2026*

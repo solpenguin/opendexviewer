@@ -97,6 +97,11 @@ const api = {
         console.warn('Pools endpoint not available:', error.message);
         return [];
       }
+    },
+
+    async getHolderBalance(mint, wallet) {
+      // Get wallet's balance of a specific token
+      return api.request(`/api/tokens/${mint}/holder/${wallet}`);
     }
   },
 
@@ -149,6 +154,49 @@ const api = {
         method: 'POST',
         body: JSON.stringify({ submissionIds, wallet })
       });
+    },
+
+    async getRequirements() {
+      return api.request('/api/votes/requirements');
+    }
+  },
+
+  // Watchlist endpoints
+  watchlist: {
+    async get(wallet) {
+      return api.request(`/api/watchlist/${wallet}`);
+    },
+
+    async add(wallet, tokenMint) {
+      return api.request('/api/watchlist', {
+        method: 'POST',
+        body: JSON.stringify({ wallet, tokenMint })
+      });
+    },
+
+    async remove(wallet, tokenMint) {
+      return api.request('/api/watchlist', {
+        method: 'DELETE',
+        body: JSON.stringify({ wallet, tokenMint })
+      });
+    },
+
+    async check(wallet, tokenMint) {
+      return api.request('/api/watchlist/check', {
+        method: 'POST',
+        body: JSON.stringify({ wallet, tokenMint })
+      });
+    },
+
+    async checkBatch(wallet, tokenMints) {
+      return api.request('/api/watchlist/check-batch', {
+        method: 'POST',
+        body: JSON.stringify({ wallet, tokenMints })
+      });
+    },
+
+    async getCount(wallet) {
+      return api.request(`/api/watchlist/${wallet}/count`);
     }
   }
 };

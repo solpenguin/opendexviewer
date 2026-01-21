@@ -1,23 +1,128 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
-const { cache, keys } = require('../services/cache');
+const solanaService = require('../services/solana');
+const { cache, keys, TTL } = require('../services/cache');
 const { validateVote, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
 router.use(requireDatabase);
 
-// POST /api/votes - Cast a vote
+/**
+ * Verify holder status server-side (DO NOT trust frontend data)
+ * Uses Solana RPC to verify actual token balance
+ */
+async function verifyHolderStatus(wallet, tokenMint) {
+  const cacheKey = `holder-verify:${tokenMint}:${wallet}`;
+
+  // Check cache first (short TTL - 30 seconds for voting verification)
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    // Get token accounts for this wallet that hold the specific token
+    const tokenAccounts = await solanaService.getTokenAccountsByOwner(wallet, tokenMint);
+
+    let balance = 0;
+    let decimals = 9;
+
+    if (tokenAccounts && tokenAccounts.value && tokenAccounts.value.length > 0) {
+      // Sum all token accounts for this mint (usually just one)
+      for (const account of tokenAccounts.value) {
+        const info = account.account?.data?.parsed?.info;
+        if (info && info.mint === tokenMint) {
+          balance += parseFloat(info.tokenAmount?.uiAmount || 0);
+          decimals = info.tokenAmount?.decimals || 9;
+        }
+      }
+    }
+
+    // Get token supply for percentage calculation
+    let circulatingSupply = null;
+    let percentageHeld = null;
+
+    // Try to get token info from cache for supply data
+    const tokenInfo = await cache.get(keys.tokenInfo(tokenMint));
+    if (tokenInfo && tokenInfo.circulatingSupply) {
+      circulatingSupply = tokenInfo.circulatingSupply;
+    } else if (tokenInfo && tokenInfo.supply) {
+      circulatingSupply = tokenInfo.supply;
+    }
+
+    // Calculate percentage if we have supply data
+    if (balance > 0 && circulatingSupply && circulatingSupply > 0) {
+      percentageHeld = (balance / circulatingSupply) * 100;
+    }
+
+    const result = {
+      wallet,
+      mint: tokenMint,
+      balance,
+      decimals,
+      holdsToken: balance > 0,
+      circulatingSupply,
+      percentageHeld: percentageHeld !== null ? parseFloat(percentageHeld.toFixed(6)) : 0,
+      verifiedAt: Date.now()
+    };
+
+    // Cache for 30 seconds (short TTL since we need fresh data for voting)
+    await cache.set(cacheKey, result, 30);
+
+    return result;
+  } catch (error) {
+    console.error('[Votes] Holder verification failed:', error.message);
+    // Return a failed verification - don't allow voting if we can't verify
+    return {
+      wallet,
+      mint: tokenMint,
+      balance: 0,
+      holdsToken: false,
+      percentageHeld: 0,
+      error: 'Unable to verify balance'
+    };
+  }
+}
+
+// POST /api/votes - Cast a vote (requires holder verification)
 router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
   const { submissionId, voterWallet, voteType } = req.body;
-  const parsedId = parseInt(submissionId);
+  const parsedId = parseInt(submissionId, 10);
 
   // Check if submission exists
   const submission = await db.getSubmission(parsedId);
   if (!submission) {
     return res.status(404).json({ error: 'Submission not found' });
   }
+
+  // SERVER-SIDE HOLDER VERIFICATION: Do NOT trust frontend holderData
+  // Always verify directly from Solana RPC
+  const holderData = await verifyHolderStatus(voterWallet, submission.token_mint);
+
+  // HOLDER VERIFICATION: Voter must hold the token
+  if (!holderData || !holderData.holdsToken) {
+    return res.status(403).json({
+      error: 'You must hold this token to vote',
+      code: 'NOT_HOLDER'
+    });
+  }
+
+  // MINIMUM BALANCE CHECK: Voter must hold minimum percentage
+  const voterPercentage = holderData.percentageHeld || 0;
+  if (voterPercentage < db.MIN_VOTE_BALANCE_PERCENT) {
+    return res.status(403).json({
+      error: `Minimum ${db.MIN_VOTE_BALANCE_PERCENT}% of supply required to vote`,
+      code: 'INSUFFICIENT_BALANCE',
+      required: db.MIN_VOTE_BALANCE_PERCENT,
+      held: voterPercentage
+    });
+  }
+
+  // Calculate vote weight based on holder percentage
+  const voteWeight = db.calculateVoteWeight(voterPercentage);
+  const voterBalance = holderData.balance || 0;
 
   // Check for existing vote
   const existingVote = await db.getVote(parsedId, voterWallet);
@@ -28,20 +133,22 @@ router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
     if (existingVote.vote_type === voteType) {
       // Same vote - remove it (toggle off)
       await db.deleteVote(parsedId, voterWallet);
-      result = { message: 'Vote removed', action: 'removed' };
+      result = { message: 'Vote removed', action: 'removed', voteWeight: 0 };
     } else {
-      // Different vote - update it
+      // Different vote - update it (with new weight based on current balance)
       await db.updateVote(parsedId, voterWallet, voteType);
-      result = { message: 'Vote updated', action: 'updated', voteType };
+      result = { message: 'Vote updated', action: 'updated', voteType, voteWeight };
     }
   } else {
-    // Create new vote
+    // Create new vote with holder data
     await db.createVote({
       submissionId: parsedId,
       voterWallet,
-      voteType
+      voteType,
+      voterBalance,
+      voterPercentage
     });
-    result = { message: 'Vote cast', action: 'created', voteType };
+    result = { message: 'Vote cast', action: 'created', voteType, voteWeight };
   }
 
   // Clear cache for this token's submissions
@@ -58,9 +165,15 @@ router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
     tally: {
       upvotes: tally?.upvotes || 0,
       downvotes: tally?.downvotes || 0,
-      score: tally?.score || 0
+      score: tally?.score || 0,
+      weightedScore: parseFloat(tally?.weighted_score) || 0
     },
-    submissionStatus: updatedSubmission?.status || 'unknown'
+    submissionStatus: updatedSubmission?.status || 'unknown',
+    voterInfo: {
+      balance: voterBalance,
+      percentage: voterPercentage,
+      weight: voteWeight
+    }
   });
 }));
 
@@ -74,14 +187,32 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
   }
 
   const tally = await db.getVoteTally(parsedId);
+  const submission = await db.getSubmission(parsedId);
+
+  // Calculate time until eligible for auto-approval (in minutes)
+  let minutesUntilEligible = 0;
+  if (submission && submission.status === 'pending') {
+    const createdAt = new Date(submission.created_at);
+    const now = new Date();
+    const minutesSinceCreation = (now - createdAt) / (1000 * 60);
+    minutesUntilEligible = Math.max(0, db.MIN_REVIEW_MINUTES - minutesSinceCreation);
+  }
 
   res.json({
     submissionId: parsedId,
     upvotes: tally?.upvotes || 0,
     downvotes: tally?.downvotes || 0,
     score: tally?.score || 0,
-    approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
-    rejectThreshold: db.AUTO_REJECT_THRESHOLD
+    weightedScore: parseFloat(tally?.weighted_score) || 0,
+    // Voting requirements info
+    requirements: {
+      approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
+      rejectThreshold: db.AUTO_REJECT_THRESHOLD,
+      minReviewMinutes: db.MIN_REVIEW_MINUTES,
+      minVoteBalancePercent: db.MIN_VOTE_BALANCE_PERCENT,
+      minutesUntilEligible: parseFloat(minutesUntilEligible.toFixed(2)),
+      voteWeightTiers: db.VOTE_WEIGHT_TIERS
+    }
   });
 }));
 
@@ -103,6 +234,9 @@ router.get('/check', asyncHandler(async (req, res) => {
   res.json({
     hasVoted: !!vote,
     voteType: vote?.vote_type || null,
+    voteWeight: vote?.vote_weight ? parseFloat(vote.vote_weight) : null,
+    voterBalance: vote?.voter_balance ? parseFloat(vote.voter_balance) : null,
+    voterPercentage: vote?.voter_percentage ? parseFloat(vote.voter_percentage) : null,
     votedAt: vote?.created_at || null
   });
 }));
@@ -143,6 +277,25 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
   }
 
   res.json(results);
+}));
+
+// GET /api/votes/requirements - Get voting requirements and thresholds
+router.get('/requirements', asyncHandler(async (req, res) => {
+  res.json({
+    approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
+    rejectThreshold: db.AUTO_REJECT_THRESHOLD,
+    minReviewMinutes: db.MIN_REVIEW_MINUTES,
+    minVoteBalancePercent: db.MIN_VOTE_BALANCE_PERCENT,
+    voteWeightTiers: db.VOTE_WEIGHT_TIERS,
+    description: {
+      holderRequired: 'You must hold the token to vote on submissions',
+      minBalance: `You need at least ${db.MIN_VOTE_BALANCE_PERCENT}% of supply to vote`,
+      voteWeight: 'Larger holders have more voting power (1x-3x based on holdings)',
+      reviewPeriod: `Submissions need ${db.MIN_REVIEW_MINUTES} minute(s) of review before auto-approval`,
+      approvalScore: `Submissions are auto-approved at +${db.AUTO_APPROVE_THRESHOLD} weighted score (requires ~10% of supply)`,
+      rejectionScore: `Submissions are auto-rejected at ${db.AUTO_REJECT_THRESHOLD} weighted score`
+    }
+  });
 }));
 
 module.exports = router;

@@ -28,7 +28,7 @@ const tokenList = {
     const search = utils.getUrlParam('q');
     const rows = utils.getUrlParam('rows');
 
-    if (filter && ['trending', 'new', 'gainers', 'losers'].includes(filter)) {
+    if (filter && ['trending', 'new', 'gainers', 'losers', 'watchlist'].includes(filter)) {
       this.currentFilter = filter;
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.filter === filter);
@@ -110,12 +110,23 @@ const tokenList = {
 
     // Filter tabs
     document.querySelectorAll('.filter-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
+      tab.addEventListener('click', async () => {
         if (this.isLoading) return;
+
+        const filter = tab.dataset.filter;
+
+        // Watchlist requires wallet connection
+        if (filter === 'watchlist' && typeof wallet !== 'undefined' && !wallet.connected) {
+          const connected = await wallet.connect();
+          if (!connected) {
+            toast.warning('Connect your wallet to view watchlist');
+            return;
+          }
+        }
 
         document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        this.currentFilter = tab.dataset.filter;
+        this.currentFilter = filter;
         this.currentPage = 1;
         this.isSearchMode = false;
         utils.setUrlParam('filter', this.currentFilter);
@@ -248,6 +259,12 @@ const tokenList = {
     }
 
     try {
+      // Handle watchlist filter separately
+      if (this.currentFilter === 'watchlist') {
+        await this.loadWatchlistTokens(silent);
+        return;
+      }
+
       const params = {
         filter: this.currentFilter,
         sort: this.currentSort,
@@ -290,6 +307,120 @@ const tokenList = {
     } finally {
       this.isLoading = false;
     }
+  },
+
+  // Load watchlist tokens
+  async loadWatchlistTokens(silent = false) {
+    try {
+      if (typeof wallet === 'undefined' || !wallet.connected) {
+        this.tokens = [];
+        this.showWatchlistEmpty(true);
+        return;
+      }
+
+      // Get watchlist from server
+      const watchlistResponse = await api.watchlist.get(wallet.address);
+      const watchlistTokens = watchlistResponse.tokens || [];
+
+      if (watchlistTokens.length === 0) {
+        this.tokens = [];
+        this.showWatchlistEmpty(false);
+        return;
+      }
+
+      // Fetch current price data for each watchlist token
+      const tokenPromises = watchlistTokens.map(async (item) => {
+        try {
+          const tokenData = await api.tokens.get(item.mint);
+          return {
+            ...tokenData,
+            inWatchlist: true,
+            watchlistAddedAt: item.addedAt
+          };
+        } catch (error) {
+          // Return minimal data if token fetch fails
+          return {
+            mintAddress: item.mint,
+            address: item.mint,
+            name: item.name || 'Unknown',
+            symbol: item.symbol || '???',
+            logoUri: item.logoUri,
+            price: null,
+            priceChange24h: null,
+            volume24h: null,
+            marketCap: null,
+            inWatchlist: true
+          };
+        }
+      });
+
+      this.tokens = await Promise.all(tokenPromises);
+
+      // Sort watchlist by volume or user preference
+      this.tokens.sort((a, b) => {
+        const aVal = a.volume24h || 0;
+        const bVal = b.volume24h || 0;
+        return this.sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
+      });
+
+      this.render();
+      this.hideApiError();
+    } catch (error) {
+      console.error('[TokenList] Failed to load watchlist:', error);
+      if (!silent) {
+        this.showError('Failed to load watchlist. Please try again.');
+      }
+    } finally {
+      this.isLoading = false;
+    }
+  },
+
+  // Show empty watchlist state
+  showWatchlistEmpty(needsWallet) {
+    const tbody = document.getElementById('token-list');
+    if (!tbody) return;
+
+    if (needsWallet) {
+      tbody.innerHTML = `
+        <tr class="loading-row">
+          <td colspan="7">
+            <div class="empty-state">
+              <span class="empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </span>
+              <span class="empty-title">Connect Wallet</span>
+              <span class="empty-text">Connect your wallet to view your watchlist</span>
+              <button class="btn btn-primary" onclick="wallet.connect()">Connect Wallet</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = `
+        <tr class="loading-row">
+          <td colspan="7">
+            <div class="empty-state">
+              <span class="empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </span>
+              <span class="empty-title">Your watchlist is empty</span>
+              <span class="empty-text">Click the star icon on any token to add it to your watchlist</span>
+              <button class="btn btn-secondary" onclick="document.querySelector('[data-filter=trending]').click()">Browse Tokens</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    this.isLoading = false;
+
+    // Update count display
+    const countEl = document.getElementById('result-count');
+    if (countEl) countEl.textContent = '0 tokens in watchlist';
   },
 
   // Search tokens
@@ -436,17 +567,29 @@ const tokenList = {
   showError(message) {
     const tbody = document.getElementById('token-list');
     if (tbody) {
-      tbody.innerHTML = `
-        <tr class="loading-row">
-          <td colspan="6">
-            <div class="error-state">
-              <span class="error-icon">⚠️</span>
-              <span>${message}</span>
-              <button class="btn btn-secondary btn-sm" onclick="tokenList.loadTokens()">Retry</button>
-            </div>
-          </td>
-        </tr>
-      `;
+      // Use DOM methods to prevent XSS - message is safe since it's hardcoded, but good practice
+      const tr = document.createElement('tr');
+      tr.className = 'loading-row';
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      const div = document.createElement('div');
+      div.className = 'error-state';
+      const icon = document.createElement('span');
+      icon.className = 'error-icon';
+      icon.textContent = '⚠️';
+      const text = document.createElement('span');
+      text.textContent = message; // Safe: textContent escapes HTML
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-sm';
+      btn.textContent = 'Retry';
+      btn.onclick = () => tokenList.loadTokens();
+      div.appendChild(icon);
+      div.appendChild(text);
+      div.appendChild(btn);
+      td.appendChild(div);
+      tr.appendChild(td);
+      tbody.innerHTML = '';
+      tbody.appendChild(tr);
     }
   },
 
@@ -476,6 +619,8 @@ const tokenList = {
     if (countEl) {
       if (this.isSearchMode) {
         countEl.textContent = `${this.tokens.length} results for "${this.searchQuery}"`;
+      } else if (this.currentFilter === 'watchlist') {
+        countEl.textContent = `${this.tokens.length} tokens in watchlist`;
       } else {
         countEl.textContent = '';
       }
@@ -484,7 +629,7 @@ const tokenList = {
     if (!this.tokens || this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="6">
+          <td colspan="7">
             <div class="empty-state">
               <span class="empty-icon">🔍</span>
               <span>No tokens found</span>
@@ -497,21 +642,32 @@ const tokenList = {
     }
 
     const defaultLogo = utils.getDefaultLogo();
+    const isWatchlistLoaded = typeof watchlist !== 'undefined' && watchlist.isLoaded;
 
     tbody.innerHTML = this.tokens.map((token, index) => {
       const rank = (this.currentPage - 1) * this.pageSize + index + 1;
       const change = token.priceChange24h || 0;
       const changeClass = change >= 0 ? 'change-positive' : 'change-negative';
       // Handle different property names from various API responses
-      const address = token.mintAddress || token.address || token.mint;
+      const rawAddress = token.mintAddress || token.address || token.mint || '';
+      // Validate and sanitize Solana address - only allow valid base58 characters
+      // This prevents XSS via malicious addresses
+      const address = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawAddress) ? rawAddress : '';
+      if (!address) {
+        console.warn('[TokenList] Skipping token with invalid address:', rawAddress);
+        return ''; // Skip this token
+      }
       const logo = token.logoUri || token.logoURI || token.logo || defaultLogo;
       // Escape the logo URL for safe use in HTML attributes
       const safeLogo = this.escapeHtml(logo);
+      const inWatchlist = token.inWatchlist || (isWatchlistLoaded && watchlist.has(address));
+      // Use encodeURIComponent for URL safety, and escape for HTML attribute safety
+      const safeAddress = this.escapeHtml(address);
 
       return `
-        <tr onclick="window.location.href='token.html?mint=${address}'" class="token-row">
+        <tr class="token-row" data-mint="${safeAddress}">
           <td class="cell-rank">${rank}</td>
-          <td>
+          <td class="cell-token-clickable" data-navigate="${safeAddress}">
             <div class="token-cell">
               <img
                 class="token-logo"
@@ -526,13 +682,31 @@ const tokenList = {
               </div>
             </div>
           </td>
-          <td class="cell-price">${utils.formatPrice(token.price)}</td>
-          <td class="cell-change ${changeClass}">${utils.formatChange(change)}</td>
-          <td class="cell-volume">${utils.formatNumber(token.volume24h)}</td>
-          <td class="cell-mcap">${utils.formatNumber(token.marketCap)}</td>
+          <td class="cell-price" data-navigate="${safeAddress}">${utils.formatPrice(token.price)}</td>
+          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${utils.formatChange(change)}</td>
+          <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h)}</td>
+          <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap)}</td>
+          <td class="cell-watchlist">
+            <button
+              class="watchlist-btn ${inWatchlist ? 'active' : ''}"
+              data-watchlist-token="${safeAddress}"
+              aria-pressed="${inWatchlist}"
+              title="${inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}"
+            >
+              <span class="watchlist-icon">
+                ${inWatchlist ?
+                  `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>` :
+                  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`
+                }
+              </span>
+            </button>
+          </td>
         </tr>
       `;
     }).join('');
+
+    // Use event delegation for click handlers instead of inline onclick (safer)
+    this.bindRowClickHandlers();
 
     this.updatePagination();
   },
@@ -540,6 +714,45 @@ const tokenList = {
   // Escape HTML to prevent XSS - delegates to shared utils
   escapeHtml(text) {
     return utils.escapeHtml(text);
+  },
+
+  // Bind click handlers for token rows using event delegation (safer than inline onclick)
+  bindRowClickHandlers() {
+    const tbody = document.getElementById('token-list');
+    if (!tbody) return;
+
+    // Remove existing listener to prevent duplicates
+    tbody.removeEventListener('click', this.handleRowClick);
+
+    // Use event delegation for all row clicks
+    this.handleRowClick = (e) => {
+      const target = e.target;
+
+      // Handle navigation clicks (cells with data-navigate attribute)
+      const navigateCell = target.closest('[data-navigate]');
+      if (navigateCell && !target.closest('.watchlist-btn')) {
+        const mint = navigateCell.dataset.navigate;
+        // Double-check it's a valid Solana address before navigation
+        if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+          window.location.href = `token.html?mint=${encodeURIComponent(mint)}`;
+        }
+        return;
+      }
+
+      // Handle watchlist button clicks
+      const watchlistBtn = target.closest('.watchlist-btn');
+      if (watchlistBtn) {
+        e.stopPropagation();
+        const mint = watchlistBtn.dataset.watchlistToken;
+        // Validate address before calling watchlist toggle
+        if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint) && typeof watchlist !== 'undefined') {
+          watchlist.toggle(mint);
+        }
+        return;
+      }
+    };
+
+    tbody.addEventListener('click', this.handleRowClick);
   },
 
   // Go to specific page

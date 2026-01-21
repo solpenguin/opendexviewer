@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Token Details - OpenDex</title>
   <meta name="description" content="View token details, price charts, and community content">
   <meta name="theme-color" content="#07080a">
@@ -93,6 +93,11 @@
                   <line x1="10" y1="14" x2="21" y2="3"></line>
                 </svg>
               </a>
+              <button id="watchlist-btn" class="btn-icon watchlist-btn-header" title="Add to watchlist">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -114,19 +119,44 @@
         </div>
       </section>
 
-    <!-- Community Banner -->
-    <section id="banner-section" class="banner-section" style="display: none;">
-      <img id="community-banner" class="community-banner" src="" alt="Community Banner">
-      <div class="banner-voting">
-        <button class="vote-btn vote-up" data-vote="up">
-          <span class="vote-icon">▲</span>
-          <span class="vote-count" id="banner-upvotes">0</span>
-        </button>
-        <button class="vote-btn vote-down" data-vote="down">
-          <span class="vote-icon">▼</span>
-          <span class="vote-count" id="banner-downvotes">0</span>
-        </button>
+    <!-- Combined Community Section (Banner + Links) -->
+    <section id="community-section" class="community-section" style="display: none;">
+      <div class="community-section-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          Community
+        </h2>
+        <a id="submit-community-link" href="submit.html" class="btn btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Contribute
+        </a>
       </div>
+
+      <!-- Banner Display -->
+      <div id="banner-wrapper" class="community-banner-wrapper" style="display: none;">
+        <img id="community-banner" class="community-banner" src="" alt="Community Banner">
+        <div class="banner-voting">
+          <button class="vote-btn vote-up" data-vote="up">
+            <span class="vote-icon">▲</span>
+            <span class="vote-count" id="banner-upvotes">0</span>
+          </button>
+          <button class="vote-btn vote-down" data-vote="down">
+            <span class="vote-icon">▼</span>
+            <span class="vote-count" id="banner-downvotes">0</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Community Links -->
+      <div id="community-links" class="community-links-inline"></div>
     </section>
 
       <!-- Main Content Grid -->
@@ -253,21 +283,23 @@
           </div>
         </section>
 
-        <!-- Social Links Section -->
-        <section class="social-section">
-          <h2>Community Links</h2>
-          <div id="social-links" class="social-links">
-            <p class="no-links">No community links submitted yet.</p>
-          </div>
-          <a id="submit-link" href="submit.html" class="btn btn-secondary btn-block">Submit Links</a>
-        </section>
       </div>
 
       <!-- All Submissions Section -->
       <section class="submissions-section">
         <div class="submissions-header">
-          <h2>Community Submissions</h2>
-          <span id="submissions-count" class="submissions-count">0 submissions</span>
+          <div class="submissions-header-left">
+            <h2>Community Submissions</h2>
+            <span id="submissions-count" class="submissions-count">0 submissions</span>
+          </div>
+          <button id="voting-info-btn" class="btn btn-ghost btn-sm" onclick="voting.showVotingInfoModal()" title="How voting works">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            How Voting Works
+          </button>
         </div>
         <div class="submissions-tabs">
           <button class="submissions-tab active" data-type="banner">Banners</button>
@@ -294,6 +326,7 @@
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
   <script src="js/wallet.js"></script>
+  <script src="js/watchlist.js"></script>
   <script src="js/voting.js"></script>
   <script src="js/tokenDetail.js"></script>
 </body>

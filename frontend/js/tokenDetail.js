@@ -98,6 +98,18 @@ const tokenDetail = {
       });
     }
 
+    // Watchlist button
+    const watchlistBtn = document.getElementById('watchlist-btn');
+    if (watchlistBtn) {
+      watchlistBtn.addEventListener('click', async () => {
+        if (!this.mint) return;
+        watchlistBtn.disabled = true;
+        await watchlist.toggle(this.mint);
+        this.updateWatchlistButton();
+        watchlistBtn.disabled = false;
+      });
+    }
+
     // Chart type toggle (line/candle)
     document.querySelectorAll('.chart-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -211,6 +223,19 @@ const tokenDetail = {
     }
   },
 
+  // Update watchlist button state
+  updateWatchlistButton() {
+    const btn = document.getElementById('watchlist-btn');
+    if (!btn || !this.mint) return;
+
+    const inWatchlist = typeof watchlist !== 'undefined' && watchlist.has(this.mint);
+    btn.classList.toggle('active', inWatchlist);
+    btn.title = inWatchlist ? 'Remove from watchlist' : 'Add to watchlist';
+    btn.innerHTML = inWatchlist
+      ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`
+      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+  },
+
   // Render token info
   renderToken() {
     const token = this.token;
@@ -226,6 +251,9 @@ const tokenDetail = {
         this.src = utils.getDefaultLogo();
       };
     }
+
+    // Update watchlist button
+    this.updateWatchlistButton();
 
     const nameEl = document.getElementById('token-name');
     if (nameEl) nameEl.textContent = token.name || 'Unknown Token';
@@ -347,20 +375,31 @@ const tokenDetail = {
 
   // Update chart OHLCV stats
   updateChartStats(data) {
-    if (!data || !data.data || data.data.length === 0) {
+    // Clear stats if no data
+    if (!data || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
+      // Clear the stats display
+      const statIds = ['chart-open', 'chart-high', 'chart-low', 'chart-close', 'chart-volume'];
+      statIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '--';
+      });
       return;
     }
 
-    const lastCandle = data.data[data.data.length - 1];
     const allData = data.data;
+    const lastCandle = allData[allData.length - 1];
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
-    // Calculate period high/low
-    let high = Math.max(...allData.map(d => d.high || d.price));
-    let low = Math.min(...allData.map(d => d.low || d.price));
-    let open = allData[0].open || allData[0].price;
-    let close = lastCandle.close || lastCandle.price;
+    // Calculate period high/low with safeguards for empty/invalid data
+    const highValues = allData.map(d => d.high || d.price || 0).filter(v => v > 0);
+    const lowValues = allData.map(d => d.low || d.price || 0).filter(v => v > 0);
+
+    // Guard against empty arrays which would cause Math.max/min to return Infinity/-Infinity
+    let high = highValues.length > 0 ? Math.max(...highValues) : 0;
+    let low = lowValues.length > 0 ? Math.min(...lowValues) : 0;
+    let open = allData[0]?.open || allData[0]?.price || 0;
+    let close = lastCandle?.close || lastCandle?.price || 0;
     const totalVolume = allData.reduce((sum, d) => sum + (d.volume || 0), 0);
 
     // Convert to MCAP values if needed
@@ -695,66 +734,107 @@ const tokenDetail = {
     });
   },
 
-  // Update banner display
-  updateBanner() {
-    const bannerSection = document.getElementById('banner-section');
+  // Update the combined community section (banner + links)
+  updateCommunitySection() {
+    const communitySection = document.getElementById('community-section');
+    const bannerWrapper = document.getElementById('banner-wrapper');
+    const linksContainer = document.getElementById('community-links');
+    const submitLink = document.getElementById('submit-community-link');
+
+    // Update submit link with token mint
+    if (submitLink) {
+      submitLink.href = `submit.html?mint=${encodeURIComponent(this.mint)}`;
+    }
+
+    const socialTypes = ['twitter', 'telegram', 'discord', 'website'];
+
+    // Get banner submissions
     const bannerSubmissions = this.submissions.filter(s =>
       s.submission_type === 'banner' && s.status === 'approved'
     );
 
-    if (bannerSubmissions.length > 0) {
-      // Get highest scored banner
-      const topBanner = bannerSubmissions.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
-
-      bannerSection.style.display = 'block';
-      document.getElementById('community-banner').src = topBanner.content_url;
-      document.getElementById('banner-upvotes').textContent = topBanner.upvotes || 0;
-      document.getElementById('banner-downvotes').textContent = topBanner.downvotes || 0;
-
-      // Set up voting buttons
-      bannerSection.querySelectorAll('.vote-btn').forEach(btn => {
-        btn.onclick = () => voting.vote(topBanner.id, btn.dataset.vote);
-      });
-    } else {
-      bannerSection.style.display = 'none';
-    }
-  },
-
-  // Update social links
-  updateSocialLinks() {
-    const container = document.getElementById('social-links');
-    const socialTypes = ['twitter', 'telegram', 'discord', 'website'];
-
+    // Get social link submissions
     const socialSubmissions = this.submissions.filter(s =>
       socialTypes.includes(s.submission_type) && s.status === 'approved'
     );
 
-    if (socialSubmissions.length === 0) {
-      container.innerHTML = '<p class="no-links">No community links submitted yet.</p>';
+    const hasBanner = bannerSubmissions.length > 0;
+    const hasLinks = socialSubmissions.length > 0;
+
+    // If neither banner nor links, hide the entire section
+    if (!hasBanner && !hasLinks) {
+      communitySection.style.display = 'none';
       return;
     }
 
-    // Group by type and get top one for each
-    const grouped = {};
-    socialSubmissions.forEach(s => {
-      if (!grouped[s.submission_type] || (s.score || 0) > (grouped[s.submission_type].score || 0)) {
-        grouped[s.submission_type] = s;
-      }
-    });
+    // Show the community section
+    communitySection.style.display = 'block';
 
-    const icons = {
-      twitter: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`,
-      telegram: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.88.03-.24.37-.49 1.02-.74 3.99-1.74 6.65-2.89 7.99-3.45 3.8-1.6 4.59-1.88 5.1-1.89.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>`,
-      discord: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>`,
-      website: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
-    };
+    // Handle banner display
+    if (hasBanner) {
+      const topBanner = bannerSubmissions.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+      bannerWrapper.style.display = 'block';
 
-    container.innerHTML = Object.values(grouped).map(s => `
-      <a href="${this.escapeHtml(s.content_url)}" target="_blank" rel="noopener noreferrer" class="social-link-btn">
-        ${icons[s.submission_type]}
-        <span>${s.submission_type.charAt(0).toUpperCase() + s.submission_type.slice(1)}</span>
-      </a>
-    `).join('');
+      const bannerImg = document.getElementById('community-banner');
+      bannerImg.src = topBanner.content_url;
+      bannerImg.onerror = function() {
+        bannerWrapper.style.display = 'none';
+      };
+
+      document.getElementById('banner-upvotes').textContent = topBanner.upvotes || 0;
+      document.getElementById('banner-downvotes').textContent = topBanner.downvotes || 0;
+
+      // Set up voting buttons
+      bannerWrapper.querySelectorAll('.vote-btn').forEach(btn => {
+        btn.onclick = () => voting.vote(topBanner.id, btn.dataset.vote);
+      });
+    } else {
+      bannerWrapper.style.display = 'none';
+    }
+
+    // Handle links display
+    if (hasLinks) {
+      // Group by type and get top one for each
+      const grouped = {};
+      socialSubmissions.forEach(s => {
+        if (!grouped[s.submission_type] || (s.score || 0) > (grouped[s.submission_type].score || 0)) {
+          grouped[s.submission_type] = s;
+        }
+      });
+
+      const icons = {
+        twitter: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`,
+        telegram: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.88.03-.24.37-.49 1.02-.74 3.99-1.74 6.65-2.89 7.99-3.45 3.8-1.6 4.59-1.88 5.1-1.89.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>`,
+        discord: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>`,
+        website: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
+      };
+
+      const labels = {
+        twitter: 'Twitter / X',
+        telegram: 'Telegram',
+        discord: 'Discord',
+        website: 'Website'
+      };
+
+      linksContainer.innerHTML = Object.values(grouped).map(s => `
+        <a href="${this.escapeHtml(s.content_url)}" target="_blank" rel="noopener noreferrer" class="community-link-chip ${s.submission_type}">
+          ${icons[s.submission_type]}
+          <span>${labels[s.submission_type]}</span>
+        </a>
+      `).join('');
+      linksContainer.style.display = 'flex';
+    } else {
+      linksContainer.style.display = 'none';
+    }
+  },
+
+  // Legacy methods for backward compatibility
+  updateBanner() {
+    this.updateCommunitySection();
+  },
+
+  updateSocialLinks() {
+    // Now handled by updateCommunitySection
   },
 
   // Load submissions
@@ -768,8 +848,8 @@ const tokenDetail = {
         countEl.textContent = `${this.submissions.length} submission${this.submissions.length !== 1 ? 's' : ''}`;
       }
 
-      this.updateBanner();
-      this.updateSocialLinks();
+      // Update the combined community section
+      this.updateCommunitySection();
       this.renderSubmissions('banner');
     } catch (error) {
       console.error('Failed to load submissions:', error);
@@ -867,11 +947,29 @@ const tokenDetail = {
         <span>${parseInt(s.upvotes) || 0}</span>
       `;
 
-      // Score
+      // Score display with weighted score
+      const scoreContainer = document.createElement('div');
+      scoreContainer.className = 'submission-score-container';
+
       const score = document.createElement('span');
       const scoreValue = parseInt(s.score) || 0;
       score.className = `submission-score ${scoreValue >= 0 ? 'positive' : 'negative'}`;
       score.textContent = String(scoreValue);
+      score.setAttribute('data-score', s.id);
+
+      // Add weighted score if available
+      const weightedScoreValue = parseFloat(s.weighted_score) || scoreValue;
+      if (weightedScoreValue !== scoreValue) {
+        const weightedScore = document.createElement('span');
+        weightedScore.className = `weighted-score ${weightedScoreValue >= 0 ? 'positive' : 'negative'}`;
+        weightedScore.textContent = `(${weightedScoreValue.toFixed(1)}w)`;
+        weightedScore.setAttribute('data-weighted-score', s.id);
+        weightedScore.title = 'Weighted score based on voter holdings';
+        scoreContainer.appendChild(score);
+        scoreContainer.appendChild(weightedScore);
+      } else {
+        scoreContainer.appendChild(score);
+      }
 
       // Downvote button
       const downBtn = document.createElement('button');
@@ -885,7 +983,7 @@ const tokenDetail = {
       `;
 
       votes.appendChild(upBtn);
-      votes.appendChild(score);
+      votes.appendChild(scoreContainer);
       votes.appendChild(downBtn);
 
       // Date

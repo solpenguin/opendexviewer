@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Submit Content - OpenDex</title>
   <meta name="description" content="Submit banners and social links for tokens - completely free">
   <meta name="theme-color" content="#07080a">
@@ -60,7 +60,7 @@
         </svg>
       </div>
       <h1>Submit Token Content</h1>
-      <p>Add banners and social links for your favorite tokens - <strong>completely free</strong>.</p>
+      <p>Add banners and social links for tokens you hold - <strong>completely free</strong>.</p>
       <div class="submit-features">
         <div class="submit-feature">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -79,10 +79,9 @@
         </div>
         <div class="submit-feature">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          <span>Instant Review</span>
+          <span>Holder Verified</span>
         </div>
       </div>
     </section>
@@ -107,8 +106,50 @@
           </div>
         </div>
 
+        <!-- Step 0: Wallet Connection (Required) -->
+        <div class="form-group wallet-required-section" id="wallet-connect-section">
+          <div class="wallet-required-card">
+            <div class="wallet-required-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="5" width="20" height="14" rx="2"/>
+                <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+              </svg>
+            </div>
+            <h3>Connect Your Wallet</h3>
+            <p>You must hold the token to submit content for it. Connect your wallet to verify ownership.</p>
+            <button type="button" id="connect-wallet-main" class="btn btn-primary btn-large">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="5" width="20" height="14" rx="2"/>
+                <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+              </svg>
+              Connect Wallet
+            </button>
+          </div>
+        </div>
+
+        <!-- Wallet Connected Card (shown after connecting) -->
+        <div class="form-group wallet-connected-section" id="wallet-connected-section" style="display: none;">
+          <div class="wallet-connected-card">
+            <div class="wallet-connected-header">
+              <div class="wallet-connected-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div class="wallet-connected-info">
+                <span class="wallet-label">Wallet Connected</span>
+                <span id="connected-wallet-address" class="wallet-address">...</span>
+              </div>
+              <button type="button" id="disconnect-wallet-btn" class="btn btn-ghost btn-sm">
+                Disconnect
+              </button>
+            </div>
+          </div>
+          <input type="hidden" id="submitter-wallet" name="submitterWallet" value="">
+        </div>
+
         <!-- Token Selection -->
-        <div class="form-group">
+        <div class="form-group" id="token-selection-group">
           <label for="token-mint">
             Token Address (Mint)
             <span class="required">*</span>
@@ -137,6 +178,31 @@
               Token Found
             </div>
           </div>
+
+          <!-- Holder Verification Card -->
+          <div id="holder-verification" class="holder-verification-card" style="display: none;">
+            <div class="holder-verification-loading" id="holder-loading">
+              <div class="loading-spinner small"></div>
+              <span>Checking your balance...</span>
+            </div>
+            <div class="holder-verification-result" id="holder-result" style="display: none;">
+              <div class="holder-status" id="holder-status">
+                <span class="holder-status-icon" id="holder-status-icon"></span>
+                <span class="holder-status-text" id="holder-status-text"></span>
+              </div>
+              <div class="holder-balance" id="holder-balance-info">
+                <div class="balance-row">
+                  <span class="balance-label">Your Balance:</span>
+                  <span class="balance-value" id="holder-balance">0</span>
+                </div>
+                <div class="balance-row">
+                  <span class="balance-label">Share of Supply:</span>
+                  <span class="balance-value" id="holder-percentage">0%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <p id="token-error" class="form-error" style="display: none;"></p>
         </div>
 
@@ -225,14 +291,24 @@
             >
             <div class="input-status" id="url-status"></div>
           </div>
-          <p id="url-hint" class="form-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-            For banners: Direct image URL (PNG, JPG, GIF, WebP). Recommended size: 1200x300px.
-          </p>
+          <div id="url-hint" class="form-hint-with-help">
+            <p class="form-hint">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span id="url-hint-text">For banners: Direct image URL (PNG, JPG, GIF, WebP). Recommended size: 1200x300px.</span>
+            </p>
+            <button type="button" id="imgur-help-btn" class="btn btn-ghost btn-sm help-btn" style="display: none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              How to Upload
+            </button>
+          </div>
           <p id="url-error" class="form-error" style="display: none;"></p>
         </div>
 
@@ -255,34 +331,6 @@
             </div>
           </div>
           <p class="banner-dimensions" id="banner-dimensions"></p>
-        </div>
-
-        <!-- Wallet Connection -->
-        <div class="form-group wallet-group">
-          <label for="submitter-wallet">Your Wallet (Recommended)</label>
-          <div class="wallet-input-container">
-            <input
-              type="text"
-              id="submitter-wallet"
-              name="submitterWallet"
-              placeholder="Connect wallet to track your submissions..."
-              readonly
-            >
-            <button type="button" id="connect-wallet-inline" class="btn btn-secondary btn-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
-                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
-                <path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>
-              </svg>
-              Connect
-            </button>
-          </div>
-          <p class="form-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            Connecting your wallet helps track your submissions and proves ownership.
-          </p>
         </div>
 
         <!-- Submit Button -->

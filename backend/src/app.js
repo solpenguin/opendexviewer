@@ -6,6 +6,7 @@ const cors = require('cors');
 const tokenRoutes = require('./routes/tokens');
 const submissionRoutes = require('./routes/submissions');
 const voteRoutes = require('./routes/votes');
+const watchlistRoutes = require('./routes/watchlist');
 const healthRoutes = require('./routes/health');
 
 // Import middleware
@@ -62,6 +63,7 @@ app.use('/health', healthRoutes);
 app.use('/api/tokens', tokenRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/votes', voteRoutes);
+app.use('/api/watchlist', watchlistRoutes);
 
 // Root redirect
 app.get('/', (req, res) => {
@@ -74,6 +76,7 @@ app.get('/', (req, res) => {
       tokens: '/api/tokens',
       submissions: '/api/submissions',
       votes: '/api/votes',
+      watchlist: '/api/watchlist',
       health: '/health'
     }
   });

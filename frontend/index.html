@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>OpenDex - Open Source Solana Token Scanner</title>
   <meta name="description" content="Free, open-source Solana token scanner with real-time prices, charts, and community-driven content">
   <meta name="theme-color" content="#07080a">
@@ -121,6 +121,15 @@
           </span>
           Losers
         </button>
+        <button class="filter-tab" data-filter="watchlist" id="watchlist-tab">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </span>
+          Watchlist
+          <span id="watchlist-count" class="watchlist-badge" style="display: none;">0</span>
+        </button>
       </div>
 
       <div class="filter-info">
@@ -157,11 +166,16 @@
                 Market Cap
                 <span class="sort-icon"></span>
               </th>
+              <th class="th-watchlist" title="Watchlist">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </th>
             </tr>
           </thead>
           <tbody id="token-list">
             <tr class="loading-row">
-              <td colspan="6">
+              <td colspan="7">
                 <div class="loading-state">
                   <div class="loading-spinner large"></div>
                   <span>Loading tokens...</span>
@@ -238,6 +252,7 @@
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
   <script src="js/wallet.js"></script>
+  <script src="js/watchlist.js"></script>
   <script src="js/tokens.js"></script>
 </body>
 </html>

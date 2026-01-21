@@ -7,9 +7,38 @@ let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 5;
 const RETRY_DELAY_MS = 5000;
 
-// Auto-approval threshold (submissions auto-approve when score reaches this)
-const AUTO_APPROVE_THRESHOLD = parseInt(process.env.AUTO_APPROVE_THRESHOLD) || 5;
-const AUTO_REJECT_THRESHOLD = parseInt(process.env.AUTO_REJECT_THRESHOLD) || -5;
+// Auto-approval threshold (submissions auto-approve when weighted score reaches this)
+// Requires 10% of circulating supply worth of weighted votes to approve
+const AUTO_APPROVE_THRESHOLD = parseInt(process.env.AUTO_APPROVE_THRESHOLD) || 10;
+const AUTO_REJECT_THRESHOLD = parseInt(process.env.AUTO_REJECT_THRESHOLD) || -10;
+
+// Minimum review period before auto-approval (in minutes)
+const MIN_REVIEW_MINUTES = parseInt(process.env.MIN_REVIEW_MINUTES) || 5;
+
+// Minimum token balance required to vote (as percentage of circulating supply)
+// 0.001% = must hold at least 0.001% of supply
+const MIN_VOTE_BALANCE_PERCENT = parseFloat(process.env.MIN_VOTE_BALANCE_PERCENT) || 0.001;
+
+// Vote weight tiers based on percentage of circulating supply held
+// Higher holders get more voting power (capped at 3x)
+const VOTE_WEIGHT_TIERS = [
+  { minPercent: 1.0, weight: 3 },    // >= 1% holdings = 3x vote weight
+  { minPercent: 0.1, weight: 2 },    // >= 0.1% holdings = 2x vote weight
+  { minPercent: 0.01, weight: 1.5 }, // >= 0.01% holdings = 1.5x vote weight
+  { minPercent: 0, weight: 1 }       // < 0.01% holdings = 1x vote weight (base)
+];
+
+// Calculate vote weight based on holder percentage
+function calculateVoteWeight(percentageHeld) {
+  if (!percentageHeld || percentageHeld <= 0) return 1;
+
+  for (const tier of VOTE_WEIGHT_TIERS) {
+    if (percentageHeld >= tier.minPercent) {
+      return tier.weight;
+    }
+  }
+  return 1;
+}
 
 // Create connection pool
 function createPool() {
@@ -79,6 +108,9 @@ async function initializeDatabase() {
         submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
         voter_wallet VARCHAR(44) NOT NULL,
         vote_type VARCHAR(10) NOT NULL,
+        vote_weight DECIMAL(5,2) DEFAULT 1.0,
+        voter_balance DECIMAL(30,10) DEFAULT 0,
+        voter_percentage DECIMAL(12,6) DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(submission_id, voter_wallet)
       );
@@ -88,14 +120,39 @@ async function initializeDatabase() {
         upvotes INTEGER DEFAULT 0,
         downvotes INTEGER DEFAULT 0,
         score INTEGER DEFAULT 0,
+        weighted_score DECIMAL(10,2) DEFAULT 0,
         updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Add new columns if they don't exist (for existing databases)
+      DO $$ BEGIN
+        ALTER TABLE votes ADD COLUMN IF NOT EXISTS vote_weight DECIMAL(5,2) DEFAULT 1.0;
+        ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_balance DECIMAL(30,10) DEFAULT 0;
+        ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_percentage DECIMAL(12,6) DEFAULT 0;
+        ALTER TABLE vote_tallies ADD COLUMN IF NOT EXISTS weighted_score DECIMAL(10,2) DEFAULT 0;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+
+      -- Watchlist table for user favorites
+      CREATE TABLE IF NOT EXISTS watchlist (
+        id SERIAL PRIMARY KEY,
+        wallet_address VARCHAR(44) NOT NULL,
+        token_mint VARCHAR(44) NOT NULL,
+        added_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(wallet_address, token_mint)
       );
 
       CREATE INDEX IF NOT EXISTS idx_submissions_token ON submissions(token_mint);
       CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
+      CREATE INDEX IF NOT EXISTS idx_submissions_wallet ON submissions(submitter_wallet);
+      CREATE INDEX IF NOT EXISTS idx_submissions_created ON submissions(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_submissions_token_status ON submissions(token_mint, status);
       CREATE INDEX IF NOT EXISTS idx_votes_submission ON votes(submission_id);
       CREATE INDEX IF NOT EXISTS idx_votes_wallet ON votes(voter_wallet);
       CREATE INDEX IF NOT EXISTS idx_tokens_name_symbol ON tokens(LOWER(name), LOWER(symbol));
+      CREATE INDEX IF NOT EXISTS idx_watchlist_wallet ON watchlist(wallet_address);
+      CREATE INDEX IF NOT EXISTS idx_watchlist_token ON watchlist(token_mint);
+      CREATE INDEX IF NOT EXISTS idx_vote_tallies_score ON vote_tallies(weighted_score DESC);
     `);
 
     isConnected = true;
@@ -125,6 +182,10 @@ async function initializeDatabase() {
 
 // Token operations
 async function upsertToken(token) {
+  if (!pool) {
+    console.warn('Database not available - skipping token upsert');
+    return null;
+  }
   const { mintAddress, name, symbol, decimals, logoUri } = token;
   const result = await pool.query(
     `INSERT INTO tokens (mint_address, name, symbol, decimals, logo_uri)
@@ -142,6 +203,7 @@ async function upsertToken(token) {
 }
 
 async function getToken(mintAddress) {
+  if (!pool) return null;
   const result = await pool.query(
     'SELECT * FROM tokens WHERE mint_address = $1',
     [mintAddress]
@@ -243,36 +305,44 @@ async function getApprovedSubmissions(tokenMint) {
 }
 
 // Vote operations
-async function createVote({ submissionId, voterWallet, voteType }) {
+async function createVote({ submissionId, voterWallet, voteType, voterBalance = 0, voterPercentage = 0 }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Calculate vote weight based on holder percentage
+    const voteWeight = calculateVoteWeight(voterPercentage);
+
     // Use ON CONFLICT to handle race conditions gracefully
     const result = await client.query(
-      `INSERT INTO votes (submission_id, voter_wallet, vote_type)
-       VALUES ($1, $2, $3)
+      `INSERT INTO votes (submission_id, voter_wallet, vote_type, vote_weight, voter_balance, voter_percentage)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (submission_id, voter_wallet) DO UPDATE SET
          vote_type = EXCLUDED.vote_type,
+         vote_weight = EXCLUDED.vote_weight,
+         voter_balance = EXCLUDED.voter_balance,
+         voter_percentage = EXCLUDED.voter_percentage,
          created_at = NOW()
        RETURNING *`,
-      [submissionId, voterWallet, voteType]
+      [submissionId, voterWallet, voteType, voteWeight, voterBalance, voterPercentage]
     );
 
-    // Update tally within the same transaction
+    // Update tally within the same transaction (now includes weighted score)
     await client.query(
-      `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, updated_at)
+      `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
        SELECT
          $1,
          COUNT(*) FILTER (WHERE vote_type = 'up'),
          COUNT(*) FILTER (WHERE vote_type = 'down'),
          COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
          NOW()
        FROM votes WHERE submission_id = $1
        ON CONFLICT (submission_id) DO UPDATE SET
          upvotes = EXCLUDED.upvotes,
          downvotes = EXCLUDED.downvotes,
          score = EXCLUDED.score,
+         weighted_score = EXCLUDED.weighted_score,
          updated_at = NOW()`,
       [submissionId]
     );
@@ -332,38 +402,60 @@ async function getVoteTally(submissionId) {
 }
 
 async function updateVoteTally(submissionId) {
-  // Update vote counts
+  // Update vote counts (now includes weighted score)
   const result = await pool.query(
-    `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, updated_at)
+    `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
      SELECT
        $1,
        COUNT(*) FILTER (WHERE vote_type = 'up'),
        COUNT(*) FILTER (WHERE vote_type = 'down'),
        COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
+       COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
        NOW()
      FROM votes WHERE submission_id = $1
      ON CONFLICT (submission_id) DO UPDATE SET
        upvotes = EXCLUDED.upvotes,
        downvotes = EXCLUDED.downvotes,
        score = EXCLUDED.score,
+       weighted_score = EXCLUDED.weighted_score,
        updated_at = NOW()
-     RETURNING score`,
+     RETURNING score, weighted_score`,
     [submissionId]
   );
 
-  // Auto-approve or auto-reject based on score
-  const score = result.rows[0]?.score || 0;
-  await checkAutoModeration(submissionId, score);
+  // Auto-approve or auto-reject based on WEIGHTED score
+  const weightedScore = parseFloat(result.rows[0]?.weighted_score) || 0;
+  await checkAutoModeration(submissionId, weightedScore);
 }
 
-// Auto-moderation based on vote score
-async function checkAutoModeration(submissionId, score) {
-  if (score >= AUTO_APPROVE_THRESHOLD) {
-    await pool.query(
-      `UPDATE submissions SET status = 'approved' WHERE id = $1 AND status = 'pending'`,
+// Auto-moderation based on weighted vote score
+// Includes minimum review period (5 minutes) before auto-approval
+async function checkAutoModeration(submissionId, weightedScore) {
+  // Check if submission meets the threshold
+  if (weightedScore >= AUTO_APPROVE_THRESHOLD) {
+    // Check if minimum review period has passed
+    const submission = await pool.query(
+      `SELECT created_at FROM submissions WHERE id = $1 AND status = 'pending'`,
       [submissionId]
     );
-  } else if (score <= AUTO_REJECT_THRESHOLD) {
+
+    if (submission.rows.length > 0) {
+      const createdAt = new Date(submission.rows[0].created_at);
+      const now = new Date();
+      const minutesSinceCreation = (now - createdAt) / (1000 * 60);
+
+      // Only auto-approve if minimum review period has passed (5 minutes default)
+      if (minutesSinceCreation >= MIN_REVIEW_MINUTES) {
+        await pool.query(
+          `UPDATE submissions SET status = 'approved' WHERE id = $1 AND status = 'pending'`,
+          [submissionId]
+        );
+      }
+      // If threshold is met but review period hasn't passed, submission stays pending
+      // It will be approved on the next vote after the period passes
+    }
+  } else if (weightedScore <= AUTO_REJECT_THRESHOLD) {
+    // Auto-rejection doesn't require review period (to quickly remove spam)
     await pool.query(
       `UPDATE submissions SET status = 'rejected' WHERE id = $1 AND status = 'pending'`,
       [submissionId]
@@ -407,6 +499,89 @@ async function getPendingSubmissions(limit = 50) {
   return result.rows;
 }
 
+// ==========================================
+// Watchlist operations
+// ==========================================
+
+// Add token to user's watchlist
+async function addToWatchlist(walletAddress, tokenMint) {
+  const result = await pool.query(
+    `INSERT INTO watchlist (wallet_address, token_mint)
+     VALUES ($1, $2)
+     ON CONFLICT (wallet_address, token_mint) DO NOTHING
+     RETURNING *`,
+    [walletAddress, tokenMint]
+  );
+  return result.rows[0] || { wallet_address: walletAddress, token_mint: tokenMint, exists: true };
+}
+
+// Remove token from user's watchlist
+async function removeFromWatchlist(walletAddress, tokenMint) {
+  const result = await pool.query(
+    `DELETE FROM watchlist
+     WHERE wallet_address = $1 AND token_mint = $2
+     RETURNING *`,
+    [walletAddress, tokenMint]
+  );
+  return result.rows[0];
+}
+
+// Get user's watchlist
+async function getWatchlist(walletAddress) {
+  const result = await pool.query(
+    `SELECT w.token_mint, w.added_at, t.name, t.symbol, t.logo_uri
+     FROM watchlist w
+     LEFT JOIN tokens t ON w.token_mint = t.mint_address
+     WHERE w.wallet_address = $1
+     ORDER BY w.added_at DESC`,
+    [walletAddress]
+  );
+  return result.rows.map(row => ({
+    mint: row.token_mint,
+    name: row.name,
+    symbol: row.symbol,
+    logoUri: row.logo_uri,
+    addedAt: row.added_at
+  }));
+}
+
+// Check if token is in user's watchlist
+async function isInWatchlist(walletAddress, tokenMint) {
+  const result = await pool.query(
+    `SELECT 1 FROM watchlist
+     WHERE wallet_address = $1 AND token_mint = $2`,
+    [walletAddress, tokenMint]
+  );
+  return result.rows.length > 0;
+}
+
+// Check multiple tokens against watchlist (for batch operations)
+async function checkWatchlistBatch(walletAddress, tokenMints) {
+  if (!tokenMints || tokenMints.length === 0) return {};
+
+  const result = await pool.query(
+    `SELECT token_mint FROM watchlist
+     WHERE wallet_address = $1 AND token_mint = ANY($2)`,
+    [walletAddress, tokenMints]
+  );
+
+  // Return a map of mint -> true for items in watchlist
+  const watchlistMap = {};
+  result.rows.forEach(row => {
+    watchlistMap[row.token_mint] = true;
+  });
+  return watchlistMap;
+}
+
+// Get watchlist count for a user
+async function getWatchlistCount(walletAddress) {
+  const result = await pool.query(
+    `SELECT COUNT(*) as count FROM watchlist WHERE wallet_address = $1`,
+    [walletAddress]
+  );
+  return parseInt(result.rows[0].count);
+}
+
 // Check if database is ready for queries
 function isReady() {
   return pool !== null && isConnected;
@@ -441,15 +616,36 @@ async function checkHealth() {
   }
 }
 
-// Initialize on load
+// Initialize on load - track initialization promise for proper error handling
+let initializationPromise = null;
+
 if (process.env.DATABASE_URL) {
-  initializeDatabase();
+  initializationPromise = initializeDatabase().catch(err => {
+    console.error('Critical: Database initialization failed:', err.message);
+    // Don't throw - allow app to start without database (graceful degradation)
+    return false;
+  });
+}
+
+// Get initialization promise for startup checks if needed
+function getInitializationPromise() {
+  return initializationPromise;
+}
+
+// Safe query wrapper - checks pool exists before executing
+async function safeQuery(queryFn) {
+  if (!pool) {
+    throw new Error('Database not initialized');
+  }
+  return queryFn();
 }
 
 module.exports = {
   pool,
   initializeDatabase,
+  getInitializationPromise,
   isReady,
+  safeQuery,
   upsertToken,
   getToken,
   searchTokens,
@@ -467,6 +663,18 @@ module.exports = {
   deleteVote,
   getVoteTally,
   checkHealth,
+  calculateVoteWeight,
+  // Watchlist operations
+  addToWatchlist,
+  removeFromWatchlist,
+  getWatchlist,
+  isInWatchlist,
+  checkWatchlistBatch,
+  getWatchlistCount,
+  // Constants
   AUTO_APPROVE_THRESHOLD,
-  AUTO_REJECT_THRESHOLD
+  AUTO_REJECT_THRESHOLD,
+  MIN_REVIEW_MINUTES,
+  MIN_VOTE_BALANCE_PERCENT,
+  VOTE_WEIGHT_TIERS
 };
