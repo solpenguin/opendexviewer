@@ -209,25 +209,30 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     // Use GeckoTerminal (free, no API key needed)
     // Optimization: Skip GeckoTerminal enrichment - use Helius batch API instead
     const useHeliusEnrichment = solanaService.isHeliusConfigured();
-    console.log(`[API /tokens] Using GeckoTerminal API (Helius enrichment: ${useHeliusEnrichment})`);
+
+    // Calculate page number from offset (GeckoTerminal uses 1-based pages)
+    // GeckoTerminal returns ~20 tokens per page
+    const geckoPageSize = 20;
+    const geckoPage = Math.floor(parseInt(offset) / geckoPageSize) + 1;
+    console.log(`[API /tokens] Using GeckoTerminal API (page: ${geckoPage}, Helius enrichment: ${useHeliusEnrichment})`);
 
     try {
       switch (filter) {
         case 'new':
-          tokens = await geckoService.getNewTokens(parseInt(limit), useHeliusEnrichment);
+          tokens = await geckoService.getNewTokens(parseInt(limit), useHeliusEnrichment, geckoPage);
           break;
         case 'gainers':
           // Get trending and sort by price change
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment });
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment, page: geckoPage });
           tokens = tokens?.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
           break;
         case 'losers':
           // Get trending and sort by price change (ascending)
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment });
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment, page: geckoPage });
           tokens = tokens?.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
           break;
         default: // trending
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment });
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment, page: geckoPage });
       }
     } catch (err) {
       geckoError = err;
@@ -309,6 +314,185 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 // Solana address regex for exact match detection
 const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const MIN_SEARCH_RESULTS = 5;
+const MAX_BATCH_SIZE = 50; // Limit batch requests to prevent abuse
+
+// POST /api/tokens/batch - Get multiple tokens in one request (optimized for watchlist)
+// This endpoint reduces N individual requests to 1 batch request
+router.post('/batch', asyncHandler(async (req, res) => {
+  const { mints } = req.body;
+
+  // Validate input
+  if (!mints || !Array.isArray(mints)) {
+    return res.status(400).json({ error: 'mints array required' });
+  }
+
+  if (mints.length === 0) {
+    return res.json([]);
+  }
+
+  if (mints.length > MAX_BATCH_SIZE) {
+    return res.status(400).json({
+      error: `Maximum ${MAX_BATCH_SIZE} tokens per batch request`,
+      requested: mints.length
+    });
+  }
+
+  // Validate each mint is a valid Solana address
+  const validMints = mints.filter(mint =>
+    typeof mint === 'string' && SOLANA_ADDRESS_REGEX.test(mint)
+  );
+
+  if (validMints.length === 0) {
+    return res.status(400).json({ error: 'No valid mint addresses provided' });
+  }
+
+  console.log(`[API /tokens/batch] Fetching ${validMints.length} tokens`);
+
+  try {
+    // Check cache for each mint
+    const results = [];
+    const uncachedMints = [];
+
+    for (const mint of validMints) {
+      const cacheKey = keys.tokenInfo(mint);
+      const cached = await cache.getWithMeta(cacheKey);
+      if (cached && cached.value) {
+        results.push({ mint, data: cached.value, cached: true });
+      } else {
+        uncachedMints.push(mint);
+      }
+    }
+
+    console.log(`[API /tokens/batch] Cache: ${results.length} hits, ${uncachedMints.length} misses`);
+
+    // Batch fetch uncached tokens
+    if (uncachedMints.length > 0) {
+      // Priority 1: Try Helius batch API (most efficient)
+      let heliusData = {};
+      if (solanaService.isHeliusConfigured()) {
+        try {
+          heliusData = await solanaService.getTokenMetadataBatch(uncachedMints);
+          console.log(`[API /tokens/batch] Helius returned ${Object.keys(heliusData).length} tokens`);
+        } catch (err) {
+          console.error('[API /tokens/batch] Helius batch error:', err.message);
+        }
+      }
+
+      // Priority 2: Try local database
+      const localTokens = {};
+      for (const mint of uncachedMints) {
+        if (!heliusData[mint]) {
+          const local = await db.getToken(mint);
+          if (local) {
+            localTokens[mint] = {
+              mintAddress: mint,
+              address: mint,
+              name: local.name,
+              symbol: local.symbol,
+              decimals: local.decimals,
+              logoUri: local.logo_uri
+            };
+          }
+        }
+      }
+
+      // Priority 3: Try GeckoTerminal batch (market data)
+      let geckoData = {};
+      const stillNeeded = uncachedMints.filter(m => !heliusData[m] && !localTokens[m]);
+      if (stillNeeded.length > 0 && stillNeeded.length <= 30) {
+        try {
+          geckoData = await geckoService.getMultiTokenInfo(stillNeeded);
+          console.log(`[API /tokens/batch] GeckoTerminal returned ${Object.keys(geckoData).length} tokens`);
+        } catch (err) {
+          console.error('[API /tokens/batch] GeckoTerminal batch error:', err.message);
+        }
+      }
+
+      // Combine all sources and cache results
+      for (const mint of uncachedMints) {
+        let tokenData = null;
+
+        if (heliusData[mint]) {
+          const h = heliusData[mint];
+          tokenData = {
+            mintAddress: mint,
+            address: mint,
+            name: h.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+            symbol: h.symbol || '???',
+            decimals: h.decimals || 9,
+            logoUri: h.logoUri || null,
+            logoURI: h.logoUri || null,
+            price: 0,
+            priceChange24h: 0,
+            volume24h: 0,
+            marketCap: 0
+          };
+        } else if (localTokens[mint]) {
+          tokenData = localTokens[mint];
+        } else if (geckoData[mint]) {
+          const g = geckoData[mint];
+          tokenData = {
+            mintAddress: mint,
+            address: mint,
+            name: g.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+            symbol: g.symbol || '???',
+            decimals: g.decimals || 9,
+            logoUri: g.logoUri || null,
+            logoURI: g.logoUri || null,
+            price: g.price || 0,
+            priceChange24h: 0,
+            volume24h: g.volume24h || 0,
+            marketCap: g.marketCap || 0
+          };
+        } else {
+          // Fallback: minimal data
+          tokenData = {
+            mintAddress: mint,
+            address: mint,
+            name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+            symbol: '???',
+            decimals: 9,
+            logoUri: null,
+            logoURI: null,
+            price: 0,
+            priceChange24h: 0,
+            volume24h: 0,
+            marketCap: 0
+          };
+        }
+
+        // Cache the result
+        if (tokenData) {
+          const cacheKey = keys.tokenInfo(mint);
+          await cache.setWithTimestamp(cacheKey, tokenData, TTL.PRICE_DATA);
+          results.push({ mint, data: tokenData, cached: false });
+        }
+      }
+    }
+
+    // Get view counts for all tokens
+    const viewCounts = await db.getTokenViewsBatch(validMints);
+
+    // Build final response array in original order
+    const response = validMints.map(mint => {
+      const result = results.find(r => r.mint === mint);
+      if (result && result.data) {
+        return {
+          ...result.data,
+          views: viewCounts[mint] || 0
+        };
+      }
+      return null;
+    }).filter(Boolean);
+
+    console.log(`[API /tokens/batch] Returning ${response.length} tokens`);
+    return res.json(response);
+
+  } catch (error) {
+    console.error('[API /tokens/batch] Error:', error.message);
+    return res.status(500).json({ error: 'Failed to fetch token batch' });
+  }
+}));
 
 // GET /api/tokens/search - Search tokens (hybrid local + external)
 router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, res) => {

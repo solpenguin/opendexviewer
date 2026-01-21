@@ -342,17 +342,30 @@ const tokenList = {
         return;
       }
 
-      // Fetch current price data for each watchlist token
-      const tokenPromises = watchlistTokens.map(async (item) => {
-        try {
-          const tokenData = await api.tokens.get(item.mint);
-          return {
-            ...tokenData,
-            inWatchlist: true,
-            watchlistAddedAt: item.addedAt
-          };
-        } catch (error) {
-          // Return minimal data if token fetch fails
+      // Use batch API to fetch all watchlist tokens in one request
+      // This reduces N individual requests to 1 batch request
+      const mints = watchlistTokens.map(item => item.mint);
+
+      try {
+        const batchTokens = await api.tokens.getBatch(mints);
+
+        // Map batch results to include watchlist metadata
+        const tokenMap = new Map();
+        for (const token of batchTokens) {
+          const mint = token.address || token.mintAddress;
+          tokenMap.set(mint, token);
+        }
+
+        this.tokens = watchlistTokens.map(item => {
+          const tokenData = tokenMap.get(item.mint);
+          if (tokenData) {
+            return {
+              ...tokenData,
+              inWatchlist: true,
+              watchlistAddedAt: item.addedAt
+            };
+          }
+          // Return minimal data if token not found in batch
           return {
             mintAddress: item.mint,
             address: item.mint,
@@ -365,10 +378,23 @@ const tokenList = {
             marketCap: null,
             inWatchlist: true
           };
-        }
-      });
-
-      this.tokens = await Promise.all(tokenPromises);
+        });
+      } catch (error) {
+        console.warn('[TokenList] Batch fetch failed, falling back to cached data:', error.message);
+        // Fallback: use locally stored watchlist data
+        this.tokens = watchlistTokens.map(item => ({
+          mintAddress: item.mint,
+          address: item.mint,
+          name: item.name || 'Unknown',
+          symbol: item.symbol || '???',
+          logoUri: item.logoUri,
+          price: null,
+          priceChange24h: null,
+          volume24h: null,
+          marketCap: null,
+          inWatchlist: true
+        }));
+      }
 
       // Sort watchlist by volume or user preference
       this.tokens.sort((a, b) => {

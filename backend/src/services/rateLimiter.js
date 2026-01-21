@@ -12,6 +12,10 @@ const requestQueues = new Map();
 // Processing flags per API
 const isProcessing = new Map();
 
+// Queue size limits to prevent unbounded growth under high load
+const MAX_QUEUE_SIZE = parseInt(process.env.API_QUEUE_MAX_SIZE) || 500;
+const QUEUE_TIMEOUT_MS = parseInt(process.env.API_QUEUE_TIMEOUT_MS) || 30000;
+
 // Rate limit configurations per API (requests per second)
 const RATE_LIMITS = {
   birdeye: {
@@ -27,7 +31,9 @@ const RATE_LIMITS = {
     maxJitter: 300,      // Add up to 300ms random jitter
     burstLimit: 2,       // Allow small bursts for parallel requests
     burstWindow: 4000,   // 4 second window
-    useQueue: true       // Force queue-based processing
+    useQueue: true,      // Force queue-based processing
+    maxQueueSize: 200,   // Limit queue size for GeckoTerminal (strict rate limit)
+    queueTimeout: 45000  // 45s timeout for queued requests
   },
   jupiter: {
     minInterval: 100,    // Minimum 100ms between requests (10 req/sec max)
@@ -150,11 +156,16 @@ async function rateLimitedRequest(apiName, requestFn) {
 /**
  * Queue a request to be executed with rate limiting
  * Requests are processed in order with proper delays
+ * Includes queue size limits and request timeouts to prevent resource exhaustion
  * @param {string} apiName - Name of the API
  * @param {Function} requestFn - Async function that makes the request
  * @returns {Promise<any>} Result of the request
  */
 async function queueRequest(apiName, requestFn) {
+  const config = RATE_LIMITS[apiName] || RATE_LIMITS.default;
+  const maxQueueSize = config.maxQueueSize || MAX_QUEUE_SIZE;
+  const queueTimeout = config.queueTimeout || QUEUE_TIMEOUT_MS;
+
   return new Promise((resolve, reject) => {
     // Get or create queue for this API
     if (!requestQueues.has(apiName)) {
@@ -162,7 +173,31 @@ async function queueRequest(apiName, requestFn) {
     }
 
     const queue = requestQueues.get(apiName);
-    queue.push({ requestFn, resolve, reject });
+
+    // Reject if queue is full to prevent unbounded growth
+    if (queue.length >= maxQueueSize) {
+      console.warn(`[RateLimiter] ${apiName} queue full (${queue.length}/${maxQueueSize}), rejecting request`);
+      reject(new Error(`API queue full - server overloaded. Try again later.`));
+      return;
+    }
+
+    // Set up timeout for this request
+    const timeoutId = setTimeout(() => {
+      // Find and remove this request from queue if still pending
+      const index = queue.findIndex(item => item.timeoutId === timeoutId);
+      if (index !== -1) {
+        queue.splice(index, 1);
+        console.warn(`[RateLimiter] ${apiName} request timed out after ${queueTimeout}ms in queue`);
+        reject(new Error(`Request timed out waiting in queue`));
+      }
+    }, queueTimeout);
+
+    queue.push({ requestFn, resolve, reject, timeoutId, queuedAt: Date.now() });
+
+    // Log queue stats periodically
+    if (queue.length % 50 === 0) {
+      console.log(`[RateLimiter] ${apiName} queue size: ${queue.length}`);
+    }
 
     // Start processing if not already
     processQueue(apiName);
@@ -181,7 +216,21 @@ async function processQueue(apiName) {
   const queue = requestQueues.get(apiName);
 
   while (queue && queue.length > 0) {
-    const { requestFn, resolve, reject } = queue.shift();
+    const item = queue.shift();
+    const { requestFn, resolve, reject, timeoutId, queuedAt } = item;
+
+    // Clear the timeout since we're processing this request now
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    // Log queue wait time for monitoring
+    if (queuedAt) {
+      const waitTime = Date.now() - queuedAt;
+      if (waitTime > 5000) {
+        console.log(`[RateLimiter] ${apiName} request waited ${Math.round(waitTime / 1000)}s in queue`);
+      }
+    }
 
     try {
       // Apply rate limiting delay directly (not through rateLimitedRequest to avoid recursion)

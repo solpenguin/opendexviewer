@@ -160,11 +160,16 @@ const api = {
       const endpoint = `/api/tokens${query ? `?${query}` : ''}`;
       const cacheKey = apiCache.key('tokens:list', params);
 
+      // Don't use stale cache for pagination - user expects fresh data when changing pages
+      // Only use stale-while-revalidate for same-page refreshes (offset=0 or not specified)
+      const offset = parseInt(params.offset) || 0;
+      const allowStale = offset === 0;
+
       return apiCache.getOrFetch(
         cacheKey,
         () => api.request(endpoint),
         apiCache.TTL.tokenList,
-        true // Allow stale-while-revalidate
+        allowStale
       );
     },
 
@@ -226,6 +231,58 @@ const api = {
         apiCache.TTL.search,
         true
       );
+    },
+
+    // Batch fetch multiple tokens in one request (optimized for watchlist)
+    // Reduces N individual requests to 1 batch request
+    async getBatch(mints) {
+      if (!mints || mints.length === 0) {
+        return [];
+      }
+
+      // For small batches, still use batch endpoint for consistency
+      // but check cache first for each token
+      const uncached = [];
+      const cachedResults = [];
+
+      for (const mint of mints) {
+        const cached = apiCache.get(`tokens:detail:${mint}`);
+        if (cached) {
+          cachedResults.push(cached.data);
+        } else {
+          uncached.push(mint);
+        }
+      }
+
+      // If all cached, return immediately
+      if (uncached.length === 0) {
+        // Return in original order
+        return mints.map(mint => cachedResults.find(t => t.address === mint || t.mintAddress === mint)).filter(Boolean);
+      }
+
+      // Fetch uncached tokens via batch endpoint
+      try {
+        const batchData = await api.request('/api/tokens/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mints: uncached })
+        });
+
+        // Cache each result
+        for (const token of batchData) {
+          if (token && (token.address || token.mintAddress)) {
+            apiCache.set(`tokens:detail:${token.address || token.mintAddress}`, token, apiCache.TTL.tokenDetail);
+          }
+        }
+
+        // Combine cached and fetched, maintaining original order
+        const allResults = [...cachedResults, ...batchData];
+        return mints.map(mint => allResults.find(t => t.address === mint || t.mintAddress === mint)).filter(Boolean);
+      } catch (error) {
+        console.error('Batch token fetch failed:', error.message);
+        // Fallback: return whatever we had cached
+        return cachedResults;
+      }
     },
 
     async getSubmissions(mint, params = {}) {

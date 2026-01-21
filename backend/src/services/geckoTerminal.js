@@ -1,10 +1,21 @@
 const axios = require('axios');
 const { rateLimitedRequest, sleep } = require('./rateLimiter');
+const { httpsAgent } = require('./httpAgent');
 
 // GeckoTerminal API - Free, no API key required
 // Docs: https://apiguide.geckoterminal.com/
 const GECKO_API = 'https://api.geckoterminal.com/api/v2';
 const NETWORK = 'solana';
+
+// Create axios instance with connection pooling for GeckoTerminal
+const geckoAxios = axios.create({
+  baseURL: GECKO_API,
+  httpsAgent,
+  timeout: 30000,
+  headers: {
+    'Accept': 'application/json'
+  }
+});
 
 // Retry configuration for 429 errors
 const RETRY_CONFIG = {
@@ -137,9 +148,7 @@ async function getTokenInfo(mintAddress) {
 
   try {
     const response = await deduplicatedRequest(`token:${mintAddress}`, () =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}`, {
-        headers: getHeaders()
-      })
+      geckoAxios.get(`/networks/${NETWORK}/tokens/${mintAddress}`)
     );
 
     const token = response.data.data;
@@ -194,9 +203,7 @@ async function getMultiTokenInfo(addresses) {
     const addressList = addresses.slice(0, 30).join(',');
 
     const response = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/multi/${addressList}`, {
-        headers: getHeaders()
-      }),
+      geckoAxios.get(`/networks/${NETWORK}/tokens/multi/${addressList}`),
       'getMultiTokenInfo'
     );
 
@@ -249,9 +256,8 @@ async function getTokenOverview(mintAddress) {
     // Only fetch pools - it includes price and market data we need
     // Metadata (name, symbol, decimals) now comes from Helius
     const poolsResponse = await deduplicatedRequest(`pools:${mintAddress}`, () =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
-        params: { page: 1 },
-        headers: getHeaders()
+      geckoAxios.get(`/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+        params: { page: 1 }
       })
     );
 
@@ -350,15 +356,14 @@ async function getMarketData(mintAddress) {
  * Set skipEnrichment=true to skip GeckoTerminal enrichment call
  */
 async function getTrendingTokens(options = {}) {
-  const { limit = 20, skipEnrichment = false } = options;
+  const { limit = 20, skipEnrichment = false, page = 1 } = options;
 
-  console.log(`[GeckoTerminal] getTrendingTokens: limit=${limit}, skipEnrichment=${skipEnrichment}`);
+  console.log(`[GeckoTerminal] getTrendingTokens: limit=${limit}, page=${page}, skipEnrichment=${skipEnrichment}`);
 
   try {
     const response = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/trending_pools`, {
-        params: { page: 1 },
-        headers: getHeaders()
+      geckoAxios.get(`/networks/${NETWORK}/trending_pools`, {
+        params: { page }
       }),
       'getTrendingTokens'
     );
@@ -458,14 +463,13 @@ async function getTrendingTokens(options = {}) {
  * Endpoint: /networks/{network}/new_pools
  * Optimized: Set skipEnrichment=true to skip GeckoTerminal enrichment (use Helius batch instead)
  */
-async function getNewTokens(limit = 20, skipEnrichment = false) {
-  console.log(`[GeckoTerminal] getNewTokens: limit=${limit}, skipEnrichment=${skipEnrichment}`);
+async function getNewTokens(limit = 20, skipEnrichment = false, page = 1) {
+  console.log(`[GeckoTerminal] getNewTokens: limit=${limit}, page=${page}, skipEnrichment=${skipEnrichment}`);
 
   try {
     const response = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/new_pools`, {
-        params: { page: 1 },
-        headers: getHeaders()
+      geckoAxios.get(`/networks/${NETWORK}/new_pools`, {
+        params: { page }
       }),
       'getNewTokens'
     );
@@ -556,13 +560,12 @@ async function searchTokens(query, limit = 20) {
 
   try {
     const response = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/search/pools`, {
+      geckoAxios.get(`/search/pools`, {
         params: {
           query: query,
           network: NETWORK,
           page: 1
-        },
-        headers: getHeaders()
+        }
       }),
       'searchTokens'
     );
@@ -655,9 +658,8 @@ async function getOHLCV(mintAddress, options = {}) {
     // If not cached, fetch pools
     if (!poolAddress) {
       const poolsResponse = await deduplicatedRequest(`pools:${mintAddress}`, () =>
-        axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
-          params: { page: 1 },
-          headers: getHeaders()
+        geckoAxios.get(`/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+          params: { page: 1 }
         })
       );
 
@@ -700,14 +702,13 @@ async function getOHLCV(mintAddress, options = {}) {
     }
 
     const ohlcvResponse = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/pools/${poolAddress}/ohlcv/${timeframe}`, {
+      geckoAxios.get(`/networks/${NETWORK}/pools/${poolAddress}/ohlcv/${timeframe}`, {
         params: {
           aggregate: aggregate,
           limit: 100,
           currency: 'usd',
           token: 'base'
-        },
-        headers: getHeaders()
+        }
       }),
       'getOHLCV'
     );
@@ -787,9 +788,8 @@ async function getTokenPools(mintAddress, options = {}) {
 
   try {
     const response = await geckoRequest(() =>
-      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
-        params: { page: 1 },
-        headers: getHeaders()
+      geckoAxios.get(`/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+        params: { page: 1 }
       }),
       'getTokenPools'
     );

@@ -3,6 +3,7 @@
 
 -- Enable useful extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- Trigram for fast fuzzy search
 
 -- =====================================================
 -- TOKENS TABLE
@@ -22,6 +23,9 @@ CREATE TABLE IF NOT EXISTS tokens (
 -- Index for faster lookups by mint address
 CREATE INDEX IF NOT EXISTS idx_tokens_mint ON tokens(mint_address);
 CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol);
+-- Trigram indexes for fast fuzzy search (requires pg_trgm extension)
+CREATE INDEX IF NOT EXISTS idx_tokens_name_trgm ON tokens USING gin(name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_tokens_symbol_trgm ON tokens USING gin(symbol gin_trgm_ops);
 
 -- =====================================================
 -- SUBMISSIONS TABLE
@@ -57,9 +61,15 @@ CREATE TABLE IF NOT EXISTS votes (
     UNIQUE(submission_id, voter_wallet)
 );
 
--- Index for vote queries
+-- Indexes for vote queries (optimized for concurrent load)
 CREATE INDEX IF NOT EXISTS idx_votes_submission ON votes(submission_id);
 CREATE INDEX IF NOT EXISTS idx_votes_wallet ON votes(voter_wallet);
+-- Compound index for duplicate vote check (voter + submission)
+CREATE INDEX IF NOT EXISTS idx_votes_voter_submission ON votes(voter_wallet, submission_id);
+-- Index for vote counting by submission and type
+CREATE INDEX IF NOT EXISTS idx_votes_submission_type ON votes(submission_id, vote_type);
+-- Index for chronological queries
+CREATE INDEX IF NOT EXISTS idx_votes_created ON votes(created_at DESC);
 
 -- =====================================================
 -- VOTE TALLIES TABLE
@@ -72,6 +82,11 @@ CREATE TABLE IF NOT EXISTS vote_tallies (
     score INTEGER DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Index for score-based queries (leaderboards, trending)
+CREATE INDEX IF NOT EXISTS idx_vote_tallies_score ON vote_tallies(score DESC);
+-- Index for recently updated tallies
+CREATE INDEX IF NOT EXISTS idx_vote_tallies_updated ON vote_tallies(updated_at DESC);
 
 -- =====================================================
 -- FUNCTIONS & TRIGGERS

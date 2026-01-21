@@ -47,12 +47,22 @@ function createPool() {
     return null;
   }
 
+  // Scale connection pool based on environment
+  // Production: Higher pool for concurrent users
+  // Development: Lower pool to avoid exhausting local DB
+  const isProduction = process.env.NODE_ENV === 'production';
+  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 100 : 20);
+
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    max: 20,                    // Maximum connections in pool
-    idleTimeoutMillis: 30000,   // Close idle connections after 30s
-    connectionTimeoutMillis: 10000 // Timeout for new connections (increased)
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
+    max: maxConnections,                    // Maximum connections in pool (100 for prod)
+    min: isProduction ? 10 : 2,             // Minimum idle connections
+    idleTimeoutMillis: 30000,               // Close idle connections after 30s
+    connectionTimeoutMillis: 10000,         // Timeout for new connections
+    statement_timeout: 30000,               // Kill queries running > 30s
+    query_timeout: 30000,                   // Same as statement_timeout for safety
+    allowExitOnIdle: false                  // Keep pool alive
   });
 }
 
@@ -156,17 +166,32 @@ async function initializeDatabase() {
         UNIQUE(owner_wallet)
       );
 
+      -- Submission indexes
       CREATE INDEX IF NOT EXISTS idx_submissions_token ON submissions(token_mint);
       CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
       CREATE INDEX IF NOT EXISTS idx_submissions_wallet ON submissions(submitter_wallet);
       CREATE INDEX IF NOT EXISTS idx_submissions_created ON submissions(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_submissions_token_status ON submissions(token_mint, status);
+
+      -- Vote indexes (optimized for concurrent load)
       CREATE INDEX IF NOT EXISTS idx_votes_submission ON votes(submission_id);
       CREATE INDEX IF NOT EXISTS idx_votes_wallet ON votes(voter_wallet);
+      CREATE INDEX IF NOT EXISTS idx_votes_voter_submission ON votes(voter_wallet, submission_id);
+      CREATE INDEX IF NOT EXISTS idx_votes_submission_type ON votes(submission_id, vote_type);
+      CREATE INDEX IF NOT EXISTS idx_votes_created ON votes(created_at DESC);
+
+      -- Token indexes
       CREATE INDEX IF NOT EXISTS idx_tokens_name_symbol ON tokens(LOWER(name), LOWER(symbol));
+
+      -- Watchlist indexes
       CREATE INDEX IF NOT EXISTS idx_watchlist_wallet ON watchlist(wallet_address);
       CREATE INDEX IF NOT EXISTS idx_watchlist_token ON watchlist(token_mint);
+
+      -- Vote tally indexes
       CREATE INDEX IF NOT EXISTS idx_vote_tallies_score ON vote_tallies(weighted_score DESC);
+      CREATE INDEX IF NOT EXISTS idx_vote_tallies_updated ON vote_tallies(updated_at DESC);
+
+      -- API key indexes
       CREATE INDEX IF NOT EXISTS idx_api_keys_wallet ON api_keys(owner_wallet);
       CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 

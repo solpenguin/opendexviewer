@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>About - OpenDex</title>
+  <meta name="description" content="Learn about OpenDex - a free, open-source token viewer for Solana. Access the Developer API.">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <img src="OpenDEX_Logo.png" alt="OpenDex Logo" class="logo-img" width="28" height="28">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">Beta</span>
+      </a>
+
+      <nav class="nav">
+        <a href="/" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+        <a href="about.html" class="nav-link active">About</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main about-page">
+    <!-- Page Hero -->
+    <section class="submit-hero">
+      <div class="submit-hero-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </div>
+      <h1>About OpenDex</h1>
+      <p>A free, open-source token viewer built for the Solana community</p>
+    </section>
+
+    <!-- About OpenDex Section -->
+    <section class="about-section about-opendex-section">
+      <div class="about-content">
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h3>What is OpenDex?</h3>
+          <p>OpenDex is a free, community-driven token viewer for the Solana blockchain. Unlike other platforms that charge for listings or features, OpenDex is completely free to use. We aggregate data from Jupiter, DexScreener, and on-chain sources to provide comprehensive token information.</p>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <h3>Community-Driven</h3>
+          <p>Token communities can submit and vote on banners, social links, and other content. No centralized authority decides what gets shown - the community does. Holders vote on submissions, with voting power weighted by token ownership to prevent spam while ensuring all voices are heard.</p>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h3>Holder Verification</h3>
+          <p>Only verified token holders can submit content and vote. This is enforced both client-side and server-side by checking on-chain balances via Solana RPC. This ensures that only people with skin in the game can influence what content is shown for a token.</p>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+          </div>
+          <h3>Open Source</h3>
+          <p>OpenDex is fully open source. You can view the code, report issues, or contribute on <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" class="link">GitHub</a>. We believe in transparency and community ownership of the tools we use.</p>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <h3>Free Forever</h3>
+          <p>There are no listing fees, no premium tiers, no paid promotions. OpenDex is and will remain free for everyone. Our goal is to provide useful tools for the Solana community, not to extract value from it.</p>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <h3>Real-Time Data</h3>
+          <p>Token prices, market caps, volumes, and holder counts are fetched in real-time from Jupiter aggregator and on-chain data. Price charts show historical OHLC data with multiple timeframes. All data is refreshed automatically to keep you up to date.</p>
+        </div>
+      </div>
+
+      <div class="about-cta">
+        <a href="/" class="btn btn-primary btn-large">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Explore Tokens
+        </a>
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" class="btn btn-secondary btn-large">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          View on GitHub
+        </a>
+      </div>
+    </section>
+
+    <!-- How Voting Works Section -->
+    <section class="about-section how-it-works-section">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+          </svg>
+        </div>
+        <h2>How Voting & Approval Works</h2>
+        <p>Community-driven content moderation ensures quality and authenticity</p>
+      </div>
+
+      <div class="process-steps">
+        <div class="process-step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Submit Content</h3>
+            <p>Token holders can submit banners and social links for any token they hold. You must have a balance of the token in your connected wallet to submit content for it.</p>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Community Review Period</h3>
+            <p>After submission, content enters a review period where other token holders can vote. The review period lasts a minimum of <strong>30 minutes</strong> to allow the community time to evaluate submissions.</p>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Weighted Voting</h3>
+            <p>Votes are weighted based on your token holdings. Larger holders have more influence, but all holders with at least <strong>0.01%</strong> of the supply can vote. This prevents spam while giving the community control.</p>
+            <div class="voting-tiers">
+              <div class="tier">
+                <span class="tier-range">0.01% - 0.1%</span>
+                <span class="tier-weight">1x weight</span>
+              </div>
+              <div class="tier">
+                <span class="tier-range">0.1% - 1%</span>
+                <span class="tier-weight">2x weight</span>
+              </div>
+              <div class="tier">
+                <span class="tier-range">1% - 5%</span>
+                <span class="tier-weight">3x weight</span>
+              </div>
+              <div class="tier">
+                <span class="tier-range">5%+</span>
+                <span class="tier-weight">5x weight</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h3>Auto-Approval & Rejection</h3>
+            <p>Content is automatically approved when it reaches a weighted score of <strong>+10</strong>, or automatically rejected at <strong>-5</strong>. This ensures popular content appears quickly while spam is removed.</p>
+            <div class="threshold-indicators">
+              <div class="threshold approve">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>+10 = Auto-Approve</span>
+              </div>
+              <div class="threshold reject">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                <span>-5 = Auto-Reject</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">5</div>
+          <div class="step-content">
+            <h3>Content Goes Live</h3>
+            <p>Once approved, your banner or social link appears on the token's page for everyone to see. The highest-voted content is displayed prominently, and the community can continue voting to surface the best submissions.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Developer API Section -->
+    <section class="about-section api-section" id="api-section">
+      <div class="about-header">
+        <div class="about-icon api">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+        </div>
+        <h2>Developer API</h2>
+        <p>Access community content programmatically for your apps and tools</p>
+      </div>
+
+      <!-- API Key Management -->
+      <div class="api-key-section">
+        <h3>Your API Key</h3>
+        <p class="api-key-description">Register for a free API key to access community content (banners, social links) for any token. One key per wallet.</p>
+
+        <!-- Not connected state -->
+        <div id="api-key-connect" class="api-key-card">
+          <div class="api-key-card-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2"/>
+              <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+            </svg>
+            <p>Connect your wallet to manage your API key</p>
+            <button type="button" id="connect-wallet-api" class="btn btn-secondary">Connect Wallet</button>
+          </div>
+        </div>
+
+        <!-- Has no key state -->
+        <div id="api-key-register" class="api-key-card" style="display: none;">
+          <div class="api-key-card-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <p>You don't have an API key yet</p>
+            <div class="api-key-register-form">
+              <input type="text" id="api-key-name" placeholder="App name (optional)" maxlength="100">
+              <button type="button" id="register-api-key-btn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Generate API Key
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Has key state -->
+        <div id="api-key-info" class="api-key-card" style="display: none;">
+          <div class="api-key-card-header">
+            <div class="api-key-status active">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Active
+            </div>
+            <button type="button" id="revoke-api-key-btn" class="btn btn-ghost btn-sm btn-danger">Revoke Key</button>
+          </div>
+          <div class="api-key-details">
+            <div class="api-key-row">
+              <span class="api-key-label">Key Prefix</span>
+              <span class="api-key-value" id="api-key-prefix">--------</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Created</span>
+              <span class="api-key-value" id="api-key-created-date">--</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Last Used</span>
+              <span class="api-key-value" id="api-key-last-used">Never</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Requests</span>
+              <span class="api-key-value" id="api-key-requests">0</span>
+            </div>
+          </div>
+          <p class="api-key-note">Your full API key was shown only once when created. If you've lost it, revoke this key and create a new one.</p>
+        </div>
+
+        <!-- New key created state (shows full key once) -->
+        <div id="api-key-created" class="api-key-card api-key-created-card" style="display: none;">
+          <div class="api-key-success-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <h4>API Key Created!</h4>
+          </div>
+          <p class="api-key-warning">Save this key now - it will only be shown once!</p>
+          <div class="api-key-display">
+            <code id="api-key-full"></code>
+            <button type="button" id="copy-api-key-btn" class="btn btn-ghost btn-sm" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <button type="button" id="api-key-done-btn" class="btn btn-primary">I've Saved My Key</button>
+        </div>
+      </div>
+
+      <!-- API Documentation -->
+      <div class="api-docs-section">
+        <h3>API Endpoints</h3>
+        <p>All API requests require your API key in the <code>X-API-Key</code> header.</p>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get community content (banner, social links) for a token</p>
+          <div class="api-example">
+            <div class="api-example-label">Example Request</div>
+            <pre><code>curl -H "X-API-Key: YOUR_KEY" \
+  https://api.opendex.dev/api/v1/community/So11111111111111111111111111111111111111112</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "success": true,
+  "data": {
+    "token": "So11111111111111111111111111111111111111112",
+    "banner": {
+      "url": "https://i.imgur.com/example.png",
+      "score": 15
+    },
+    "links": {
+      "twitter": { "url": "https://twitter.com/solana", "score": 12 },
+      "telegram": null,
+      "discord": { "url": "https://discord.gg/solana", "score": 8 },
+      "website": { "url": "https://solana.com", "score": 10 }
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/:mint/all</code>
+          </div>
+          <p class="api-endpoint-desc">Get all approved submissions for a token (not just top-voted)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>type    (optional) - Filter by type: banner, twitter, telegram, discord, website</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/batch</code>
+          </div>
+          <p class="api-endpoint-desc">Get community content for multiple tokens at once (max 20)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>mints   (required) - Comma-separated token addresses (max 20)</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Example Request</div>
+            <pre><code>curl -H "X-API-Key: YOUR_KEY" \
+  "https://api.opendex.dev/api/v1/community/batch?mints=mint1,mint2,mint3"</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/keys/info</code>
+          </div>
+          <p class="api-endpoint-desc">Get information about your API key (usage stats, creation date)</p>
+        </div>
+
+        <h3>Rate Limits</h3>
+        <p>API requests are rate limited to prevent abuse:</p>
+        <ul class="api-rate-limits">
+          <li><strong>100 requests/minute</strong> - Standard endpoints</li>
+          <li><strong>10 requests/minute</strong> - Key registration</li>
+        </ul>
+
+        <h3>Error Codes</h3>
+        <div class="api-error-codes">
+          <div class="api-error-code">
+            <code>401</code>
+            <span>Missing or invalid API key</span>
+          </div>
+          <div class="api-error-code">
+            <code>403</code>
+            <span>API key has been revoked</span>
+          </div>
+          <div class="api-error-code">
+            <code>429</code>
+            <span>Rate limit exceeded</span>
+          </div>
+          <div class="api-error-code">
+            <code>503</code>
+            <span>Service temporarily unavailable</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank">GitHub</a>
+        <span class="separator">|</span>
+        <a href="docs/API.md" target="_blank">API Docs</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/about.js"></script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 
 // Import routes
 const tokenRoutes = require('./routes/tokens');
@@ -43,6 +44,27 @@ if (process.env.NODE_ENV === 'production' && (!corsOrigins || corsOrigins.length
 }
 
 app.use(cors(corsOptions));
+
+// Response compression - reduces bandwidth by ~70% for JSON responses
+// Only compress responses > 1KB and in production/high-traffic scenarios
+app.use(compression({
+  level: 6,           // Balance between compression ratio and CPU usage
+  threshold: 1024,    // Only compress responses > 1KB
+  filter: (req, res) => {
+    // Don't compress for clients that don't accept it
+    if (req.headers['x-no-compression']) return false;
+    // Use compression's default filter
+    return compression.filter(req, res);
+  }
+}));
+
+// Request timeout middleware - prevent hung requests
+const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
+app.use((req, res, next) => {
+  req.setTimeout(REQUEST_TIMEOUT);
+  res.setTimeout(REQUEST_TIMEOUT);
+  next();
+});
 
 // Parse JSON bodies
 app.use(express.json({ limit: '1mb' }));
