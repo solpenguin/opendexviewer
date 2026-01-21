@@ -24,10 +24,23 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
   // Try cache first - use getWithMeta since we store with setWithTimestamp
+  // Note: We refresh view counts even for cached responses since they're cheap to fetch
   const cachedMeta = await cache.getWithMeta(cacheKey);
-  if (cachedMeta) {
+  if (cachedMeta && filter !== 'most_viewed') {
     console.log(`[API /tokens] Returning ${cachedMeta.value?.length || 0} cached tokens (age: ${Math.round(cachedMeta.age / 1000)}s)`);
-    return res.json(cachedMeta.value);
+
+    // Refresh view counts from database (cheap query, keeps views up-to-date)
+    let tokens = cachedMeta.value;
+    if (tokens && tokens.length > 0) {
+      const addresses = tokens.map(t => t.address || t.mintAddress);
+      const viewCounts = await db.getTokenViewsBatch(addresses);
+      tokens = tokens.map(t => ({
+        ...t,
+        views: viewCounts[t.address || t.mintAddress] || 0
+      }));
+    }
+
+    return res.json(tokens);
   }
 
   let tokens;
@@ -43,33 +56,125 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         // Get the token mints that have views
         const mints = mostViewed.map(v => v.token_mint);
 
+        // Try to batch fetch metadata from Helius first (most efficient)
+        let heliusMetadata = {};
+        if (solanaService.isHeliusConfigured()) {
+          try {
+            heliusMetadata = await solanaService.getTokenMetadataBatch(mints);
+            console.log(`[API /tokens] Helius batch returned ${Object.keys(heliusMetadata).length} tokens`);
+          } catch (err) {
+            console.error('[API /tokens] Helius batch failed:', err.message);
+          }
+        }
+
         // Fetch full token data for these mints
         const tokenPromises = mints.map(async (mint) => {
           try {
-            // Try to get cached token data first
-            const cacheKey = keys.tokenInfo(mint);
-            let tokenData = await cache.get(cacheKey);
+            const viewInfo = mostViewed.find(v => v.token_mint === mint);
+            const viewCount = viewInfo?.view_count || 0;
 
-            if (!tokenData) {
-              // Fetch from GeckoTerminal
-              tokenData = await geckoService.getTokenOverview(mint);
+            // Priority 1: Check Helius batch result
+            if (heliusMetadata[mint] && heliusMetadata[mint].name) {
+              const helius = heliusMetadata[mint];
+              // Get price data from GeckoTerminal (Helius doesn't have market data)
+              let priceData = {};
+              try {
+                priceData = await geckoService.getTokenOverview(mint) || {};
+              } catch (e) {
+                // Price data is optional, continue without it
+              }
+              return {
+                mintAddress: mint,
+                address: mint,
+                name: helius.name,
+                symbol: helius.symbol || '???',
+                price: priceData.price || 0,
+                priceChange24h: priceData.priceChange24h || 0,
+                volume24h: priceData.volume24h || 0,
+                marketCap: priceData.marketCap || 0,
+                logoUri: helius.logoUri || priceData.logoUri || null,
+                logoURI: helius.logoUri || priceData.logoURI || null,
+                views: viewCount
+              };
             }
 
-            // Find the view count for this token
-            const viewInfo = mostViewed.find(v => v.token_mint === mint);
+            // Priority 2: Check local database (tokens are saved when detail pages are viewed)
+            const localToken = await db.getToken(mint);
+            if (localToken && localToken.name) {
+              // Get price data from GeckoTerminal
+              let priceData = {};
+              try {
+                priceData = await geckoService.getTokenOverview(mint) || {};
+              } catch (e) {
+                // Price data is optional
+              }
+              return {
+                mintAddress: mint,
+                address: mint,
+                name: localToken.name,
+                symbol: localToken.symbol || '???',
+                price: priceData.price || 0,
+                priceChange24h: priceData.priceChange24h || 0,
+                volume24h: priceData.volume24h || 0,
+                marketCap: priceData.marketCap || 0,
+                logoUri: localToken.logo_uri || priceData.logoUri || null,
+                logoURI: localToken.logo_uri || priceData.logoURI || null,
+                views: viewCount
+              };
+            }
 
+            // Priority 3: Try to get from API cache
+            const tokenCacheKey = keys.tokenInfo(mint);
+            const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+            if (cachedMeta && cachedMeta.value && cachedMeta.value.name) {
+              const tokenData = cachedMeta.value;
+              return {
+                mintAddress: mint,
+                address: mint,
+                name: tokenData.name,
+                symbol: tokenData.symbol || '???',
+                price: tokenData.price || 0,
+                priceChange24h: tokenData.priceChange24h || 0,
+                volume24h: tokenData.volume24h || 0,
+                marketCap: tokenData.marketCap || 0,
+                logoUri: tokenData.logoUri || null,
+                logoURI: tokenData.logoURI || null,
+                views: viewCount
+              };
+            }
+
+            // Priority 4: Fetch from GeckoTerminal
+            const tokenData = await geckoService.getTokenOverview(mint);
+            if (tokenData && tokenData.name) {
+              return {
+                mintAddress: mint,
+                address: mint,
+                name: tokenData.name,
+                symbol: tokenData.symbol || '???',
+                price: tokenData.price || 0,
+                priceChange24h: tokenData.priceChange24h || 0,
+                volume24h: tokenData.volume24h || 0,
+                marketCap: tokenData.marketCap || 0,
+                logoUri: tokenData.logoUri || null,
+                logoURI: tokenData.logoURI || null,
+                views: viewCount
+              };
+            }
+
+            // Final fallback: return minimal data with truncated address as name
+            console.warn(`[API /tokens] No metadata found for most_viewed token: ${mint}`);
             return {
               mintAddress: mint,
               address: mint,
-              name: tokenData?.name || 'Unknown',
-              symbol: tokenData?.symbol || '???',
-              price: tokenData?.price || 0,
-              priceChange24h: tokenData?.priceChange24h || 0,
-              volume24h: tokenData?.volume24h || 0,
-              marketCap: tokenData?.marketCap || 0,
-              logoUri: tokenData?.logoUri || null,
-              logoURI: tokenData?.logoURI || null,
-              views: viewInfo?.view_count || 0
+              name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+              symbol: '???',
+              price: 0,
+              priceChange24h: 0,
+              volume24h: 0,
+              marketCap: 0,
+              logoUri: null,
+              logoURI: null,
+              views: viewCount
             };
           } catch (err) {
             console.error(`[API /tokens] Failed to fetch token ${mint}:`, err.message);
@@ -77,20 +182,23 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
             return {
               mintAddress: mint,
               address: mint,
-              name: 'Unknown',
+              name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
               symbol: '???',
               price: 0,
+              priceChange24h: 0,
+              volume24h: 0,
+              marketCap: 0,
+              logoUri: null,
+              logoURI: null,
               views: viewInfo?.view_count || 0
             };
           }
         });
 
         tokens = await Promise.all(tokenPromises);
-        // Filter out any completely failed tokens
-        tokens = tokens.filter(t => t.name !== 'Unknown' || t.views > 0);
 
-        // Cache the result
-        await cache.setWithTimestamp(cacheKey, tokens, TTL.PRICE_DATA);
+        // Cache the result (shorter TTL for most_viewed since it changes frequently)
+        await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
         return res.json(tokens);
       } else {
         // No viewed tokens yet, return empty array
