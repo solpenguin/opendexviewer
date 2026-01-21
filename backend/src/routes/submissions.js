@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validateSubmission, validateWallet, asyncHandler, requireDatabase, sanitizeString } = require('../middleware/validation');
+const { validateMint, validateSubmission, validateSubmissionSignature, validateWallet, asyncHandler, requireDatabase, sanitizeString } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
@@ -61,41 +61,38 @@ router.get('/:id', asyncHandler(async (req, res) => {
   res.json(sanitizeSubmissionOutput(submission));
 }));
 
-// POST /api/submissions - Create new submission
-router.post('/', strictLimiter, validateSubmission, validateWallet, asyncHandler(async (req, res) => {
+// POST /api/submissions - Create new submission (requires wallet signature)
+// Duplicate check is enforced atomically via database unique constraint
+router.post('/', strictLimiter, validateSubmission, validateSubmissionSignature, asyncHandler(async (req, res) => {
   const { tokenMint, submissionType, contentUrl, submitterWallet } = req.body;
 
-  // Check for duplicate submissions (same token, type, and URL)
-  // Using normalized URL comparison
-  const existing = await db.getSubmissionsByToken(tokenMint, { type: submissionType });
-  const normalizedUrl = contentUrl.toLowerCase().replace(/\/+$/, ''); // Remove trailing slashes
-  const isDuplicate = existing.some(s => {
-    const existingNormalized = s.content_url.toLowerCase().replace(/\/+$/, '');
-    return existingNormalized === normalizedUrl && s.status !== 'rejected';
-  });
-
-  if (isDuplicate) {
-    return res.status(409).json({
-      error: 'This content has already been submitted for this token'
+  try {
+    // Create submission - database enforces uniqueness atomically via unique index
+    // This prevents race conditions where duplicate check passes but insert happens twice
+    const submission = await db.createSubmission({
+      tokenMint,
+      submissionType,
+      contentUrl,
+      submitterWallet: submitterWallet || null
     });
+
+    // Clear cache for this token's submissions
+    await cache.clearPattern(keys.submissions(tokenMint));
+
+    res.status(201).json({
+      ...sanitizeSubmissionOutput(submission),
+      message: 'Submission created successfully. It will be visible after community approval.',
+      approvalThreshold: db.AUTO_APPROVE_THRESHOLD
+    });
+  } catch (error) {
+    // Handle duplicate submission error from database constraint
+    if (error.code === 'DUPLICATE_SUBMISSION') {
+      return res.status(409).json({
+        error: 'This content has already been submitted for this token'
+      });
+    }
+    throw error; // Re-throw other errors to be handled by asyncHandler
   }
-
-  // Create submission
-  const submission = await db.createSubmission({
-    tokenMint,
-    submissionType,
-    contentUrl,
-    submitterWallet: submitterWallet || null
-  });
-
-  // Clear cache for this token's submissions
-  await cache.clearPattern(keys.submissions(tokenMint));
-
-  res.status(201).json({
-    ...sanitizeSubmissionOutput(submission),
-    message: 'Submission created successfully. It will be visible after community approval.',
-    approvalThreshold: db.AUTO_APPROVE_THRESHOLD
-  });
 }));
 
 // GET /api/submissions/token/:mint - Get submissions for a token

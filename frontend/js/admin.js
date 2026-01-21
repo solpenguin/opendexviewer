@@ -368,7 +368,7 @@ const adminPanel = {
               </div>
             </div>
           </td>
-          <td><span class="type-badge">${sub.submission_type}</span></td>
+          <td><span class="type-badge">${this.escapeHtml(sub.submission_type)}</span></td>
           <td class="content-url">
             <a href="${this.escapeHtml(sub.content_url)}" target="_blank" rel="noopener">${this.escapeHtml(sub.content_url)}</a>
           </td>
@@ -377,7 +377,7 @@ const adminPanel = {
               ${sub.score > 0 ? '+' : ''}${sub.score || 0}
             </span>
           </td>
-          <td><span class="status-badge ${sub.status}">${sub.status}</span></td>
+          <td><span class="status-badge ${this.escapeHtml(sub.status)}">${this.escapeHtml(sub.status)}</span></td>
           <td>${this.formatDate(sub.created_at)}</td>
           <td>
             <div class="table-actions">

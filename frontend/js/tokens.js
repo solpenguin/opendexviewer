@@ -2,10 +2,10 @@
 const tokenList = {
   tokens: [],
   currentPage: 1,
-  pageSize: 50,
+  pageSize: 15,
   totalPages: 10, // Estimated total pages for pagination display
   currentFilter: 'trending',
-  currentSort: 'volume',
+  currentSort: 'mcap',
   sortOrder: 'desc',
   searchQuery: '',
   isSearchMode: false,
@@ -39,19 +39,11 @@ const tokenList = {
     const filter = utils.getUrlParam('filter');
     const page = utils.getUrlParam('page');
     const search = utils.getUrlParam('q');
-    const rows = utils.getUrlParam('rows');
 
     if (filter && ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'watchlist'].includes(filter)) {
       this.currentFilter = filter;
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.filter === filter);
-      });
-    }
-
-    if (rows && [10, 25, 50].includes(parseInt(rows))) {
-      this.pageSize = parseInt(rows);
-      document.querySelectorAll('.rows-btn').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.rows) === this.pageSize);
       });
     }
 
@@ -174,25 +166,6 @@ const tokenList = {
         const icon = th.querySelector('.sort-icon');
         if (icon) icon.className = `sort-icon ${this.sortOrder}`;
 
-        this.loadTokens();
-      });
-    });
-
-    // Rows per page selector
-    document.querySelectorAll('.rows-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (this.isLoading) return;
-
-        const newPageSize = parseInt(btn.dataset.rows);
-        if (newPageSize === this.pageSize) return;
-
-        document.querySelectorAll('.rows-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        this.pageSize = newPageSize;
-        this.currentPage = 1; // Reset to first page
-        utils.setUrlParam('rows', newPageSize !== 50 ? newPageSize : null);
-        utils.setUrlParam('page', null);
         this.loadTokens();
       });
     });

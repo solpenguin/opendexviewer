@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../services/database');
 const solanaService = require('../services/solana');
 const { cache, keys, TTL } = require('../services/cache');
-const { validateVote, asyncHandler, requireDatabase } = require('../middleware/validation');
+const { validateVote, validateVoteSignature, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
@@ -68,8 +68,9 @@ async function verifyHolderStatus(wallet, tokenMint) {
       verifiedAt: Date.now()
     };
 
-    // Cache for 60 seconds - balances don't change that often, reduces RPC calls
-    await cache.set(cacheKey, result, TTL.MEDIUM);
+    // Cache for 30 seconds - short TTL to prevent abuse via token transfers after voting
+    // Balance can change quickly in DeFi, so we need relatively fresh verification
+    await cache.set(cacheKey, result, TTL.SHORT);
 
     return result;
   } catch (error) {
@@ -86,8 +87,8 @@ async function verifyHolderStatus(wallet, tokenMint) {
   }
 }
 
-// POST /api/votes - Cast a vote (requires holder verification)
-router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
+// POST /api/votes - Cast a vote (requires holder verification and wallet signature)
+router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandler(async (req, res) => {
   const { submissionId, voterWallet, voteType } = req.body;
   const parsedId = parseInt(submissionId, 10);
 
@@ -127,9 +128,25 @@ router.post('/', walletLimiter, validateVote, asyncHandler(async (req, res) => {
   // Check for existing vote
   const existingVote = await db.getVote(parsedId, voterWallet);
 
+  // Vote cooldown period (10 seconds) to prevent rapid vote flipping
+  const VOTE_COOLDOWN_MS = 10 * 1000;
+
   let result;
 
   if (existingVote) {
+    // Check vote cooldown - prevent rapid vote changes
+    const lastVoteTime = new Date(existingVote.updated_at || existingVote.created_at).getTime();
+    const timeSinceLastVote = Date.now() - lastVoteTime;
+
+    if (timeSinceLastVote < VOTE_COOLDOWN_MS) {
+      const remainingSeconds = Math.ceil((VOTE_COOLDOWN_MS - timeSinceLastVote) / 1000);
+      return res.status(429).json({
+        error: `Please wait ${remainingSeconds} seconds before changing your vote`,
+        code: 'VOTE_COOLDOWN',
+        retryAfter: remainingSeconds
+      });
+    }
+
     if (existingVote.vote_type === voteType) {
       // Same vote - remove it (toggle off)
       await db.deleteVote(parsedId, voterWallet);

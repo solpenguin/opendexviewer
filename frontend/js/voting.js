@@ -39,7 +39,8 @@ const voting = {
   async checkHolderStatus(tokenMint, forceRefresh = false) {
     if (!wallet.connected || !tokenMint) return null;
 
-    const cacheKey = `${tokenMint}:${wallet.address}`;
+    // Use pipe separator to prevent cache key collisions if mint contains colons
+    const cacheKey = `${tokenMint}|${wallet.address}`;
 
     // Check cache first (valid for 2 minutes) unless force refresh
     if (!forceRefresh) {
@@ -66,7 +67,12 @@ const voting = {
     }
   },
 
-  // Cast a vote (now with holder verification)
+  // Create signature message for vote (must match backend)
+  createVoteSignatureMessage(voteType, submissionId, timestamp) {
+    return `OpenDex Vote: ${voteType} on submission #${submissionId} at ${timestamp}`;
+  },
+
+  // Cast a vote (now with holder verification and wallet signature)
   async vote(submissionId, voteType) {
     // Prevent double-voting while a vote is pending
     if (this.pendingVotes.has(submissionId)) {
@@ -98,10 +104,28 @@ const voting = {
       return;
     }
 
-    // Check minimum balance requirement
-    if (holderData.percentageHeld < this.requirements.minVoteBalancePercent) {
+    // Check minimum balance requirement (with proper null/NaN handling)
+    const percentageHeld = parseFloat(holderData.percentageHeld);
+    if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
       toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
       this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
+      return;
+    }
+
+    // Sign the vote with wallet
+    const timestamp = Date.now();
+    const message = this.createVoteSignatureMessage(voteType, submissionId, timestamp);
+
+    let signatureData;
+    try {
+      signatureData = await wallet.signMessage(message);
+    } catch (error) {
+      console.error('Failed to sign vote:', error);
+      if (error.message?.includes('User rejected')) {
+        toast.warning('Vote cancelled - signature required');
+      } else {
+        toast.error('Failed to sign vote. Please try again.');
+      }
       return;
     }
 
@@ -118,7 +142,8 @@ const voting = {
         submissionId,
         voterWallet: wallet.address,
         voteType,
-        holderData // Pass holder data to backend for verification
+        signature: signatureData.signature,
+        signatureTimestamp: timestamp
       });
 
       // Update the vote state
@@ -146,6 +171,15 @@ const voting = {
         toast.error('You must hold this token to vote');
       } else if (error.message && error.message.includes('INSUFFICIENT_BALANCE')) {
         toast.error('Insufficient token balance to vote');
+      } else if (error.message && error.message.includes('SIGNATURE_EXPIRED')) {
+        toast.error('Signature expired - please try again');
+      } else if (error.message && error.message.includes('INVALID_SIGNATURE')) {
+        toast.error('Invalid signature - please reconnect your wallet');
+      } else if (error.message && error.message.includes('VOTE_COOLDOWN')) {
+        // Extract seconds from error message if available
+        const match = error.message.match(/wait (\d+) seconds/);
+        const seconds = match ? match[1] : '10';
+        toast.warning(`Please wait ${seconds}s before changing your vote`);
       } else {
         toast.error('Failed to cast vote. Please try again.');
       }
@@ -178,8 +212,21 @@ const voting = {
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
   },
 
+  // Escape HTML to prevent XSS
+  escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+  },
+
   // Show modal for insufficient balance
   showInsufficientBalanceModal(holderData, required) {
+    // Safely escape all user-controlled values
+    const safeRequired = this.escapeHtml(String(required));
+    const safeBalance = this.escapeHtml((holderData.balance || 0).toLocaleString());
+    const safePercentage = this.escapeHtml((parseFloat(holderData.percentageHeld) || 0).toFixed(6));
+
     const modal = document.createElement('div');
     modal.className = 'voting-modal-overlay';
     modal.innerHTML = `
@@ -192,19 +239,19 @@ const voting = {
           </svg>
         </div>
         <h3>Insufficient Balance</h3>
-        <p>You need at least <strong>${required}%</strong> of the token supply to vote.</p>
+        <p>You need at least <strong>${safeRequired}%</strong> of the token supply to vote.</p>
         <div class="holder-balance-info">
           <div class="balance-row">
             <span>Your balance:</span>
-            <span>${holderData.balance?.toLocaleString() || 0} tokens</span>
+            <span>${safeBalance} tokens</span>
           </div>
           <div class="balance-row">
             <span>Your share:</span>
-            <span>${(holderData.percentageHeld || 0).toFixed(6)}%</span>
+            <span>${safePercentage}%</span>
           </div>
           <div class="balance-row required">
             <span>Required:</span>
-            <span>${required}%</span>
+            <span>${safeRequired}%</span>
           </div>
         </div>
         <div class="voting-modal-actions">

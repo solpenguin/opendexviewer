@@ -2,8 +2,9 @@
  * Input validation middleware
  */
 
-// Validate Solana address format (base58, 32-44 characters)
-const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// Validate Solana address format (base58, exactly 43-44 characters for public keys)
+// Standard Solana addresses are 44 characters, but some derived addresses can be 43
+const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 
 // Validate URL format
 function isValidUrl(string) {
@@ -348,6 +349,229 @@ async function validateApiKey(req, res, next) {
 }
 
 // ==========================================
+// Wallet Signature Verification
+// ==========================================
+
+// Signature expiry time (2 minutes) - prevents replay attacks while allowing reasonable signing time
+const SIGNATURE_EXPIRY_MS = 2 * 60 * 1000;
+
+/**
+ * Verify a Solana wallet signature
+ * Uses Ed25519 signature verification via tweetnacl
+ *
+ * @param {string} message - The message that was signed
+ * @param {number[]} signature - The signature as an array of bytes
+ * @param {string} walletAddress - The wallet address (base58 public key)
+ * @returns {boolean} True if signature is valid
+ */
+function verifyWalletSignature(message, signature, walletAddress) {
+  try {
+    const nacl = require('tweetnacl');
+    const bs58 = require('bs58');
+
+    // Decode the wallet address (base58 public key)
+    const publicKey = bs58.decode(walletAddress);
+
+    // Ensure public key is 32 bytes (Ed25519)
+    if (publicKey.length !== 32) {
+      console.error('[Signature] Invalid public key length:', publicKey.length);
+      return false;
+    }
+
+    // Convert signature array to Uint8Array
+    const signatureBytes = new Uint8Array(signature);
+
+    // Ensure signature is 64 bytes (Ed25519)
+    if (signatureBytes.length !== 64) {
+      console.error('[Signature] Invalid signature length:', signatureBytes.length);
+      return false;
+    }
+
+    // Encode the message
+    const messageBytes = new TextEncoder().encode(message);
+
+    // Verify the signature
+    const isValid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKey);
+
+    return isValid;
+  } catch (error) {
+    console.error('[Signature] Verification error:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Create the message to be signed for a vote
+ * Format: "OpenDex Vote: [voteType] on [submissionId] at [timestamp]"
+ *
+ * @param {string} voteType - 'up' or 'down'
+ * @param {number} submissionId - The submission ID
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createVoteSignatureMessage(voteType, submissionId, timestamp) {
+  return `OpenDex Vote: ${voteType} on submission #${submissionId} at ${timestamp}`;
+}
+
+/**
+ * Create the message to be signed for a submission
+ * Format: "OpenDex Submit: [type] for [tokenMint] at [timestamp]"
+ *
+ * @param {string} submissionType - The submission type
+ * @param {string} tokenMint - The token mint address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createSubmissionSignatureMessage(submissionType, tokenMint, timestamp) {
+  return `OpenDex Submit: ${submissionType} for ${tokenMint} at ${timestamp}`;
+}
+
+/**
+ * Middleware to validate wallet signature for votes
+ * Requires: signature, signatureTimestamp in request body
+ */
+function validateVoteSignature(req, res, next) {
+  const { submissionId, voterWallet, voteType, signature, signatureTimestamp } = req.body;
+
+  // Check if signature fields are present
+  if (!signature || !signatureTimestamp) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the vote with your wallet',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  // Validate signature timestamp (must be within expiry window)
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({
+      error: 'Signature expired',
+      message: 'Please sign again - signatures expire after 2 minutes',
+      code: 'SIGNATURE_EXPIRED'
+    });
+  }
+
+  // Prevent future timestamps (with 10 second tolerance for clock skew)
+  if (timestamp > now + 10000) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      message: 'Signature timestamp is in the future',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  // Validate signature format (should be array of numbers)
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({
+      error: 'Invalid signature format',
+      code: 'INVALID_SIGNATURE_FORMAT'
+    });
+  }
+
+  // Recreate the expected message
+  const expectedMessage = createVoteSignatureMessage(voteType, parseInt(submissionId), timestamp);
+
+  // Verify the signature
+  const isValid = verifyWalletSignature(expectedMessage, signature, voterWallet);
+
+  if (!isValid) {
+    return res.status(401).json({
+      error: 'Invalid signature',
+      message: 'Wallet signature verification failed',
+      code: 'INVALID_SIGNATURE'
+    });
+  }
+
+  // Signature is valid - proceed
+  next();
+}
+
+/**
+ * Middleware to validate wallet signature for submissions
+ * Requires: signature, signatureTimestamp, submitterWallet in request body
+ */
+function validateSubmissionSignature(req, res, next) {
+  const { tokenMint, submissionType, submitterWallet, signature, signatureTimestamp } = req.body;
+
+  // Check if signature fields are present
+  if (!signature || !signatureTimestamp || !submitterWallet) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the submission with your wallet',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  // Validate submitter wallet format
+  if (!SOLANA_ADDRESS_REGEX.test(submitterWallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  // Validate signature timestamp (must be within expiry window)
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({
+      error: 'Signature expired',
+      message: 'Please sign again - signatures expire after 2 minutes',
+      code: 'SIGNATURE_EXPIRED'
+    });
+  }
+
+  // Prevent future timestamps (with 10 second tolerance for clock skew)
+  if (timestamp > now + 10000) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      message: 'Signature timestamp is in the future',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  // Validate signature format (should be array of numbers)
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({
+      error: 'Invalid signature format',
+      code: 'INVALID_SIGNATURE_FORMAT'
+    });
+  }
+
+  // Recreate the expected message
+  const expectedMessage = createSubmissionSignatureMessage(submissionType, tokenMint, timestamp);
+
+  // Verify the signature
+  const isValid = verifyWalletSignature(expectedMessage, signature, submitterWallet);
+
+  if (!isValid) {
+    return res.status(401).json({
+      error: 'Invalid signature',
+      message: 'Wallet signature verification failed',
+      code: 'INVALID_SIGNATURE'
+    });
+  }
+
+  // Signature is valid - proceed
+  next();
+}
+
+// ==========================================
 // Admin Authentication
 // ==========================================
 
@@ -441,6 +665,13 @@ module.exports = {
   hashApiKey,
   generateApiKey,
   validateApiKey,
+  // Wallet Signature functions
+  verifyWalletSignature,
+  validateVoteSignature,
+  validateSubmissionSignature,
+  createVoteSignatureMessage,
+  createSubmissionSignatureMessage,
+  SIGNATURE_EXPIRY_MS,
   // Admin functions
   generateAdminSessionToken,
   verifyAdminPassword,

@@ -92,57 +92,65 @@ const tokenDetail = {
     if (errorMsg) errorMsg.textContent = message;
   },
 
-  // Bind events
+  // Store bound event handlers for cleanup
+  boundHandlers: new Map(),
+
+  // Bind events with cleanup tracking
   bindEvents() {
+    // Clear any existing handlers first (prevent memory leaks on re-init)
+    this.unbindEvents();
+
+    // Helper to track handlers for later cleanup
+    const bindHandler = (element, event, handler) => {
+      if (!element) return;
+      element.addEventListener(event, handler);
+      if (!this.boundHandlers.has(element)) {
+        this.boundHandlers.set(element, []);
+      }
+      this.boundHandlers.get(element).push({ event, handler });
+    };
+
     // Copy address button
     const copyBtn = document.getElementById('copy-address');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', async () => {
-        const copied = await utils.copyToClipboard(this.mint);
-        if (copied) {
-          toast.success('Address copied to clipboard');
-        }
-      });
-    }
+    const copyHandler = async () => {
+      const copied = await utils.copyToClipboard(this.mint);
+      if (copied) {
+        toast.success('Address copied to clipboard');
+      }
+    };
+    bindHandler(copyBtn, 'click', copyHandler);
 
     // Address click also copies
     const addressEl = document.getElementById('token-address');
-    if (addressEl) {
-      addressEl.addEventListener('click', async () => {
-        const copied = await utils.copyToClipboard(this.mint);
-        if (copied) {
-          toast.success('Address copied to clipboard');
-        }
-      });
-    }
+    bindHandler(addressEl, 'click', copyHandler);
 
     // Watchlist button
     const watchlistBtn = document.getElementById('watchlist-btn');
-    if (watchlistBtn) {
-      watchlistBtn.addEventListener('click', async () => {
-        if (!this.mint) return;
-        watchlistBtn.disabled = true;
-        await watchlist.toggle(this.mint);
-        this.updateWatchlistButton();
-        watchlistBtn.disabled = false;
-      });
-    }
+    const watchlistHandler = async () => {
+      if (!this.mint) return;
+      watchlistBtn.disabled = true;
+      await watchlist.toggle(this.mint);
+      this.updateWatchlistButton();
+      watchlistBtn.disabled = false;
+    };
+    bindHandler(watchlistBtn, 'click', watchlistHandler);
 
     // Chart type toggle (line/candle)
     document.querySelectorAll('.chart-type-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      const handler = () => {
         document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.chartType = btn.dataset.type;
         if (this.chartData) {
           this.renderChart(this.chartData);
         }
-      });
+      };
+      bindHandler(btn, 'click', handler);
     });
 
     // Chart metric toggle (price/mcap)
     document.querySelectorAll('.chart-metric-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      const handler = () => {
         document.querySelectorAll('.chart-metric-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.chartMetric = btn.dataset.metric;
@@ -155,32 +163,69 @@ const tokenDetail = {
           this.renderChart(this.chartData);
           this.updateChartStats(this.chartData);
         }
-      });
+      };
+      bindHandler(btn, 'click', handler);
     });
 
     // Chart timeframes
     document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      const handler = () => {
         document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentInterval = btn.dataset.interval;
         this.loadChart(this.currentInterval);
-      });
+      };
+      bindHandler(btn, 'click', handler);
     });
 
     // Submission tabs
     document.querySelectorAll('.submissions-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
+      const handler = () => {
         document.querySelectorAll('.submissions-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         this.renderSubmissions(tab.dataset.type);
-      });
+      };
+      bindHandler(tab, 'click', handler);
     });
 
-    // Submit link with token pre-filled
+    // Submit link with token pre-filled (use encodeURIComponent for safety)
     const submitLink = document.getElementById('submit-link');
     if (submitLink) {
-      submitLink.href = `submit.html?mint=${this.mint}`;
+      submitLink.href = `submit.html?mint=${encodeURIComponent(this.mint)}`;
+    }
+
+    // Visibility change handler for pausing/resuming intervals
+    this.visibilityHandler = () => {
+      if (document.visibilityState === 'hidden') {
+        // Page is hidden, clear intervals to save resources
+        if (this.priceRefreshInterval) {
+          clearInterval(this.priceRefreshInterval);
+          this.priceRefreshInterval = null;
+        }
+      } else if (document.visibilityState === 'visible') {
+        // Page is visible again, restart intervals if needed
+        if (!this.priceRefreshInterval && this.mint) {
+          this.refreshPrice(); // Immediate refresh when becoming visible
+          this.startPriceRefresh();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+  },
+
+  // Remove all bound event listeners
+  unbindEvents() {
+    for (const [element, handlers] of this.boundHandlers) {
+      for (const { event, handler } of handlers) {
+        element.removeEventListener(event, handler);
+      }
+    }
+    this.boundHandlers.clear();
+
+    // Remove visibility handler
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
     }
   },
 
@@ -340,7 +385,7 @@ const tokenDetail = {
           <div class="pool-card">
             <div class="pool-pair">
               <span class="pool-symbols">${this.escapeHtml(pool.symbolA || '?')}/${this.escapeHtml(pool.symbolB || '?')}</span>
-              <span class="pool-type">${pool.type || 'AMM'}</span>
+              <span class="pool-type">${this.escapeHtml(pool.type || 'AMM')}</span>
             </div>
             <div class="pool-stats">
               <div class="pool-stat">
@@ -855,9 +900,9 @@ const tokenDetail = {
       };
 
       linksContainer.innerHTML = Object.values(grouped).map(s => `
-        <a href="${this.escapeHtml(s.content_url)}" target="_blank" rel="noopener noreferrer" class="community-link-chip ${s.submission_type}">
-          ${icons[s.submission_type]}
-          <span>${labels[s.submission_type]}</span>
+        <a href="${this.escapeHtml(s.content_url)}" target="_blank" rel="noopener noreferrer" class="community-link-chip ${this.escapeHtml(s.submission_type)}">
+          ${icons[s.submission_type] || ''}
+          <span>${labels[s.submission_type] || this.escapeHtml(s.submission_type)}</span>
         </a>
       `).join('');
       linksContainer.style.display = 'flex';
@@ -907,6 +952,9 @@ const tokenDetail = {
       filtered = this.submissions.filter(s => s.submission_type !== 'banner');
     }
 
+    // Sort by score (descending) for consistent ordering
+    filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
+
     // Clear container
     container.innerHTML = '';
 
@@ -930,6 +978,12 @@ const tokenDetail = {
 
     // Build submission cards using DOM methods for XSS safety
     filtered.forEach(s => {
+      // Skip submissions with invalid or missing IDs
+      if (!s || !s.id || isNaN(parseInt(s.id))) {
+        console.warn('Skipping submission with invalid ID:', s);
+        return;
+      }
+
       const card = document.createElement('div');
       card.className = 'submission-card';
 
@@ -1002,7 +1056,14 @@ const tokenDetail = {
         weightedScore.className = `weighted-score ${weightedScoreValue >= 0 ? 'positive' : 'negative'}`;
         weightedScore.textContent = `(${weightedScoreValue.toFixed(1)}w)`;
         weightedScore.setAttribute('data-weighted-score', s.id);
-        weightedScore.title = 'Weighted score based on voter holdings';
+        // Detailed tooltip explaining vote weight system
+        weightedScore.title = `Weighted Score: ${weightedScoreValue.toFixed(1)}\n` +
+          'Votes are weighted by holder percentage:\n' +
+          '• ≥1% holdings = 3x weight\n' +
+          '• ≥0.1% holdings = 2x weight\n' +
+          '• ≥0.01% holdings = 1.5x weight\n' +
+          '• <0.01% holdings = 1x weight';
+        weightedScore.style.cursor = 'help';
         scoreContainer.appendChild(score);
         scoreContainer.appendChild(weightedScore);
       } else {
@@ -1120,15 +1181,28 @@ const tokenDetail = {
 
   // Cleanup on page unload
   destroy() {
+    // Clear all intervals
     if (this.priceRefreshInterval) {
       clearInterval(this.priceRefreshInterval);
+      this.priceRefreshInterval = null;
     }
     if (this.freshnessInterval) {
       clearInterval(this.freshnessInterval);
+      this.freshnessInterval = null;
     }
-    if (this.chart) {
-      this.chart.destroy();
+
+    // Destroy chart safely
+    if (this.chart && typeof this.chart.destroy === 'function') {
+      try {
+        this.chart.destroy();
+      } catch (e) {
+        console.warn('Chart destruction failed:', e.message);
+      }
+      this.chart = null;
     }
+
+    // Remove all event listeners
+    this.unbindEvents();
   }
 };
 

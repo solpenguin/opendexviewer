@@ -173,6 +173,12 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_submissions_created ON submissions(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_submissions_token_status ON submissions(token_mint, status);
 
+      -- Unique constraint on token_mint + submission_type + normalized content_url (prevents duplicate submissions)
+      -- Only applies to non-rejected submissions via partial index
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_submissions_unique_content
+        ON submissions(token_mint, submission_type, LOWER(TRIM(TRAILING '/' FROM content_url)))
+        WHERE status != 'rejected';
+
       -- Vote indexes (optimized for concurrent load)
       CREATE INDEX IF NOT EXISTS idx_votes_submission ON votes(submission_id);
       CREATE INDEX IF NOT EXISTS idx_votes_wallet ON votes(voter_wallet);
@@ -278,10 +284,15 @@ async function getToken(mintAddress) {
 }
 
 // Search tokens by name, symbol, or mint address
+// Max query length to prevent DoS via expensive LIKE queries
+const MAX_SEARCH_QUERY_LENGTH = 100;
+
 async function searchTokens(query, limit = 10) {
   if (!pool) return [];
 
-  const searchPattern = `%${query.toLowerCase()}%`;
+  // Truncate query to prevent DoS attacks with very long search strings
+  const safeQuery = query.slice(0, MAX_SEARCH_QUERY_LENGTH);
+  const searchPattern = `%${safeQuery.toLowerCase()}%`;
 
   const result = await pool.query(
     `SELECT mint_address, name, symbol, decimals, logo_uri, created_at
@@ -299,7 +310,7 @@ async function searchTokens(query, limit = 10) {
        END,
        created_at DESC
      LIMIT $5`,
-    [searchPattern, `%${query}%`, query.toLowerCase(), `${query.toLowerCase()}%`, limit]
+    [searchPattern, `%${safeQuery}%`, safeQuery.toLowerCase(), `${safeQuery.toLowerCase()}%`, limit]
   );
 
   return result.rows.map(row => ({
@@ -313,21 +324,41 @@ async function searchTokens(query, limit = 10) {
 }
 
 // Submission operations
+// Uses transaction to atomically check for duplicates and create submission
 async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet }) {
-  const result = await pool.query(
-    `INSERT INTO submissions (token_mint, submission_type, content_url, submitter_wallet)
-     VALUES ($1, $2, $3, $4)
-     RETURNING *`,
-    [tokenMint, submissionType, contentUrl, submitterWallet]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  // Initialize vote tally
-  await pool.query(
-    `INSERT INTO vote_tallies (submission_id) VALUES ($1)`,
-    [result.rows[0].id]
-  );
+    // Insert with ON CONFLICT to handle race conditions atomically
+    // The unique index idx_submissions_unique_content enforces uniqueness at DB level
+    const result = await client.query(
+      `INSERT INTO submissions (token_mint, submission_type, content_url, submitter_wallet)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [tokenMint, submissionType, contentUrl, submitterWallet]
+    );
 
-  return result.rows[0];
+    // Initialize vote tally
+    await client.query(
+      `INSERT INTO vote_tallies (submission_id) VALUES ($1)`,
+      [result.rows[0].id]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    // Check if it's a unique constraint violation (duplicate submission)
+    if (error.code === '23505' && error.constraint?.includes('submissions_unique_content')) {
+      const duplicateError = new Error('This content has already been submitted for this token');
+      duplicateError.code = 'DUPLICATE_SUBMISSION';
+      throw duplicateError;
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function getSubmission(id) {

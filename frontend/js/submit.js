@@ -390,6 +390,18 @@ const submitPage = {
       const balanceEl = document.getElementById('holder-balance');
       const percentageEl = document.getElementById('holder-percentage');
 
+      // Add refresh button if not already present
+      let refreshBtn = document.getElementById('holder-refresh-btn');
+      if (!refreshBtn) {
+        refreshBtn = document.createElement('button');
+        refreshBtn.id = 'holder-refresh-btn';
+        refreshBtn.className = 'btn btn-icon btn-small';
+        refreshBtn.title = 'Refresh holder status';
+        refreshBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>';
+        refreshBtn.onclick = () => this.checkHolderStatus(mint);
+        statusDiv?.parentNode?.insertBefore(refreshBtn, statusDiv.nextSibling);
+      }
+
       if (holderInfo.holdsToken) {
         statusDiv.className = 'holder-status verified';
         statusIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -574,6 +586,11 @@ const submitPage = {
     }
   },
 
+  // Create signature message for submission (must match backend)
+  createSubmissionSignatureMessage(submissionType, tokenMint, timestamp) {
+    return `OpenDex Submit: ${submissionType} for ${tokenMint} at ${timestamp}`;
+  },
+
   // Submit form - handles multiple submissions
   async submitForm() {
     if (!this.walletConnected) {
@@ -609,11 +626,38 @@ const submitPage = {
     const submitBtn = document.getElementById('submit-btn');
     const submitBtnText = document.getElementById('submit-btn-text');
 
+    // Sign each submission with wallet
+    // We need to sign each submission type separately
+    toast.info('Please sign the submission with your wallet...');
+
+    const signedSubmissions = [];
+    for (const submission of submissions) {
+      const timestamp = Date.now();
+      const message = this.createSubmissionSignatureMessage(submission.submissionType, tokenMint, timestamp);
+
+      try {
+        const signatureData = await wallet.signMessage(message);
+        signedSubmissions.push({
+          ...submission,
+          signature: signatureData.signature,
+          signatureTimestamp: timestamp
+        });
+      } catch (error) {
+        console.error('Failed to sign submission:', error);
+        if (error.message?.includes('User rejected')) {
+          toast.warning('Submission cancelled - signature required');
+        } else {
+          toast.error(`Failed to sign ${submission.submissionType} submission`);
+        }
+        return;
+      }
+    }
+
     // Disable button during submission
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
       <div class="loading-spinner small"></div>
-      <span>Submitting ${submissions.length} item${submissions.length > 1 ? 's' : ''}...</span>
+      <span>Submitting ${signedSubmissions.length} item${signedSubmissions.length > 1 ? 's' : ''}...</span>
     `;
 
     try {
@@ -621,7 +665,7 @@ const submitPage = {
       const results = [];
       const errors = [];
 
-      for (const submission of submissions) {
+      for (const submission of signedSubmissions) {
         try {
           const result = await api.submissions.create(submission);
           results.push({ type: submission.submissionType, result });
@@ -630,15 +674,24 @@ const submitPage = {
         }
       }
 
-      // Show results
-      if (results.length > 0) {
-        const types = results.map(r => r.type).join(', ');
+      // Show results with detailed feedback
+      if (results.length > 0 && errors.length === 0) {
+        // All succeeded
         toast.success(`${results.length} submission${results.length > 1 ? 's' : ''} received!`);
         this.showSuccessModal(results, errors);
-      }
-
-      if (errors.length > 0 && results.length === 0) {
-        toast.error('All submissions failed. Please try again.');
+      } else if (results.length > 0 && errors.length > 0) {
+        // Partial success - some succeeded, some failed
+        toast.warning(`${results.length} succeeded, ${errors.length} failed`);
+        this.showSuccessModal(results, errors);
+      } else if (errors.length > 0 && results.length === 0) {
+        // All failed - show detailed error messages
+        const uniqueErrors = [...new Set(errors.map(e => this.getReadableError(e.error)))];
+        if (uniqueErrors.length === 1) {
+          toast.error(uniqueErrors[0]);
+        } else {
+          toast.error(`All ${errors.length} submissions failed`);
+        }
+        this.showErrorModal(errors);
       }
 
       // Clear form if at least one succeeded
@@ -978,6 +1031,74 @@ const submitPage = {
     } catch {
       return url.slice(0, 40) + (url.length > 40 ? '...' : '');
     }
+  },
+
+  // Convert API error to user-friendly message
+  getReadableError(errorMessage) {
+    if (!errorMessage) return 'Unknown error';
+
+    // Map common errors to friendly messages
+    const errorMappings = {
+      'already been submitted': 'This content was already submitted',
+      'DUPLICATE_SUBMISSION': 'This content was already submitted',
+      'Invalid token': 'Token not found',
+      'Invalid URL': 'Invalid URL format',
+      'URL shorteners': 'URL shorteners are not allowed',
+      'SIGNATURE_EXPIRED': 'Signature expired - please try again',
+      'INVALID_SIGNATURE': 'Invalid signature',
+      'rate limit': 'Too many requests - please wait',
+      'HTTP 429': 'Too many requests - please wait',
+      'HTTP 503': 'Server temporarily unavailable'
+    };
+
+    for (const [key, message] of Object.entries(errorMappings)) {
+      if (errorMessage.includes(key)) {
+        return message;
+      }
+    }
+
+    return errorMessage;
+  },
+
+  // Show error modal for failed submissions
+  showErrorModal(errors) {
+    const modal = document.createElement('div');
+    modal.className = 'submission-modal-overlay';
+
+    const errorList = errors.map(e => {
+      const typeLabel = e.type.charAt(0).toUpperCase() + e.type.slice(1);
+      const readableError = this.getReadableError(e.error);
+      return `
+        <div class="error-item">
+          <span class="error-type">${utils.escapeHtml(typeLabel)}</span>
+          <span class="error-message">${utils.escapeHtml(readableError)}</span>
+        </div>
+      `;
+    }).join('');
+
+    modal.innerHTML = `
+      <div class="submission-modal">
+        <div class="modal-icon error">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <h3>Submission Failed</h3>
+        <p>The following submissions could not be completed:</p>
+        <div class="error-list">
+          ${errorList}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="this.closest('.submission-modal-overlay').remove()">Close</button>
+          <button class="btn btn-primary" onclick="this.closest('.submission-modal-overlay').remove()">Try Again</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
   }
 };
 

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Developer API - OpenDex</title>
+  <meta name="description" content="Access OpenDex community content programmatically. Free API for token banners, social links, and community-curated data.">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <img src="OpenDEX_Logo.png" alt="OpenDex Logo" class="logo-img" width="28" height="28">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">Beta</span>
+      </a>
+
+      <nav class="nav">
+        <a href="/" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+        <a href="about.html" class="nav-link">About</a>
+        <a href="api.html" class="nav-link active">API</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main about-page">
+    <!-- Page Hero -->
+    <section class="submit-hero">
+      <div class="submit-hero-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 18 22 12 16 6"/>
+          <polyline points="8 6 2 12 8 18"/>
+        </svg>
+      </div>
+      <h1>Developer API</h1>
+      <p>Access community content programmatically for your apps and tools</p>
+    </section>
+
+    <!-- Developer API Section -->
+    <section class="about-section api-section" id="api-section">
+      <!-- API Key Management -->
+      <div class="api-key-section">
+        <h3>Your API Key</h3>
+        <p class="api-key-description">Register for a free API key to access community content (banners, social links) for any token. One key per wallet.</p>
+
+        <!-- Not connected state -->
+        <div id="api-key-connect" class="api-key-card">
+          <div class="api-key-card-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2"/>
+              <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+            </svg>
+            <p>Connect your wallet to manage your API key</p>
+            <button type="button" id="connect-wallet-api" class="btn btn-secondary">Connect Wallet</button>
+          </div>
+        </div>
+
+        <!-- Has no key state -->
+        <div id="api-key-register" class="api-key-card" style="display: none;">
+          <div class="api-key-card-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <p>You don't have an API key yet</p>
+            <div class="api-key-register-form">
+              <input type="text" id="api-key-name" placeholder="App name (optional)" maxlength="100">
+              <button type="button" id="register-api-key-btn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Generate API Key
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Has key state -->
+        <div id="api-key-info" class="api-key-card" style="display: none;">
+          <div class="api-key-card-header">
+            <div class="api-key-status active">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Active
+            </div>
+            <button type="button" id="revoke-api-key-btn" class="btn btn-ghost btn-sm btn-danger">Revoke Key</button>
+          </div>
+          <div class="api-key-details">
+            <div class="api-key-row">
+              <span class="api-key-label">Key Prefix</span>
+              <span class="api-key-value" id="api-key-prefix">--------</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Created</span>
+              <span class="api-key-value" id="api-key-created-date">--</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Last Used</span>
+              <span class="api-key-value" id="api-key-last-used">Never</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Requests</span>
+              <span class="api-key-value" id="api-key-requests">0</span>
+            </div>
+          </div>
+          <p class="api-key-note">Your full API key was shown only once when created. If you've lost it, revoke this key and create a new one.</p>
+        </div>
+
+        <!-- New key created state (shows full key once) -->
+        <div id="api-key-created" class="api-key-card api-key-created-card" style="display: none;">
+          <div class="api-key-success-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <h4>API Key Created!</h4>
+          </div>
+          <p class="api-key-warning">Save this key now - it will only be shown once!</p>
+          <div class="api-key-display">
+            <code id="api-key-full"></code>
+            <button type="button" id="copy-api-key-btn" class="btn btn-ghost btn-sm" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <button type="button" id="api-key-done-btn" class="btn btn-primary">I've Saved My Key</button>
+        </div>
+      </div>
+
+      <!-- API Documentation -->
+      <div class="api-docs-section">
+        <h3>API Endpoints</h3>
+        <p>All API requests require your API key in the <code>X-API-Key</code> header.</p>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get community content (banner, social links) for a token</p>
+          <div class="api-example">
+            <div class="api-example-label">Example Request</div>
+            <pre><code>curl -H "X-API-Key: YOUR_KEY" \
+  https://api.opendex.dev/api/v1/community/So11111111111111111111111111111111111111112</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "success": true,
+  "data": {
+    "token": "So11111111111111111111111111111111111111112",
+    "banner": {
+      "url": "https://i.imgur.com/example.png",
+      "score": 15
+    },
+    "links": {
+      "twitter": { "url": "https://twitter.com/solana", "score": 12 },
+      "telegram": null,
+      "discord": { "url": "https://discord.gg/solana", "score": 8 },
+      "website": { "url": "https://solana.com", "score": 10 }
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/:mint/all</code>
+          </div>
+          <p class="api-endpoint-desc">Get all approved submissions for a token (not just top-voted)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>type    (optional) - Filter by type: banner, twitter, telegram, discord, website</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/batch</code>
+          </div>
+          <p class="api-endpoint-desc">Get community content for multiple tokens at once (max 20)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>mints   (required) - Comma-separated token addresses (max 20)</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Example Request</div>
+            <pre><code>curl -H "X-API-Key: YOUR_KEY" \
+  "https://api.opendex.dev/api/v1/community/batch?mints=mint1,mint2,mint3"</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/keys/info</code>
+          </div>
+          <p class="api-endpoint-desc">Get information about your API key (usage stats, creation date)</p>
+        </div>
+
+        <h3>Rate Limits</h3>
+        <p>API requests are rate limited to prevent abuse:</p>
+        <ul class="api-rate-limits">
+          <li><strong>100 requests/minute</strong> - Standard endpoints</li>
+          <li><strong>10 requests/minute</strong> - Key registration</li>
+        </ul>
+
+        <h3>Error Codes</h3>
+        <div class="api-error-codes">
+          <div class="api-error-code">
+            <code>401</code>
+            <span>Missing or invalid API key</span>
+          </div>
+          <div class="api-error-code">
+            <code>403</code>
+            <span>API key has been revoked</span>
+          </div>
+          <div class="api-error-code">
+            <code>429</code>
+            <span>Rate limit exceeded</span>
+          </div>
+          <div class="api-error-code">
+            <code>503</code>
+            <span>Service temporarily unavailable</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank">GitHub</a>
+        <span class="separator">|</span>
+        <a href="docs/API.md" target="_blank">API Docs</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/about.js"></script>
+</body>
+</html>

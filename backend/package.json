@@ -1,7 +1,7 @@
 {
   "name": "opendex-backend",
   "version": "1.0.0",
-  "description": "Backend API for OpenDexViewer - Open Source DexScreener Alternative",
+  "description": "Backend API for OpenDexViewer - Open Source Solana Token Viewer",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
@@ -24,14 +24,18 @@
   "author": "The Sol Penguin",
   "license": "MIT",
   "dependencies": {
+    "@solana/web3.js": "^1.87.0",
     "axios": "^1.6.0",
+    "bs58": "^5.0.0",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
     "ioredis": "^5.3.2",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "tweetnacl": "^1.0.3"
   }
 }

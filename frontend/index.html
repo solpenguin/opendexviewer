@@ -27,6 +27,7 @@
         <a href="/" class="nav-link active">Tokens</a>
         <a href="submit.html" class="nav-link">Submit</a>
         <a href="about.html" class="nav-link">About</a>
+        <a href="api.html" class="nav-link">API</a>
       </nav>
 
       <div class="header-actions">
@@ -163,13 +164,13 @@
                 24h
                 <span class="sort-icon"></span>
               </th>
-              <th class="th-volume sortable active" data-sort="volume">
+              <th class="th-volume sortable" data-sort="volume">
                 Volume
-                <span class="sort-icon desc"></span>
-              </th>
-              <th class="th-mcap sortable" data-sort="mcap">
-                Market Cap
                 <span class="sort-icon"></span>
+              </th>
+              <th class="th-mcap sortable active" data-sort="mcap">
+                Market Cap
+                <span class="sort-icon desc"></span>
               </th>
               <th class="th-views sortable" data-sort="views">
                 Views
@@ -197,12 +198,7 @@
 
       <div class="pagination">
         <div class="pagination-left">
-          <span class="rows-label">Rows:</span>
-          <div class="rows-selector">
-            <button class="rows-btn" data-rows="10">10</button>
-            <button class="rows-btn" data-rows="25">25</button>
-            <button class="rows-btn active" data-rows="50">50</button>
-          </div>
+          <!-- Static 15 entries per page -->
         </div>
 
         <div class="pagination-center">

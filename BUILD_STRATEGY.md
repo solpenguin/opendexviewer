@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-**OpenDexViewer** is an open-source, open-access alternative to DexScreener for viewing Solana tokens. The platform allows token leaders to submit banners and social links for free, with community sentiment voting to curate content.
+**OpenDexViewer** is an open-source, open-access Solana token viewer. The platform allows token leaders to submit banners and social links for free, with community sentiment voting to curate content.
 
 ### Core Principles
 - **100% Free**: No paid features for banner/social link submissions
 - **Community-Driven**: Voting system determines displayed content
 - **Open Source**: Fully transparent codebase
-- **Independent**: No reliance on DexScreener's API
+- **Independent**: Built on open APIs (Jupiter, Helius, GeckoTerminal)
 
 ---
 
@@ -47,9 +47,9 @@
 
 ---
 
-## Data Sources (DexScreener-Free)
+## Data Sources
 
-Since we cannot use DexScreener's API, we will use these alternative data sources:
+We use the following open APIs for token data:
 
 ### 1. Solana RPC Providers
 - **Helius** (Recommended) - Free tier available, excellent Solana support

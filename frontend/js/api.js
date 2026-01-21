@@ -73,10 +73,15 @@ const apiCache = {
 
     // If stale cache exists and allowStale, return it and refresh in background
     if (cached && allowStale) {
-      // Background refresh (fire and forget)
+      // Background refresh (fire and forget, but log errors for debugging)
       fetchFn().then(data => {
         if (data) this.set(key, data, ttl);
-      }).catch(() => {});
+      }).catch(error => {
+        // Log background refresh failures for debugging, but don't throw
+        if (typeof config !== 'undefined' && config.debug) {
+          console.warn(`[Cache] Background refresh failed for ${key}:`, error.message);
+        }
+      });
       return cached.data;
     }
 

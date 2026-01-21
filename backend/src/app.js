@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const compression = require('compression');
 
 // Import routes
@@ -15,7 +16,44 @@ const adminRoutes = require('./routes/admin');
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
 
+// Import database for cleanup jobs
+const db = require('./services/database');
+
 const app = express();
+
+// Periodic cleanup job for expired admin sessions (runs every hour)
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+let cleanupIntervalId = null;
+
+function startCleanupJobs() {
+  // Clean up expired sessions immediately on startup
+  if (db.isReady()) {
+    db.cleanupExpiredAdminSessions()
+      .then(count => {
+        if (count > 0) {
+          console.log(`[Cleanup] Removed ${count} expired admin sessions on startup`);
+        }
+      })
+      .catch(err => console.error('[Cleanup] Failed to clean up sessions:', err.message));
+  }
+
+  // Schedule periodic cleanup
+  cleanupIntervalId = setInterval(async () => {
+    if (db.isReady()) {
+      try {
+        const count = await db.cleanupExpiredAdminSessions();
+        if (count > 0) {
+          console.log(`[Cleanup] Removed ${count} expired admin sessions`);
+        }
+      } catch (err) {
+        console.error('[Cleanup] Failed to clean up sessions:', err.message);
+      }
+    }
+  }, CLEANUP_INTERVAL_MS);
+}
+
+// Start cleanup jobs after a short delay (allow DB to initialize)
+setTimeout(startCleanupJobs, 5000);
 const PORT = process.env.PORT || 3000;
 
 // Trust proxy (for Render and other PaaS)
@@ -44,6 +82,41 @@ if (process.env.NODE_ENV === 'production' && (!corsOrigins || corsOrigins.length
 }
 
 app.use(cors(corsOptions));
+
+// Security headers - protects against common web vulnerabilities
+// SECURITY: Helmet sets various HTTP headers for security
+app.use(helmet({
+  // Content Security Policy - controls what resources can be loaded
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for static HTML site
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"], // Allow images from HTTPS sources
+      connectSrc: ["'self'", "https://api.mainnet-beta.solana.com", "https://*.helius-rpc.com", "https://api.geckoterminal.com", "https://quote-api.jup.ag"],
+      frameSrc: ["'none'"], // Prevent embedding in iframes
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+    }
+  },
+  // Prevent clickjacking
+  frameguard: { action: 'deny' },
+  // Prevent MIME type sniffing
+  noSniff: true,
+  // XSS filter (legacy browsers)
+  xssFilter: true,
+  // Referrer policy
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  // HSTS - enforce HTTPS (only in production)
+  hsts: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true
+  } : false,
+  // Don't expose server software
+  hidePoweredBy: true
+}));
 
 // Response compression - reduces bandwidth by ~70% for JSON responses
 // Only compress responses > 1KB and in production/high-traffic scenarios
@@ -164,15 +237,20 @@ app.use((err, req, res, next) => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
-  process.exit(0);
-});
+function gracefulShutdown(signal) {
+  console.log(`${signal} received. Shutting down gracefully...`);
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down gracefully...');
+  // Clear cleanup interval
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
+  }
+
   process.exit(0);
-});
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start server
 app.listen(PORT, () => {

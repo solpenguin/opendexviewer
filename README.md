@@ -1,6 +1,6 @@
 # OpenDexViewer
 
-An open-source, free alternative to DexScreener for viewing Solana tokens with community-driven content.
+An open-source, free Solana token viewer with community-driven content.
 
 ## Features
 
@@ -119,11 +119,9 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ## Data Sources
 
-This project intentionally avoids using DexScreener's API. Instead, we use:
-
 - **Jupiter API** - Token prices, metadata, swap routing
-- **Helius RPC** - Solana blockchain data
-- **Raydium/Orca APIs** - Pool and liquidity data
+- **Helius RPC** - Solana blockchain data, token metadata
+- **GeckoTerminal API** - Pool data, OHLCV charts, trending tokens
 
 ## License
 
@@ -135,4 +133,4 @@ Created by The Sol Penguin
 
 ---
 
-*OpenDex is not affiliated with DexScreener. This is an independent, community-driven project.*
+*OpenDex is an independent, community-driven project.*

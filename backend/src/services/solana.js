@@ -12,7 +12,7 @@ const HELIUS_DAS_URL = HELIUS_API_KEY
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : null;
 
-// Make RPC call
+// Make RPC call with defensive error handling
 async function rpcCall(method, params = []) {
   try {
     const response = await axios.post(RPC_URL, {
@@ -20,15 +20,36 @@ async function rpcCall(method, params = []) {
       id: 1,
       method,
       params
+    }, {
+      timeout: 30000 // 30 second timeout
     });
 
+    // Defensive check for malformed responses
+    if (!response || !response.data) {
+      throw new Error('Empty or malformed RPC response');
+    }
+
     if (response.data.error) {
-      throw new Error(response.data.error.message);
+      const errorMsg = response.data.error.message || response.data.error.code || 'Unknown RPC error';
+      throw new Error(errorMsg);
     }
 
     return response.data.result;
   } catch (error) {
-    console.error(`RPC error (${method}):`, error.message);
+    // Handle axios-specific errors
+    if (error.code === 'ECONNABORTED') {
+      console.error(`RPC timeout (${method}): Request timed out`);
+      throw new Error(`RPC timeout for ${method}`);
+    }
+    if (error.response) {
+      // Server responded with error status
+      console.error(`RPC error (${method}): HTTP ${error.response.status}`);
+    } else if (error.request) {
+      // Request made but no response received
+      console.error(`RPC error (${method}): No response received`);
+    } else {
+      console.error(`RPC error (${method}):`, error.message);
+    }
     throw error;
   }
 }
