@@ -305,10 +305,15 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
       // Cache holder count for 24 hours if we fetched it
+      // Only cache values that seem reasonable (>= 1, as even new tokens have at least 1 holder)
+      // If the API returns a suspiciously low value (like 1), don't cache it as long
       if (fetchedHolders !== undefined && fetchedHolders !== null) {
         holders = fetchedHolders;
-        await cache.set(holderCacheKey, holders, TTL.DAY);
-        console.log(`[API /tokens/:mint] Cached holder count: ${holders} for 24 hours`);
+        // If holder count is suspiciously low (1), cache for only 1 hour
+        // This allows for corrections while still preventing repeated API calls
+        const holderTTL = fetchedHolders <= 1 ? TTL.HOUR : TTL.DAY;
+        await cache.set(holderCacheKey, holders, holderTTL);
+        console.log(`[API /tokens/:mint] Cached holder count: ${holders} for ${holderTTL === TTL.HOUR ? '1 hour' : '24 hours'}`);
       }
 
       console.log('[API /tokens/:mint] heliusMetadata:', heliusMetadata ? {

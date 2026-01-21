@@ -105,11 +105,13 @@ async function checkHealth() {
 
 /**
  * Get token holder count using Helius DAS API
- * Uses getTokenAccounts which returns total count in response
+ * Uses getTokenAccounts which returns total count of token accounts in response
+ * Note: This returns token account count, not unique holders (one user can have multiple accounts)
+ * For most tokens, this is a reasonable approximation of holder count
  * Requires HELIUS_API_KEY environment variable
  *
  * @param {string} mintAddress - Token mint address
- * @returns {Promise<number|null>} - Holder count or null if unavailable
+ * @returns {Promise<number|null>} - Token account count (approximate holders) or null if unavailable
  */
 async function getTokenHolderCount(mintAddress) {
   if (!HELIUS_DAS_URL) {
@@ -121,7 +123,8 @@ async function getTokenHolderCount(mintAddress) {
     console.log(`[Solana] Fetching holder count for ${mintAddress}`);
 
     // Use Helius DAS API getTokenAccounts method
-    // This returns the total count of token accounts (unique holders)
+    // The 'total' field returns the count of all matching token accounts
+    // Using limit: 1 to minimize response size while still getting the total
     const response = await axios.post(HELIUS_DAS_URL, {
       jsonrpc: '2.0',
       id: 'holder-count',
@@ -129,10 +132,7 @@ async function getTokenHolderCount(mintAddress) {
       params: {
         mint: mintAddress,
         page: 1,
-        limit: 1, // We only need the total count, not the actual accounts
-        displayOptions: {
-          showZeroBalance: false // Only count accounts with balance > 0
-        }
+        limit: 1 // Minimize response, we only need the total count
       }
     }, {
       timeout: 10000
@@ -143,15 +143,44 @@ async function getTokenHolderCount(mintAddress) {
       return null;
     }
 
-    const total = response.data.result?.total;
-    if (typeof total === 'number') {
+    const result = response.data.result;
+    if (!result) {
+      console.error('[Solana] Helius DAS returned no result');
+      return null;
+    }
+
+    // The response structure should have:
+    // - total: total number of matching token accounts
+    // - token_accounts: array of account data
+    // - cursor: for pagination
+    const total = result.total;
+    const tokenAccountsCount = result.token_accounts?.length || 0;
+
+    console.log(`[Solana] Response fields:`, {
+      total: total,
+      totalType: typeof total,
+      tokenAccountsLength: tokenAccountsCount,
+      hasTokenAccounts: Array.isArray(result.token_accounts),
+      cursor: result.cursor,
+      allKeys: Object.keys(result)
+    });
+
+    // If total field exists and is valid, use it
+    if (typeof total === 'number' && total >= 0) {
       console.log(`[Solana] Holder count for ${mintAddress}: ${total}`);
       return total;
     }
 
+    // Fallback: if no total field, we can't get the count without pagination
+    // For now, return null to indicate unavailable
+    console.log('[Solana] Total field not found or invalid in response');
     return null;
   } catch (error) {
     console.error('[Solana] getTokenHolderCount error:', error.message);
+    if (error.response) {
+      console.error('[Solana] Response status:', error.response.status);
+      console.error('[Solana] Response data:', JSON.stringify(error.response.data, null, 2));
+    }
     return null;
   }
 }
@@ -211,6 +240,25 @@ async function getTokenMetadata(mintAddress) {
     const priceInfo = tokenInfo.price_info || {};
     const price = priceInfo.price_per_token || null;
 
+    // Extract logo URI from various possible locations in the response
+    // Different tokens store their image in different places
+    let logoUri = null;
+    if (content.links?.image) {
+      logoUri = content.links.image;
+    } else if (content.files && content.files.length > 0) {
+      // Look for image file in files array
+      const imageFile = content.files.find(f =>
+        f.mime?.startsWith('image/') ||
+        f.uri?.match(/\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
+      );
+      logoUri = imageFile?.uri || content.files[0]?.uri || null;
+    } else if (metadata.image) {
+      logoUri = metadata.image;
+    } else if (content.json_uri && content.json_uri.includes('image')) {
+      // Some tokens store image URL in json_uri
+      logoUri = content.json_uri;
+    }
+
     const result = {
       mintAddress: mintAddress,
       address: mintAddress,
@@ -221,14 +269,15 @@ async function getTokenMetadata(mintAddress) {
       // Price only available for top 10k tokens by volume
       price: price,
       hasPriceData: price !== null,
-      // Logo from content if available
-      logoUri: content.links?.image || content.files?.[0]?.uri || null
+      // Logo from content if available (checked multiple locations)
+      logoUri: logoUri
     };
 
     console.log(`[Solana] Token metadata for ${mintAddress}:`, {
       name: result.name,
       symbol: result.symbol,
-      hasPriceData: result.hasPriceData
+      hasPriceData: result.hasPriceData,
+      logoUri: result.logoUri
     });
 
     return result;
@@ -285,6 +334,20 @@ async function getTokenMetadataBatch(mintAddresses) {
       const metadata = content.metadata || {};
       const priceInfo = tokenInfo.price_info || {};
 
+      // Extract logo URI from various possible locations
+      let logoUri = null;
+      if (content.links?.image) {
+        logoUri = content.links.image;
+      } else if (content.files && content.files.length > 0) {
+        const imageFile = content.files.find(f =>
+          f.mime?.startsWith('image/') ||
+          f.uri?.match(/\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)
+        );
+        logoUri = imageFile?.uri || content.files[0]?.uri || null;
+      } else if (metadata.image) {
+        logoUri = metadata.image;
+      }
+
       result[asset.id] = {
         mintAddress: asset.id,
         address: asset.id,
@@ -294,7 +357,7 @@ async function getTokenMetadataBatch(mintAddresses) {
         supply: tokenInfo.supply ? parseFloat(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals || 9) : null,
         price: priceInfo.price_per_token || null,
         hasPriceData: !!priceInfo.price_per_token,
-        logoUri: content.links?.image || content.files?.[0]?.uri || null
+        logoUri: logoUri
       };
     }
 
