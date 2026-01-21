@@ -700,7 +700,7 @@ const tokenList = {
           <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${utils.formatChange(change)}</td>
           <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h)}</td>
           <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap)}</td>
-          <td class="cell-views" data-navigate="${safeAddress}">${token.views ? token.views.toLocaleString() : '—'}</td>
+          <td class="cell-views" data-navigate="${safeAddress}">${token.views > 0 ? token.views.toLocaleString() : '0'}</td>
           <td class="cell-watchlist">
             <button
               class="watchlist-btn ${inWatchlist ? 'active' : ''}"

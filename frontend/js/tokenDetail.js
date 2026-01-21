@@ -1094,6 +1094,11 @@ const tokenDetail = {
   // Record page view (fire-and-forget, non-blocking)
   async recordView() {
     try {
+      // Check if the API method exists (handles cached old api.js)
+      if (typeof api?.tokens?.recordView !== 'function') {
+        console.warn('View tracking: api.tokens.recordView not available (clear browser cache)');
+        return;
+      }
       const result = await api.tokens.recordView(this.mint);
       // Update display with returned view count
       if (result && result.views !== undefined) {
