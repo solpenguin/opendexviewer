@@ -142,6 +142,20 @@ async function initializeDatabase() {
         UNIQUE(wallet_address, token_mint)
       );
 
+      -- API keys table for external API access
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id SERIAL PRIMARY KEY,
+        key_hash VARCHAR(64) UNIQUE NOT NULL,
+        key_prefix VARCHAR(8) NOT NULL,
+        owner_wallet VARCHAR(44) NOT NULL,
+        name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_used_at TIMESTAMP,
+        request_count INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        UNIQUE(owner_wallet)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_submissions_token ON submissions(token_mint);
       CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
       CREATE INDEX IF NOT EXISTS idx_submissions_wallet ON submissions(submitter_wallet);
@@ -153,6 +167,21 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_watchlist_wallet ON watchlist(wallet_address);
       CREATE INDEX IF NOT EXISTS idx_watchlist_token ON watchlist(token_mint);
       CREATE INDEX IF NOT EXISTS idx_vote_tallies_score ON vote_tallies(weighted_score DESC);
+      CREATE INDEX IF NOT EXISTS idx_api_keys_wallet ON api_keys(owner_wallet);
+      CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+
+      -- Admin sessions table for admin panel authentication
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        id SERIAL PRIMARY KEY,
+        session_token VARCHAR(64) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL,
+        ip_address VARCHAR(45),
+        user_agent TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(session_token);
+      CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
     `);
 
     isConnected = true;
@@ -582,6 +611,306 @@ async function getWatchlistCount(walletAddress) {
   return parseInt(result.rows[0].count);
 }
 
+// ==========================================
+// API Key operations
+// ==========================================
+
+// Create a new API key for a wallet (one per wallet)
+async function createApiKey(ownerWallet, keyHash, keyPrefix, name = null) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `INSERT INTO api_keys (owner_wallet, key_hash, key_prefix, name)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (owner_wallet) DO NOTHING
+     RETURNING id, key_prefix, owner_wallet, name, created_at, is_active`,
+    [ownerWallet, keyHash, keyPrefix, name]
+  );
+  return result.rows[0];
+}
+
+// Get API key by hash (for validation)
+async function getApiKeyByHash(keyHash) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
+     FROM api_keys WHERE key_hash = $1`,
+    [keyHash]
+  );
+  return result.rows[0];
+}
+
+// Get API key info for a wallet
+async function getApiKeyByWallet(ownerWallet) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
+     FROM api_keys WHERE owner_wallet = $1`,
+    [ownerWallet]
+  );
+  return result.rows[0];
+}
+
+// Update last used timestamp and increment request count
+async function updateApiKeyUsage(keyHash) {
+  if (!pool) return;
+
+  await pool.query(
+    `UPDATE api_keys
+     SET last_used_at = NOW(), request_count = request_count + 1
+     WHERE key_hash = $1`,
+    [keyHash]
+  );
+}
+
+// Revoke/deactivate an API key
+async function revokeApiKey(ownerWallet) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `UPDATE api_keys SET is_active = false WHERE owner_wallet = $1 RETURNING *`,
+    [ownerWallet]
+  );
+  return result.rows[0];
+}
+
+// Delete an API key (allows user to create a new one)
+async function deleteApiKey(ownerWallet) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `DELETE FROM api_keys WHERE owner_wallet = $1 RETURNING *`,
+    [ownerWallet]
+  );
+  return result.rows[0];
+}
+
+// Check if wallet already has an API key
+async function hasApiKey(ownerWallet) {
+  if (!pool) return false;
+
+  const result = await pool.query(
+    `SELECT 1 FROM api_keys WHERE owner_wallet = $1`,
+    [ownerWallet]
+  );
+  return result.rows.length > 0;
+}
+
+// ==========================================
+// Admin Session operations
+// ==========================================
+
+// Create admin session
+async function createAdminSession(sessionToken, expiresAt, ipAddress = null, userAgent = null) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `INSERT INTO admin_sessions (session_token, expires_at, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, session_token, created_at, expires_at`,
+    [sessionToken, expiresAt, ipAddress, userAgent]
+  );
+  return result.rows[0];
+}
+
+// Get admin session by token
+async function getAdminSession(sessionToken) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `SELECT * FROM admin_sessions
+     WHERE session_token = $1 AND expires_at > NOW()`,
+    [sessionToken]
+  );
+  return result.rows[0];
+}
+
+// Delete admin session (logout)
+async function deleteAdminSession(sessionToken) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `DELETE FROM admin_sessions WHERE session_token = $1 RETURNING *`,
+    [sessionToken]
+  );
+  return result.rows[0];
+}
+
+// Clean up expired admin sessions
+async function cleanupExpiredAdminSessions() {
+  if (!pool) return 0;
+
+  const result = await pool.query(
+    `DELETE FROM admin_sessions WHERE expires_at < NOW()`
+  );
+  return result.rowCount;
+}
+
+// ==========================================
+// Admin Statistics operations
+// ==========================================
+
+// Get site statistics for admin dashboard
+async function getAdminStats() {
+  if (!pool) return null;
+
+  const stats = {};
+
+  // Get submission counts by status
+  const submissionStats = await pool.query(`
+    SELECT
+      status,
+      COUNT(*) as count
+    FROM submissions
+    GROUP BY status
+  `);
+  stats.submissions = {
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0
+  };
+  submissionStats.rows.forEach(row => {
+    stats.submissions[row.status] = parseInt(row.count);
+    stats.submissions.total += parseInt(row.count);
+  });
+
+  // Get vote count
+  const voteCount = await pool.query(`SELECT COUNT(*) as count FROM votes`);
+  stats.votes = parseInt(voteCount.rows[0].count);
+
+  // Get token count
+  const tokenCount = await pool.query(`SELECT COUNT(*) as count FROM tokens`);
+  stats.tokens = parseInt(tokenCount.rows[0].count);
+
+  // Get API key counts
+  const apiKeyStats = await pool.query(`
+    SELECT
+      COUNT(*) as total,
+      COUNT(*) FILTER (WHERE is_active = true) as active
+    FROM api_keys
+  `);
+  stats.apiKeys = {
+    total: parseInt(apiKeyStats.rows[0].total),
+    active: parseInt(apiKeyStats.rows[0].active)
+  };
+
+  // Get watchlist entry count
+  const watchlistCount = await pool.query(`SELECT COUNT(*) as count FROM watchlist`);
+  stats.watchlistEntries = parseInt(watchlistCount.rows[0].count);
+
+  // Get recent submissions (last 24h)
+  const recentSubmissions = await pool.query(`
+    SELECT COUNT(*) as count
+    FROM submissions
+    WHERE created_at > NOW() - INTERVAL '24 hours'
+  `);
+  stats.recentSubmissions = parseInt(recentSubmissions.rows[0].count);
+
+  // Get recent votes (last 24h)
+  const recentVotes = await pool.query(`
+    SELECT COUNT(*) as count
+    FROM votes
+    WHERE created_at > NOW() - INTERVAL '24 hours'
+  `);
+  stats.recentVotes = parseInt(recentVotes.rows[0].count);
+
+  return stats;
+}
+
+// Get all submissions with pagination for admin
+async function getAllSubmissions({ status, limit = 50, offset = 0, sortBy = 'created_at', sortOrder = 'DESC' } = {}) {
+  if (!pool) return { submissions: [], total: 0 };
+
+  // Validate sort column
+  const validSortColumns = ['created_at', 'score', 'weighted_score', 'status'];
+  const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+  const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+  let query = `
+    SELECT s.*, vt.upvotes, vt.downvotes, vt.score, vt.weighted_score,
+           t.name as token_name, t.symbol as token_symbol
+    FROM submissions s
+    LEFT JOIN vote_tallies vt ON s.id = vt.submission_id
+    LEFT JOIN tokens t ON s.token_mint = t.mint_address
+  `;
+  const params = [];
+
+  if (status) {
+    params.push(status);
+    query += ` WHERE s.status = $${params.length}`;
+  }
+
+  // Handle sorting - score/weighted_score come from vote_tallies
+  const sortColumnFull = (sortColumn === 'score' || sortColumn === 'weighted_score')
+    ? `vt.${sortColumn}`
+    : `s.${sortColumn}`;
+  query += ` ORDER BY ${sortColumnFull} ${order} NULLS LAST`;
+
+  params.push(limit, offset);
+  query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+  const result = await pool.query(query, params);
+
+  // Get total count
+  let countQuery = `SELECT COUNT(*) FROM submissions s`;
+  const countParams = [];
+  if (status) {
+    countParams.push(status);
+    countQuery += ` WHERE s.status = $1`;
+  }
+  const countResult = await pool.query(countQuery, countParams);
+
+  return {
+    submissions: result.rows,
+    total: parseInt(countResult.rows[0].count)
+  };
+}
+
+// Get all API keys for admin
+async function getAllApiKeys({ limit = 50, offset = 0 } = {}) {
+  if (!pool) return { keys: [], total: 0 };
+
+  const result = await pool.query(
+    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
+     FROM api_keys
+     ORDER BY created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+
+  const countResult = await pool.query(`SELECT COUNT(*) FROM api_keys`);
+
+  return {
+    keys: result.rows,
+    total: parseInt(countResult.rows[0].count)
+  };
+}
+
+// Revoke API key by ID (admin action)
+async function revokeApiKeyById(keyId) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `UPDATE api_keys SET is_active = false WHERE id = $1 RETURNING *`,
+    [keyId]
+  );
+  return result.rows[0];
+}
+
+// Delete API key by ID (admin action)
+async function deleteApiKeyById(keyId) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `DELETE FROM api_keys WHERE id = $1 RETURNING *`,
+    [keyId]
+  );
+  return result.rows[0];
+}
+
 // Check if database is ready for queries
 function isReady() {
   return pool !== null && isConnected;
@@ -671,6 +1000,24 @@ module.exports = {
   isInWatchlist,
   checkWatchlistBatch,
   getWatchlistCount,
+  // API Key operations
+  createApiKey,
+  getApiKeyByHash,
+  getApiKeyByWallet,
+  updateApiKeyUsage,
+  revokeApiKey,
+  deleteApiKey,
+  hasApiKey,
+  // Admin operations
+  createAdminSession,
+  getAdminSession,
+  deleteAdminSession,
+  cleanupExpiredAdminSessions,
+  getAdminStats,
+  getAllSubmissions,
+  getAllApiKeys,
+  revokeApiKeyById,
+  deleteApiKeyById,
   // Constants
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,

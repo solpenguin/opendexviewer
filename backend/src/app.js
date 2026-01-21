@@ -8,6 +8,8 @@ const submissionRoutes = require('./routes/submissions');
 const voteRoutes = require('./routes/votes');
 const watchlistRoutes = require('./routes/watchlist');
 const healthRoutes = require('./routes/health');
+const publicApiRoutes = require('./routes/publicApi');
+const adminRoutes = require('./routes/admin');
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -28,8 +30,8 @@ const corsOptions = {
   origin: corsOrigins && corsOrigins.length > 0
     ? corsOrigins
     : (process.env.NODE_ENV === 'production' ? false : '*'), // Deny in production if not configured
-  methods: ['GET', 'POST', 'OPTIONS'], // Only methods we actually use
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], // Methods we use
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Admin-Session'],
   // SECURITY: credentials should only be true when origin is not '*'
   credentials: corsOrigins && corsOrigins.length > 0,
   maxAge: 86400 // 24 hours
@@ -44,6 +46,10 @@ app.use(cors(corsOptions));
 
 // Parse JSON bodies
 app.use(express.json({ limit: '1mb' }));
+
+// Cookie parser for admin sessions
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
 
 // Request logging (development)
 if (process.env.NODE_ENV !== 'production') {
@@ -65,6 +71,12 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/votes', voteRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 
+// Public API (v1) - requires API key for most endpoints
+app.use('/api/v1', publicApiRoutes);
+
+// Admin panel API - password protected
+app.use('/admin', adminRoutes);
+
 // Root redirect
 app.get('/', (req, res) => {
   res.json({
@@ -77,7 +89,8 @@ app.get('/', (req, res) => {
       submissions: '/api/submissions',
       votes: '/api/votes',
       watchlist: '/api/watchlist',
-      health: '/health'
+      health: '/health',
+      publicApi: '/api/v1 (requires API key)'
     }
   });
 });
@@ -150,6 +163,7 @@ app.listen(PORT, () => {
 ║  Database: ${process.env.DATABASE_URL ? 'Connected'.padEnd(32) : 'Not configured'.padEnd(32)}║
 ║  Helius: ${process.env.HELIUS_API_KEY ? 'Enabled'.padEnd(34) : 'Disabled'.padEnd(34)}║
 ║  Birdeye: ${process.env.BIRDEYE_API_KEY ? 'Enabled'.padEnd(33) : 'Disabled'.padEnd(33)}║
+║  Admin: ${process.env.ADMIN_PASSWORD ? 'Enabled'.padEnd(35) : 'Disabled'.padEnd(35)}║
 ╚════════════════════════════════════════════╝
   `);
 });

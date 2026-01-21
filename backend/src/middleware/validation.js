@@ -274,6 +274,157 @@ function requireDatabase(req, res, next) {
   next();
 }
 
+// Hash an API key using SHA-256
+function hashApiKey(apiKey) {
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(apiKey).digest('hex');
+}
+
+// Generate a new API key (32 bytes = 64 hex chars)
+function generateApiKey() {
+  const crypto = require('crypto');
+  const key = crypto.randomBytes(32).toString('hex');
+  const prefix = key.slice(0, 8); // First 8 chars for display
+  return { key, prefix, hash: hashApiKey(key) };
+}
+
+// Middleware to validate API key from header
+// API key should be passed in X-API-Key header
+async function validateApiKey(req, res, next) {
+  const db = require('../services/database');
+
+  const apiKey = req.header('X-API-Key');
+
+  if (!apiKey) {
+    return res.status(401).json({
+      error: 'API key required',
+      message: 'Please provide your API key in the X-API-Key header'
+    });
+  }
+
+  // Validate key format (should be 64 hex characters)
+  if (!/^[a-f0-9]{64}$/i.test(apiKey)) {
+    return res.status(401).json({
+      error: 'Invalid API key format'
+    });
+  }
+
+  try {
+    const keyHash = hashApiKey(apiKey);
+    const keyInfo = await db.getApiKeyByHash(keyHash);
+
+    if (!keyInfo) {
+      return res.status(401).json({
+        error: 'Invalid API key'
+      });
+    }
+
+    if (!keyInfo.is_active) {
+      return res.status(403).json({
+        error: 'API key has been revoked'
+      });
+    }
+
+    // Update usage stats (fire and forget)
+    db.updateApiKeyUsage(keyHash).catch(err =>
+      console.error('Failed to update API key usage:', err.message)
+    );
+
+    // Attach key info to request for use in routes
+    req.apiKey = {
+      id: keyInfo.id,
+      prefix: keyInfo.key_prefix,
+      owner: keyInfo.owner_wallet,
+      name: keyInfo.name
+    };
+
+    next();
+  } catch (error) {
+    console.error('API key validation error:', error.message);
+    return res.status(500).json({
+      error: 'Failed to validate API key'
+    });
+  }
+}
+
+// ==========================================
+// Admin Authentication
+// ==========================================
+
+// Session duration (24 hours)
+const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+
+// Generate admin session token
+function generateAdminSessionToken() {
+  const crypto = require('crypto');
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Verify admin password
+function verifyAdminPassword(password) {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    console.error('ADMIN_PASSWORD not configured');
+    return false;
+  }
+
+  // Use constant-time comparison to prevent timing attacks
+  const crypto = require('crypto');
+  const passwordBuffer = Buffer.from(password || '');
+  const adminBuffer = Buffer.from(adminPassword);
+
+  // If lengths differ, compare with itself to maintain constant time
+  if (passwordBuffer.length !== adminBuffer.length) {
+    crypto.timingSafeEqual(adminBuffer, adminBuffer);
+    return false;
+  }
+
+  return crypto.timingSafeEqual(passwordBuffer, adminBuffer);
+}
+
+// Middleware to validate admin session
+async function validateAdminSession(req, res, next) {
+  const db = require('../services/database');
+
+  // Get session token from cookie or header
+  const sessionToken = req.cookies?.admin_session || req.header('X-Admin-Session');
+
+  if (!sessionToken) {
+    return res.status(401).json({
+      error: 'Authentication required',
+      message: 'Please log in to access the admin panel'
+    });
+  }
+
+  // Validate token format (64 hex chars)
+  if (!/^[a-f0-9]{64}$/i.test(sessionToken)) {
+    return res.status(401).json({
+      error: 'Invalid session'
+    });
+  }
+
+  try {
+    const session = await db.getAdminSession(sessionToken);
+
+    if (!session) {
+      return res.status(401).json({
+        error: 'Session expired',
+        message: 'Please log in again'
+      });
+    }
+
+    // Attach session to request
+    req.adminSession = session;
+    next();
+  } catch (error) {
+    console.error('Admin session validation error:', error.message);
+    return res.status(500).json({
+      error: 'Failed to validate session'
+    });
+  }
+}
+
 module.exports = {
   validateMint,
   validateWallet,
@@ -286,6 +437,16 @@ module.exports = {
   sanitizeString,
   isValidUrl,
   validateUrlDomain,
+  // API Key functions
+  hashApiKey,
+  generateApiKey,
+  validateApiKey,
+  // Admin functions
+  generateAdminSessionToken,
+  verifyAdminPassword,
+  validateAdminSession,
+  ADMIN_SESSION_DURATION_MS,
+  // Constants
   SOLANA_ADDRESS_REGEX,
   BLOCKED_DOMAINS,
   MAX_URL_LENGTH

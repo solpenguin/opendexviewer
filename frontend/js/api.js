@@ -198,6 +198,29 @@ const api = {
     async getCount(wallet) {
       return api.request(`/api/watchlist/${wallet}/count`);
     }
+  },
+
+  // API Key endpoints (Public API v1)
+  apiKeys: {
+    async register(wallet, name = null) {
+      return api.request('/api/v1/keys/register', {
+        method: 'POST',
+        body: JSON.stringify({ wallet, name })
+      });
+    },
+
+    async getStatus(wallet) {
+      return api.request(`/api/v1/keys/status/${wallet}`);
+    },
+
+    async revoke(apiKey) {
+      return api.request('/api/v1/keys/revoke', {
+        method: 'DELETE',
+        headers: {
+          'X-API-Key': apiKey
+        }
+      });
+    }
   }
 };
 

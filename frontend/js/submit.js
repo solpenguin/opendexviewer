@@ -1,12 +1,20 @@
-// Submit Page Logic
+// Submit Page Logic - Enhanced with multi-field submission and live preview
 const submitPage = {
   tokenValid: false,
-  urlValid: false,
   holderVerified: false,
   tokenData: null,
   holderData: null,
   mySubmissions: [],
   walletConnected: false,
+
+  // Track validation state for each field
+  fieldValidation: {
+    banner: { valid: false, url: '' },
+    twitter: { valid: false, url: '' },
+    telegram: { valid: false, url: '' },
+    discord: { valid: false, url: '' },
+    website: { valid: false, url: '' }
+  },
 
   // Initialize
   init() {
@@ -66,8 +74,6 @@ const submitPage = {
   bindEvents() {
     const form = document.getElementById('submit-form');
     const tokenMintInput = document.getElementById('token-mint');
-    const contentUrlInput = document.getElementById('content-url');
-    const typeRadios = document.querySelectorAll('input[name="submissionType"]');
 
     // Main connect wallet button
     const connectMain = document.getElementById('connect-wallet-main');
@@ -100,24 +106,19 @@ const submitPage = {
       });
     }
 
-    // Content URL validation and preview
-    if (contentUrlInput) {
-      contentUrlInput.addEventListener('input', utils.debounce((e) => {
-        this.validateUrl(e.target.value);
-      }, 400));
+    // Bind all content URL inputs
+    const contentTypes = ['banner', 'twitter', 'telegram', 'discord', 'website'];
+    contentTypes.forEach(type => {
+      const input = document.getElementById(`${type}-url`);
+      if (input) {
+        input.addEventListener('input', utils.debounce((e) => {
+          this.validateField(type, e.target.value);
+        }, 300));
 
-      contentUrlInput.addEventListener('blur', () => {
-        this.validateUrl(contentUrlInput.value);
-      });
-    }
-
-    // Type selection - update hint text and revalidate URL
-    typeRadios.forEach(radio => {
-      radio.addEventListener('change', () => {
-        this.updateUrlHint(radio.value);
-        this.updateProgressStep(2);
-        this.validateUrl(contentUrlInput?.value);
-      });
+        input.addEventListener('blur', () => {
+          this.validateField(type, input.value);
+        });
+      }
     });
 
     // Form submission
@@ -153,6 +154,206 @@ const submitPage = {
       this.resetMySubmissions();
       this.updateFormState();
     });
+  },
+
+  // Validate a specific field
+  validateField(type, url) {
+    const statusEl = document.getElementById(`${type}-status`);
+
+    if (!url || url.trim() === '') {
+      this.fieldValidation[type] = { valid: false, url: '' };
+      if (statusEl) {
+        statusEl.innerHTML = '';
+        statusEl.className = 'input-status';
+      }
+      this.updateFilledCount();
+      this.updateLivePreview();
+      this.updateFormState();
+      return;
+    }
+
+    // Basic URL validation
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url.trim());
+    } catch {
+      this.fieldValidation[type] = { valid: false, url: '' };
+      if (statusEl) {
+        statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        statusEl.className = 'input-status error';
+      }
+      this.updateFilledCount();
+      this.updateLivePreview();
+      this.updateFormState();
+      return;
+    }
+
+    // Type-specific validation
+    const result = this.validateUrlForType(parsedUrl, type);
+
+    if (!result.valid) {
+      this.fieldValidation[type] = { valid: false, url: '' };
+      if (statusEl) {
+        statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        statusEl.className = 'input-status error';
+        statusEl.title = result.message;
+      }
+    } else {
+      this.fieldValidation[type] = { valid: true, url: url.trim() };
+      if (statusEl) {
+        statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+        statusEl.className = 'input-status success';
+        statusEl.title = '';
+      }
+
+      // Show banner preview if banner type
+      if (type === 'banner') {
+        this.showBannerPreviewMini(url.trim());
+      }
+    }
+
+    this.updateFilledCount();
+    this.updateLivePreview();
+    this.updateFormState();
+  },
+
+  // Validate URL for specific type
+  validateUrlForType(url, type) {
+    const hostname = url.hostname.toLowerCase();
+
+    switch (type) {
+      case 'twitter':
+        if (!hostname.includes('twitter.com') && !hostname.includes('x.com')) {
+          return { valid: false, message: 'Please enter a valid Twitter/X URL' };
+        }
+        break;
+      case 'telegram':
+        if (!hostname.includes('t.me') && !hostname.includes('telegram.me')) {
+          return { valid: false, message: 'Please enter a valid Telegram URL' };
+        }
+        break;
+      case 'discord':
+        if (!hostname.includes('discord.gg') && !hostname.includes('discord.com')) {
+          return { valid: false, message: 'Please enter a valid Discord URL' };
+        }
+        break;
+      case 'banner':
+        const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+        const hasImageExtension = imageExtensions.some(ext => url.pathname.toLowerCase().includes(ext));
+        const isImageHost = ['imgur.com', 'i.imgur.com', 'cloudinary.com', 'imagekit.io'].some(h => hostname.includes(h));
+
+        if (!hasImageExtension && !isImageHost) {
+          return { valid: false, message: 'Please enter a direct image URL (PNG, JPG, GIF, WebP)' };
+        }
+        break;
+    }
+
+    return { valid: true };
+  },
+
+  // Show mini banner preview in the form
+  showBannerPreviewMini(url) {
+    const container = document.getElementById('banner-preview-mini');
+    const img = document.getElementById('banner-preview-img');
+    const overlay = container?.querySelector('.banner-preview-overlay');
+
+    if (!container || !img) return;
+
+    container.style.display = 'block';
+    if (overlay) overlay.style.display = 'flex';
+    img.style.display = 'none';
+
+    img.onload = () => {
+      if (overlay) overlay.style.display = 'none';
+      img.style.display = 'block';
+    };
+
+    img.onerror = () => {
+      if (overlay) overlay.style.display = 'none';
+      container.style.display = 'none';
+      this.fieldValidation.banner = { valid: false, url: '' };
+      const statusEl = document.getElementById('banner-status');
+      if (statusEl) {
+        statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        statusEl.className = 'input-status error';
+      }
+      this.updateFormState();
+    };
+
+    img.src = url;
+  },
+
+  // Update filled count indicator
+  updateFilledCount() {
+    const countEl = document.getElementById('filled-count');
+    if (!countEl) return;
+
+    const count = Object.values(this.fieldValidation).filter(f => f.valid).length;
+    countEl.textContent = count;
+  },
+
+  // Update live preview panel
+  updateLivePreview() {
+    const placeholder = document.getElementById('preview-placeholder');
+    const tokenPage = document.getElementById('preview-token-page');
+
+    // Show placeholder if no token selected
+    if (!this.tokenValid || !this.tokenData) {
+      if (placeholder) placeholder.style.display = 'flex';
+      if (tokenPage) tokenPage.style.display = 'none';
+      return;
+    }
+
+    // Show token page preview
+    if (placeholder) placeholder.style.display = 'none';
+    if (tokenPage) tokenPage.style.display = 'block';
+
+    // Update token info in preview
+    const logo = document.getElementById('preview-token-logo');
+    const name = document.getElementById('preview-token-name');
+    const symbol = document.getElementById('preview-token-symbol');
+
+    if (logo) {
+      logo.src = this.tokenData.logoUri || this.tokenData.logoURI || this.tokenData.logo || utils.getDefaultLogo();
+      logo.onerror = function() { this.src = utils.getDefaultLogo(); };
+    }
+    if (name) name.textContent = this.tokenData.name || 'Unknown Token';
+    if (symbol) symbol.textContent = this.tokenData.symbol || '???';
+
+    // Update banner preview
+    const bannerImg = document.getElementById('preview-banner-img');
+    const bannerPlaceholder = document.getElementById('preview-banner-placeholder');
+
+    if (this.fieldValidation.banner.valid && this.fieldValidation.banner.url) {
+      if (bannerImg) {
+        bannerImg.src = this.fieldValidation.banner.url;
+        bannerImg.style.display = 'block';
+        bannerImg.onerror = function() { this.style.display = 'none'; };
+      }
+      if (bannerPlaceholder) bannerPlaceholder.style.display = 'none';
+    } else {
+      if (bannerImg) bannerImg.style.display = 'none';
+      if (bannerPlaceholder) bannerPlaceholder.style.display = 'flex';
+    }
+
+    // Update social link chips
+    const socialTypes = ['twitter', 'telegram', 'discord', 'website'];
+    let hasAnyLink = false;
+
+    socialTypes.forEach(type => {
+      const chip = document.getElementById(`preview-${type}-chip`);
+      if (chip) {
+        const isValid = this.fieldValidation[type].valid;
+        chip.style.display = isValid ? 'flex' : 'none';
+        if (isValid) hasAnyLink = true;
+      }
+    });
+
+    // Show/hide empty links message
+    const emptyLinks = document.getElementById('preview-empty-links');
+    if (emptyLinks) {
+      emptyLinks.style.display = hasAnyLink ? 'none' : 'block';
+    }
   },
 
   // Check if connected wallet holds the token
@@ -222,7 +423,6 @@ const submitPage = {
       if (loadingEl) loadingEl.style.display = 'none';
       this.holderVerified = false;
       this.holderData = null;
-      // Don't block on verification errors - just hide the section
       this.hideHolderVerification();
       this.updateFormState();
     }
@@ -232,120 +432,6 @@ const submitPage = {
   hideHolderVerification() {
     const holderSection = document.getElementById('holder-verification');
     if (holderSection) holderSection.style.display = 'none';
-  },
-
-  // Show Imgur upload help modal
-  showImgurHelpModal() {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal-content imgur-help-modal">
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-        <div class="modal-header">
-          <div class="imgur-logo">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="#1BB76E">
-              <path d="M21.84,9.25c-.29-1.38-.81-2.66-1.52-3.84-.71-1.18-1.61-2.23-2.66-3.1-1.05-.87-2.24-1.57-3.54-2.05S11.61,0,10.22.07c-1.39.07-2.72.39-3.95.92S4.04,2.16,3.07,2.99c-.97.83-1.78,1.82-2.39,2.93-.61,1.11-1.03,2.33-1.24,3.61-.21,1.28-.19,2.6.03,3.89.22,1.29.66,2.52,1.3,3.66.64,1.14,1.46,2.16,2.44,3.01.98.85,2.1,1.52,3.32,1.98s2.54.72,3.92.72c1.39,0,2.72-.26,3.94-.73s2.35-1.15,3.33-2c.98-.85,1.8-1.86,2.44-3,.64-1.14,1.08-2.38,1.3-3.67.22-1.29.24-2.6.04-3.88l-.06-.06ZM12,18c-3.31,0-6-2.69-6-6s2.69-6,6-6,6,2.69,6,6-2.69,6-6,6Z"/>
-            </svg>
-          </div>
-          <h3>How to Upload Your Banner to Imgur</h3>
-        </div>
-        <div class="imgur-steps">
-          <div class="imgur-step">
-            <span class="step-number">1</span>
-            <div class="step-content">
-              <h4>Create Your Banner</h4>
-              <p>Design a banner image with recommended dimensions of <strong>1200 x 300 pixels</strong>. PNG or JPG format works best.</p>
-            </div>
-          </div>
-          <div class="imgur-step">
-            <span class="step-number">2</span>
-            <div class="step-content">
-              <h4>Go to Imgur</h4>
-              <p>Visit <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="link">imgur.com/upload</a> (no account required)</p>
-            </div>
-          </div>
-          <div class="imgur-step">
-            <span class="step-number">3</span>
-            <div class="step-content">
-              <h4>Upload Your Image</h4>
-              <p>Drag and drop your banner image or click to browse and select your file.</p>
-            </div>
-          </div>
-          <div class="imgur-step">
-            <span class="step-number">4</span>
-            <div class="step-content">
-              <h4>Copy the Direct Link</h4>
-              <p>After upload, right-click the image and select <strong>"Copy image address"</strong>, or click the share button and copy the <strong>Direct Link</strong> (ends in .png or .jpg).</p>
-            </div>
-          </div>
-          <div class="imgur-step">
-            <span class="step-number">5</span>
-            <div class="step-content">
-              <h4>Paste the URL</h4>
-              <p>Paste the direct image URL into the Content URL field above. Make sure it looks like: <code>https://i.imgur.com/xxxxx.png</code></p>
-            </div>
-          </div>
-        </div>
-        <div class="imgur-tips">
-          <h4>Tips for Great Banners</h4>
-          <ul>
-            <li>Use high-quality images (minimum 800px wide)</li>
-            <li>Keep text readable and not too small</li>
-            <li>Include your token logo and name</li>
-            <li>Avoid misleading or inappropriate content</li>
-          </ul>
-        </div>
-        <div class="modal-actions">
-          <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-            Open Imgur
-          </a>
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
-            Got it
-          </button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Close on backdrop click
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.remove();
-    });
-
-    // Close on Escape
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        modal.remove();
-        document.removeEventListener('keydown', handleEscape);
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-  },
-
-  // Update progress step indicators
-  updateProgressStep(step) {
-    document.querySelectorAll('.progress-step').forEach((el, index) => {
-      if (index + 1 < step) {
-        el.classList.add('completed');
-        el.classList.remove('active');
-      } else if (index + 1 === step) {
-        el.classList.add('active');
-        el.classList.remove('completed');
-      } else {
-        el.classList.remove('active', 'completed');
-      }
-    });
   },
 
   // Lookup token by mint address
@@ -394,7 +480,7 @@ const submitPage = {
         this.checkHolderStatus(mint);
       }
 
-      this.updateProgressStep(2);
+      this.updateLivePreview();
       this.updateFormState();
 
     } catch (error) {
@@ -410,6 +496,7 @@ const submitPage = {
       status.className = 'input-status error';
 
       this.showTokenError('Token not found. Please check the address.');
+      this.updateLivePreview();
       this.updateFormState();
     }
   },
@@ -433,6 +520,7 @@ const submitPage = {
     if (errorEl) errorEl.style.display = 'none';
 
     this.hideHolderVerification();
+    this.updateLivePreview();
     this.updateFormState();
   },
 
@@ -445,183 +533,30 @@ const submitPage = {
     }
   },
 
-  // Validate URL
-  validateUrl(url) {
-    const type = document.querySelector('input[name="submissionType"]:checked')?.value;
-    const status = document.getElementById('url-status');
-    const errorEl = document.getElementById('url-error');
-
-    if (!url) {
-      this.urlValid = false;
-      status.innerHTML = '';
-      status.className = 'input-status';
-      errorEl.style.display = 'none';
-      this.hideBannerPreview();
-      this.updateFormState();
-      return;
-    }
-
-    // Basic URL validation
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      this.urlValid = false;
-      status.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-      status.className = 'input-status error';
-      this.showUrlError('Please enter a valid URL');
-      this.hideBannerPreview();
-      this.updateFormState();
-      return;
-    }
-
-    // Type-specific validation
-    const validationResult = this.validateUrlForType(parsedUrl, type);
-
-    if (!validationResult.valid) {
-      this.urlValid = false;
-      status.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-      status.className = 'input-status error';
-      this.showUrlError(validationResult.message);
-      this.hideBannerPreview();
-    } else {
-      this.urlValid = true;
-      status.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-      status.className = 'input-status success';
-      errorEl.style.display = 'none';
-
-      // Show banner preview if banner type
-      if (type === 'banner') {
-        this.showBannerPreview(url);
-      } else {
-        this.hideBannerPreview();
-      }
-
-      this.updateProgressStep(3);
-    }
-
-    this.updateFormState();
-  },
-
-  // Validate URL for specific type
-  validateUrlForType(url, type) {
-    const hostname = url.hostname.toLowerCase();
-
-    switch (type) {
-      case 'twitter':
-        if (!hostname.includes('twitter.com') && !hostname.includes('x.com')) {
-          return { valid: false, message: 'Please enter a valid Twitter/X URL' };
-        }
-        break;
-      case 'telegram':
-        if (!hostname.includes('t.me') && !hostname.includes('telegram.me')) {
-          return { valid: false, message: 'Please enter a valid Telegram URL' };
-        }
-        break;
-      case 'discord':
-        if (!hostname.includes('discord.gg') && !hostname.includes('discord.com')) {
-          return { valid: false, message: 'Please enter a valid Discord URL' };
-        }
-        break;
-      case 'banner':
-        const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
-        const hasImageExtension = imageExtensions.some(ext => url.pathname.toLowerCase().includes(ext));
-        const isImageHost = ['imgur.com', 'i.imgur.com', 'cloudinary.com', 'imagekit.io'].some(h => hostname.includes(h));
-
-        if (!hasImageExtension && !isImageHost) {
-          return { valid: false, message: 'Please enter a direct image URL (PNG, JPG, GIF, WebP)' };
-        }
-        break;
-    }
-
-    return { valid: true };
-  },
-
-  // Show URL error
-  showUrlError(message) {
-    const errorEl = document.getElementById('url-error');
-    if (errorEl) {
-      errorEl.textContent = message;
-      errorEl.style.display = 'block';
-    }
-  },
-
-  // Update URL hint based on submission type
-  updateUrlHint(type) {
-    const hintText = document.getElementById('url-hint-text');
-    const helpBtn = document.getElementById('imgur-help-btn');
-
-    const hints = {
-      banner: 'Direct image URL (PNG, JPG, GIF, WebP). Recommended size: 1200x300px.',
-      twitter: 'Enter the full Twitter/X profile URL (e.g., https://twitter.com/yourtoken)',
-      telegram: 'Enter the Telegram group/channel URL (e.g., https://t.me/yourtoken)',
-      discord: 'Enter the Discord invite URL (e.g., https://discord.gg/yourtoken)',
-      website: 'Enter the official website URL (e.g., https://yourtoken.com)'
-    };
-
-    if (hintText) {
-      hintText.textContent = hints[type] || '';
-    }
-
-    // Show/hide Imgur help button based on type
-    if (helpBtn) {
-      helpBtn.style.display = type === 'banner' ? 'inline-flex' : 'none';
-    }
-  },
-
-  // Show banner preview
-  showBannerPreview(url) {
-    const container = document.getElementById('banner-preview-container');
-    const img = document.getElementById('banner-preview');
-    const loading = document.getElementById('banner-loading');
-    const error = document.getElementById('banner-error');
-    const dimensions = document.getElementById('banner-dimensions');
-
-    container.style.display = 'block';
-    loading.style.display = 'flex';
-    error.style.display = 'none';
-    img.style.display = 'none';
-    dimensions.textContent = '';
-
-    img.onload = () => {
-      loading.style.display = 'none';
-      img.style.display = 'block';
-      dimensions.textContent = `Image dimensions: ${img.naturalWidth} x ${img.naturalHeight}px`;
-
-      // Warn if dimensions are not ideal
-      if (img.naturalWidth < 800 || img.naturalHeight < 200) {
-        dimensions.innerHTML += ' <span class="warning">(Recommended: 1200x300px)</span>';
-      }
-    };
-
-    img.onerror = () => {
-      loading.style.display = 'none';
-      error.style.display = 'flex';
-      this.urlValid = false;
-      this.updateFormState();
-    };
-
-    img.src = url;
-  },
-
-  // Hide banner preview
-  hideBannerPreview() {
-    const container = document.getElementById('banner-preview-container');
-    if (container) {
-      container.style.display = 'none';
-    }
-  },
-
   // Update form submit button state
   updateFormState() {
     const submitBtn = document.getElementById('submit-btn');
+    const submitBtnText = document.getElementById('submit-btn-text');
     const formStatus = document.getElementById('form-status');
 
-    // Requirements: wallet connected, token valid, URL valid, and must hold the token
-    const canSubmit = this.walletConnected && this.tokenValid && this.urlValid && this.holderVerified;
+    // Count valid submissions
+    const validCount = Object.values(this.fieldValidation).filter(f => f.valid).length;
+
+    // Requirements: wallet connected, token valid, at least one valid field, and must hold the token
+    const canSubmit = this.walletConnected && this.tokenValid && validCount > 0 && this.holderVerified;
 
     if (submitBtn) {
       submitBtn.disabled = !canSubmit;
+    }
+
+    if (submitBtnText) {
+      if (validCount > 1) {
+        submitBtnText.textContent = `Submit ${validCount} Items for Review`;
+      } else if (validCount === 1) {
+        submitBtnText.textContent = 'Submit for Community Review';
+      } else {
+        submitBtnText.textContent = 'Submit for Community Review';
+      }
     }
 
     if (formStatus) {
@@ -631,15 +566,15 @@ const submitPage = {
         formStatus.textContent = 'Enter a valid token address to continue';
       } else if (!this.holderVerified) {
         formStatus.textContent = 'You must hold this token to submit content for it';
-      } else if (!this.urlValid) {
-        formStatus.textContent = 'Enter a valid content URL to continue';
+      } else if (validCount === 0) {
+        formStatus.textContent = 'Fill in at least one content field';
       } else {
         formStatus.textContent = '';
       }
     }
   },
 
-  // Submit form
+  // Submit form - handles multiple submissions
   async submitForm() {
     if (!this.walletConnected) {
       toast.error('Please connect your wallet first');
@@ -651,47 +586,66 @@ const submitPage = {
       return;
     }
 
-    if (!this.tokenValid || !this.urlValid) {
-      toast.error('Please fill in all required fields correctly');
+    // Collect all valid submissions
+    const submissions = [];
+    const tokenMint = document.getElementById('token-mint')?.value?.trim();
+
+    Object.entries(this.fieldValidation).forEach(([type, data]) => {
+      if (data.valid && data.url) {
+        submissions.push({
+          tokenMint,
+          submissionType: type,
+          contentUrl: data.url,
+          submitterWallet: wallet.address
+        });
+      }
+    });
+
+    if (submissions.length === 0) {
+      toast.error('Please fill in at least one content field');
       return;
     }
 
-    const form = document.getElementById('submit-form');
     const submitBtn = document.getElementById('submit-btn');
-
-    const formData = new FormData(form);
-    const data = {
-      tokenMint: formData.get('tokenMint')?.trim(),
-      submissionType: formData.get('submissionType'),
-      contentUrl: formData.get('contentUrl')?.trim(),
-      submitterWallet: wallet.address
-    };
+    const submitBtnText = document.getElementById('submit-btn-text');
 
     // Disable button during submission
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
       <div class="loading-spinner small"></div>
-      <span>Submitting...</span>
+      <span>Submitting ${submissions.length} item${submissions.length > 1 ? 's' : ''}...</span>
     `;
 
     try {
-      const result = await api.submissions.create(data);
+      // Submit all items
+      const results = [];
+      const errors = [];
 
-      // Success!
-      toast.success('Submission received! It will be reviewed by the community.');
-      this.showSuccessModal(result);
+      for (const submission of submissions) {
+        try {
+          const result = await api.submissions.create(submission);
+          results.push({ type: submission.submissionType, result });
+        } catch (error) {
+          errors.push({ type: submission.submissionType, error: error.message });
+        }
+      }
 
-      // Clear form (but keep wallet connected)
-      document.getElementById('token-mint').value = '';
-      document.getElementById('content-url').value = '';
-      this.resetTokenPreview();
-      this.hideBannerPreview();
-      this.urlValid = false;
-      this.updateFormState();
-      this.updateProgressStep(1);
+      // Show results
+      if (results.length > 0) {
+        const types = results.map(r => r.type).join(', ');
+        toast.success(`${results.length} submission${results.length > 1 ? 's' : ''} received!`);
+        this.showSuccessModal(results, errors);
+      }
 
-      // Reload user's submissions
-      this.loadMySubmissions(wallet.address);
+      if (errors.length > 0 && results.length === 0) {
+        toast.error('All submissions failed. Please try again.');
+      }
+
+      // Clear form if at least one succeeded
+      if (results.length > 0) {
+        this.clearForm();
+        this.loadMySubmissions(wallet.address);
+      }
 
     } catch (error) {
       console.error('Submission failed:', error);
@@ -704,17 +658,42 @@ const submitPage = {
           <polyline points="17 8 12 3 7 8"/>
           <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
-        <span>Submit for Community Review</span>
+        <span id="submit-btn-text">Submit for Community Review</span>
       `;
       this.updateFormState();
     }
   },
 
+  // Clear the form after successful submission
+  clearForm() {
+    document.getElementById('token-mint').value = '';
+    ['banner', 'twitter', 'telegram', 'discord', 'website'].forEach(type => {
+      const input = document.getElementById(`${type}-url`);
+      if (input) input.value = '';
+      this.fieldValidation[type] = { valid: false, url: '' };
+      const status = document.getElementById(`${type}-status`);
+      if (status) {
+        status.innerHTML = '';
+        status.className = 'input-status';
+      }
+    });
+
+    const bannerPreview = document.getElementById('banner-preview-mini');
+    if (bannerPreview) bannerPreview.style.display = 'none';
+
+    this.resetTokenPreview();
+    this.updateFilledCount();
+    this.updateLivePreview();
+    this.updateFormState();
+  },
+
   // Show success modal
-  showSuccessModal(submission) {
-    const safeSubmissionType = utils.escapeHtml(submission.submission_type);
+  showSuccessModal(results, errors) {
     const safeTokenSymbol = utils.escapeHtml(this.tokenData?.symbol || 'Unknown');
-    const safeTokenMint = encodeURIComponent(submission.token_mint);
+    const safeTokenMint = encodeURIComponent(document.getElementById('token-mint')?.value || '');
+
+    const successItems = results.map(r => `<li>${utils.escapeHtml(r.type)}</li>`).join('');
+    const errorItems = errors.map(e => `<li>${utils.escapeHtml(e.type)}: ${utils.escapeHtml(e.error)}</li>`).join('');
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -725,26 +704,96 @@ const submitPage = {
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         </div>
-        <h3>Submission Received!</h3>
-        <p>Your <strong>${safeSubmissionType}</strong> has been submitted for community review.</p>
+        <h3>Submission${results.length > 1 ? 's' : ''} Received!</h3>
+        <p>Your content has been submitted for community review.</p>
         <div class="success-details">
           <div class="detail-row">
-            <span class="label">Status:</span>
-            <span class="value status-pending">Pending Review</span>
+            <span class="label">Submitted:</span>
+            <ul class="submitted-list">${successItems}</ul>
           </div>
+          ${errors.length > 0 ? `
+          <div class="detail-row error">
+            <span class="label">Failed:</span>
+            <ul class="error-list">${errorItems}</ul>
+          </div>
+          ` : ''}
           <div class="detail-row">
             <span class="label">Token:</span>
             <span class="value">${safeTokenSymbol}</span>
           </div>
         </div>
-        <p class="success-note">The community will vote on your submission. Once it reaches +5 votes, it will be automatically approved.</p>
+        <p class="success-note">The community will vote on your submission${results.length > 1 ? 's' : ''}. Once they reach +5 votes, they will be automatically approved.</p>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
-            Submit Another
+            Submit More
           </button>
           <a href="token.html?mint=${safeTokenMint}" class="btn btn-primary">
-            View Token
+            View Token Page
           </a>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        modal.remove();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+  },
+
+  // Show Imgur upload help modal
+  showImgurHelpModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content imgur-help-modal">
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="modal-header">
+          <h3>How to Upload Your Banner</h3>
+        </div>
+        <div class="imgur-steps">
+          <div class="imgur-step">
+            <span class="step-number">1</span>
+            <div class="step-content">
+              <h4>Create Your Banner</h4>
+              <p>Design a banner image (<strong>1200 x 300px</strong> recommended). PNG or JPG format works best.</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">2</span>
+            <div class="step-content">
+              <h4>Upload to Imgur</h4>
+              <p>Visit <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="link">imgur.com/upload</a> (no account required)</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">3</span>
+            <div class="step-content">
+              <h4>Get Direct Link</h4>
+              <p>After upload, right-click the image and select <strong>"Copy image address"</strong>. The URL should look like: <code>https://i.imgur.com/xxxxx.png</code></p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+            Open Imgur
+          </a>
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+            Got it
+          </button>
         </div>
       </div>
     `;
@@ -935,4 +984,239 @@ const submitPage = {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
   submitPage.init();
+});
+
+// ==========================================
+// API Key Management
+// ==========================================
+const apiKeyManager = {
+  currentKey: null, // Temporarily stores the full key after creation
+
+  init() {
+    this.bindEvents();
+    this.updateUI();
+  },
+
+  bindEvents() {
+    // Connect wallet button in API section
+    const connectApiBtn = document.getElementById('connect-wallet-api');
+    if (connectApiBtn) {
+      connectApiBtn.addEventListener('click', () => wallet.connect());
+    }
+
+    // Register API key button
+    const registerBtn = document.getElementById('register-api-key-btn');
+    if (registerBtn) {
+      registerBtn.addEventListener('click', () => this.registerKey());
+    }
+
+    // Revoke API key button
+    const revokeBtn = document.getElementById('revoke-api-key-btn');
+    if (revokeBtn) {
+      revokeBtn.addEventListener('click', () => this.revokeKey());
+    }
+
+    // Copy API key button
+    const copyBtn = document.getElementById('copy-api-key-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => this.copyKey());
+    }
+
+    // Done button (after key creation)
+    const doneBtn = document.getElementById('api-key-done-btn');
+    if (doneBtn) {
+      doneBtn.addEventListener('click', () => this.finishKeyCreation());
+    }
+
+    // Listen for wallet connect/disconnect
+    if (typeof wallet !== 'undefined') {
+      const originalOnConnect = wallet.onConnect;
+      wallet.onConnect = () => {
+        if (originalOnConnect) originalOnConnect();
+        this.updateUI();
+      };
+
+      const originalOnDisconnect = wallet.onDisconnect;
+      wallet.onDisconnect = () => {
+        if (originalOnDisconnect) originalOnDisconnect();
+        this.updateUI();
+      };
+    }
+  },
+
+  async updateUI() {
+    const connectCard = document.getElementById('api-key-connect');
+    const registerCard = document.getElementById('api-key-register');
+    const infoCard = document.getElementById('api-key-info');
+    const createdCard = document.getElementById('api-key-created');
+
+    // Hide all cards first
+    [connectCard, registerCard, infoCard, createdCard].forEach(card => {
+      if (card) card.style.display = 'none';
+    });
+
+    // Check if wallet is connected
+    if (!wallet.connected || !wallet.address) {
+      if (connectCard) connectCard.style.display = 'block';
+      return;
+    }
+
+    // Check if user has an API key
+    try {
+      const response = await api.apiKeys.getStatus(wallet.address);
+
+      if (response.success && response.data.hasKey) {
+        // User has a key - show info card
+        if (infoCard) {
+          infoCard.style.display = 'block';
+
+          // Update the info
+          const prefixEl = document.getElementById('api-key-prefix');
+          const createdEl = document.getElementById('api-key-created');
+          const lastUsedEl = document.getElementById('api-key-last-used');
+          const requestsEl = document.getElementById('api-key-requests');
+
+          if (prefixEl) prefixEl.textContent = response.data.keyPrefix + '...';
+          if (createdEl) createdEl.textContent = new Date(response.data.createdAt).toLocaleDateString();
+          if (lastUsedEl) {
+            lastUsedEl.textContent = response.data.lastUsedAt
+              ? utils.formatTimeAgo(response.data.lastUsedAt)
+              : 'Never';
+          }
+          if (requestsEl) requestsEl.textContent = (response.data.requestCount || 0).toLocaleString();
+        }
+      } else {
+        // User doesn't have a key - show register card
+        if (registerCard) registerCard.style.display = 'block';
+      }
+    } catch (error) {
+      console.error('Failed to check API key status:', error);
+      // Show register card on error
+      if (registerCard) registerCard.style.display = 'block';
+    }
+  },
+
+  async registerKey() {
+    if (!wallet.connected || !wallet.address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    const nameInput = document.getElementById('api-key-name');
+    const name = nameInput ? nameInput.value.trim() : null;
+    const btn = document.getElementById('register-api-key-btn');
+
+    try {
+      // Disable button and show loading
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="loading-spinner small"></div> Generating...';
+      }
+
+      const response = await api.apiKeys.register(wallet.address, name);
+
+      if (response.success && response.data.apiKey) {
+        // Store the key temporarily
+        this.currentKey = response.data.apiKey;
+
+        // Show the created card with the full key
+        const createdCard = document.getElementById('api-key-created');
+        const registerCard = document.getElementById('api-key-register');
+        const keyDisplay = document.getElementById('api-key-full');
+
+        if (registerCard) registerCard.style.display = 'none';
+        if (createdCard) createdCard.style.display = 'block';
+        if (keyDisplay) keyDisplay.textContent = this.currentKey;
+
+        toast.success('API key created successfully!');
+      } else {
+        throw new Error(response.error || 'Failed to create API key');
+      }
+    } catch (error) {
+      console.error('Failed to register API key:', error);
+      toast.error(error.message || 'Failed to create API key');
+    } finally {
+      // Reset button
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Generate API Key
+        `;
+      }
+    }
+  },
+
+  async copyKey() {
+    if (!this.currentKey) {
+      toast.error('No API key to copy');
+      return;
+    }
+
+    const success = await utils.copyToClipboard(this.currentKey, false);
+    if (success) {
+      toast.success('API key copied to clipboard!');
+    } else {
+      toast.error('Failed to copy API key');
+    }
+  },
+
+  finishKeyCreation() {
+    // Clear the temporary key
+    this.currentKey = null;
+
+    // Refresh the UI to show the info card
+    this.updateUI();
+  },
+
+  async revokeKey() {
+    if (!confirm('Are you sure you want to revoke your API key? You will need to create a new one.')) {
+      return;
+    }
+
+    // For revocation, we need the user to provide their API key
+    // Since we don't store it, we'll prompt them
+    const apiKey = prompt('Enter your API key to confirm revocation:');
+
+    if (!apiKey) {
+      return;
+    }
+
+    const btn = document.getElementById('revoke-api-key-btn');
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Revoking...';
+      }
+
+      const response = await api.apiKeys.revoke(apiKey);
+
+      if (response.success) {
+        toast.success('API key revoked successfully');
+        this.updateUI();
+      } else {
+        throw new Error(response.error || 'Failed to revoke API key');
+      }
+    } catch (error) {
+      console.error('Failed to revoke API key:', error);
+      toast.error(error.message || 'Failed to revoke API key');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Revoke Key';
+      }
+    }
+  }
+};
+
+// Initialize API key manager when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  // Only init if we're on a page with the API section
+  if (document.getElementById('api-section')) {
+    apiKeyManager.init();
+  }
 });

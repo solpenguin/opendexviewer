@@ -574,93 +574,99 @@ const tokenDetail = {
     });
   },
 
-  // Render candlestick chart (simplified using bar chart)
+  // Render candlestick chart using chartjs-chart-financial plugin
   renderCandlestickChart(ctx, data) {
-    // For true candlestick, we'd need a plugin, but we can simulate with bars
-    const labels = data.map(d => new Date(d.timestamp || d.time));
+    // Get values based on selected metric (price or market cap)
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
-    // Create datasets for the candle bodies
-    const bodyData = data.map(d => ({
-      x: new Date(d.timestamp || d.time),
-      o: d.open,
-      h: d.high,
-      l: d.low,
-      c: d.close
-    }));
+    // Transform data into OHLC format for candlestick chart
+    const candleData = data.map(d => {
+      let o = d.open || d.price;
+      let h = d.high || d.price;
+      let l = d.low || d.price;
+      let c = d.close || d.price;
 
-    // Use line chart with high/low range as fallback
-    const closes = data.map(d => d.close);
-    const highs = data.map(d => d.high);
-    const lows = data.map(d => d.low);
+      // Convert to market cap if needed
+      if (isMcap && supply > 0) {
+        o *= supply;
+        h *= supply;
+        l *= supply;
+        c *= supply;
+      }
+
+      return {
+        x: new Date(d.timestamp || d.time).getTime(),
+        o: o,
+        h: h,
+        l: l,
+        c: c
+      };
+    });
+
+    const metricLabel = isMcap ? 'Market Cap' : 'Price';
+    const formatValue = isMcap
+      ? (value) => utils.formatNumber(value)
+      : (value) => utils.formatPrice(value);
 
     this.chart = new Chart(ctx, {
-      type: 'line',
+      type: 'candlestick',
       data: {
-        labels,
-        datasets: [
-          {
-            label: 'High',
-            data: highs,
-            borderColor: 'rgba(34, 197, 94, 0.3)',
-            backgroundColor: 'transparent',
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
-            borderWidth: 1,
-            borderDash: [2, 2]
+        datasets: [{
+          label: metricLabel,
+          data: candleData,
+          color: {
+            up: '#22c55e',      // Green for bullish candles
+            down: '#ef4444',   // Red for bearish candles
+            unchanged: '#6b6b73'
           },
-          {
-            label: 'Close',
-            data: closes,
-            borderColor: '#7c3aed',
-            backgroundColor: 'rgba(124, 58, 237, 0.1)',
-            fill: true,
-            tension: 0.1,
-            pointRadius: 0,
-            borderWidth: 2
-          },
-          {
-            label: 'Low',
-            data: lows,
-            borderColor: 'rgba(239, 68, 68, 0.3)',
-            backgroundColor: 'transparent',
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
-            borderWidth: 1,
-            borderDash: [2, 2]
+          borderColor: {
+            up: '#22c55e',
+            down: '#ef4444',
+            unchanged: '#6b6b73'
           }
-        ]
+        }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          duration: 300
+        },
         plugins: {
           legend: { display: false },
           tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: '#1c1c21',
+            enabled: true,
+            backgroundColor: 'rgba(28, 28, 33, 0.95)',
             titleColor: '#ffffff',
             bodyColor: '#9ca3af',
-            borderColor: '#2a2a30',
+            borderColor: '#3a3a45',
             borderWidth: 1,
-            padding: 12,
+            padding: 14,
+            displayColors: false,
+            titleFont: {
+              size: 13,
+              weight: '600'
+            },
+            bodyFont: {
+              size: 13,
+              weight: '500'
+            },
             callbacks: {
               title: (items) => {
-                if (items.length) {
-                  return new Date(items[0].parsed.x).toLocaleString();
+                if (items.length && items[0].raw) {
+                  return new Date(items[0].raw.x).toLocaleString();
                 }
                 return '';
               },
               label: (context) => {
-                const idx = context.dataIndex;
-                const d = data[idx];
+                const d = context.raw;
+                if (!d) return '';
                 return [
-                  `Open: ${utils.formatPrice(d.open)}`,
-                  `High: ${utils.formatPrice(d.high)}`,
-                  `Low: ${utils.formatPrice(d.low)}`,
-                  `Close: ${utils.formatPrice(d.close)}`
+                  `Open: ${formatValue(d.o)}`,
+                  `High: ${formatValue(d.h)}`,
+                  `Low: ${formatValue(d.l)}`,
+                  `Close: ${formatValue(d.c)}`
                 ];
               }
             }
@@ -670,26 +676,38 @@ const tokenDetail = {
           x: {
             type: 'time',
             display: true,
-            grid: { display: false },
+            grid: {
+              display: false
+            },
             ticks: {
               color: '#6b6b73',
               maxRotation: 0,
               autoSkip: true,
-              maxTicksLimit: 6
+              maxTicksLimit: 6,
+              font: {
+                size: 11
+              }
             }
           },
           y: {
             position: 'right',
-            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+            grid: {
+              color: 'rgba(255, 255, 255, 0.04)',
+              drawBorder: false
+            },
             ticks: {
               color: '#6b6b73',
-              callback: value => utils.formatPrice(value)
+              callback: value => formatValue(value),
+              font: {
+                size: 11
+              },
+              maxTicksLimit: 6
             }
           }
         },
         interaction: {
           intersect: false,
-          mode: 'index'
+          mode: 'nearest'
         }
       }
     });
