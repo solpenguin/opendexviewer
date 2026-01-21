@@ -64,6 +64,13 @@ const poolAddressCache = new Map();
 const POOL_CACHE_TTL = 5 * 60 * 1000;
 
 /**
+ * Local cache for error responses (prevents repeated failed API calls)
+ * TTL: 1 minute
+ */
+const errorCache = new Map();
+const ERROR_CACHE_TTL = 60 * 1000;
+
+/**
  * Execute a deduplicated request - if the same key is already in flight,
  * return the existing promise instead of making a new request
  * Includes 429 retry logic with exponential backoff
@@ -115,9 +122,18 @@ function getHeaders() {
  * Get token info by address
  * Endpoint: /networks/{network}/tokens/{address}
  * Uses request deduplication to prevent concurrent calls for same token
+ * Caches null responses for 1 minute to prevent repeated failed lookups
  */
 async function getTokenInfo(mintAddress) {
   console.log(`[GeckoTerminal] getTokenInfo: ${mintAddress}`);
+
+  // Check error cache first
+  const errorCacheKey = `token:${mintAddress}`;
+  const cachedError = errorCache.get(errorCacheKey);
+  if (cachedError && Date.now() < cachedError.expiry) {
+    console.log(`[GeckoTerminal] Returning cached null for ${mintAddress} (error cached)`);
+    return null;
+  }
 
   try {
     const response = await deduplicatedRequest(`token:${mintAddress}`, () =>
@@ -129,6 +145,8 @@ async function getTokenInfo(mintAddress) {
     const token = response.data.data;
     if (!token) {
       console.log('[GeckoTerminal] No token data returned');
+      // Cache the null response
+      errorCache.set(errorCacheKey, { expiry: Date.now() + ERROR_CACHE_TTL });
       return null;
     }
 
@@ -151,6 +169,10 @@ async function getTokenInfo(mintAddress) {
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenInfo error:', error.message);
+    // Cache the error (but not 429 errors - those should retry)
+    if (error.response?.status !== 429) {
+      errorCache.set(errorCacheKey, { expiry: Date.now() + ERROR_CACHE_TTL });
+    }
     return null;
   }
 }
@@ -208,45 +230,84 @@ async function getMultiTokenInfo(addresses) {
 
 /**
  * Get token overview with price and market data
- * Optimized: fetches token info and pools in parallel to reduce latency
+ * Optimized: Only fetches pools endpoint which includes price data
+ * Metadata comes from Helius, so we only need market data from GeckoTerminal
+ * Caches null responses for 1 minute to prevent repeated failed lookups
  */
 async function getTokenOverview(mintAddress) {
   console.log(`[GeckoTerminal] getTokenOverview: ${mintAddress}`);
 
-  try {
-    // Fetch token info and pools in parallel for better performance
-    const [tokenInfo, poolsResponse] = await Promise.all([
-      getTokenInfo(mintAddress),
-      deduplicatedRequest(`pools:${mintAddress}`, () =>
-        axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
-          params: { page: 1 },
-          headers: getHeaders()
-        })
-      )
-    ]);
+  // Check error cache first
+  const errorCacheKey = `overview:${mintAddress}`;
+  const cachedError = errorCache.get(errorCacheKey);
+  if (cachedError && Date.now() < cachedError.expiry) {
+    console.log(`[GeckoTerminal] Returning cached null for overview ${mintAddress} (error cached)`);
+    return null;
+  }
 
-    if (!tokenInfo) {
-      return null;
-    }
+  try {
+    // Only fetch pools - it includes price and market data we need
+    // Metadata (name, symbol, decimals) now comes from Helius
+    const poolsResponse = await deduplicatedRequest(`pools:${mintAddress}`, () =>
+      axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
+        params: { page: 1 },
+        headers: getHeaders()
+      })
+    );
 
     const pools = poolsResponse.data.data || [];
-    let priceChange24h = 0;
-    let liquidity = 0;
 
-    if (pools.length > 0) {
-      const topPool = pools[0].attributes || {};
-      priceChange24h = parseFloat(topPool.price_change_percentage?.h24) || 0;
-      liquidity = parseFloat(topPool.reserve_in_usd) || 0;
+    if (pools.length === 0) {
+      // No pools found - try token endpoint as fallback
+      console.log(`[GeckoTerminal] No pools found for ${mintAddress}, trying token endpoint`);
+      const tokenInfo = await getTokenInfo(mintAddress);
+      if (!tokenInfo) {
+        // Cache the null response
+        errorCache.set(errorCacheKey, { expiry: Date.now() + ERROR_CACHE_TTL });
+      }
+      return tokenInfo;
     }
 
+    // Extract data from the top pool (most liquid)
+    const topPool = pools[0].attributes || {};
+    const priceChange24h = parseFloat(topPool.price_change_percentage?.h24) || 0;
+    const liquidity = parseFloat(topPool.reserve_in_usd) || 0;
+    const volume24h = parseFloat(topPool.volume_usd?.h24) || 0;
+    const price = parseFloat(topPool.base_token_price_usd) || 0;
+    const fdv = parseFloat(topPool.fdv_usd) || 0;
+    const marketCap = parseFloat(topPool.market_cap_usd) || fdv;
+
+    // Extract token info from pool relationships
+    const baseTokenId = pools[0].relationships?.base_token?.data?.id || '';
+    const tokenAddress = baseTokenId.replace('solana_', '') || mintAddress;
+
+    // Parse pool name for symbol (format: "TOKEN / SOL")
+    const poolName = topPool.name || '';
+    const symbol = poolName.split(' / ')[0] || '???';
+
     return {
-      ...tokenInfo,
+      mintAddress: tokenAddress,
+      address: tokenAddress,
+      name: symbol, // Basic name from pool, Helius provides better metadata
+      symbol: symbol,
+      decimals: 9, // Default, Helius provides accurate decimals
+      logoUri: null, // Helius provides logos
+      logoURI: null,
+      price,
+      volume24h,
+      marketCap,
+      fdv,
       priceChange24h,
       liquidity,
-      holder: null // GeckoTerminal doesn't provide holder count
+      totalSupply: null, // Helius provides supply
+      holder: null
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenOverview error:', error.message);
+    // Cache the error (but not 429 errors - those should retry)
+    if (error.response?.status !== 429) {
+      errorCache.set(errorCacheKey, { expiry: Date.now() + ERROR_CACHE_TTL });
+    }
     return null;
   }
 }
@@ -285,11 +346,13 @@ async function getMarketData(mintAddress) {
 /**
  * Get trending tokens/pools
  * Endpoint: /networks/{network}/trending_pools
+ * Optimized: Returns tokens without enrichment (caller can enrich via Helius batch)
+ * Set skipEnrichment=true to skip GeckoTerminal enrichment call
  */
 async function getTrendingTokens(options = {}) {
-  const { limit = 20 } = options;
+  const { limit = 20, skipEnrichment = false } = options;
 
-  console.log(`[GeckoTerminal] getTrendingTokens: limit=${limit}`);
+  console.log(`[GeckoTerminal] getTrendingTokens: limit=${limit}, skipEnrichment=${skipEnrichment}`);
 
   try {
     const response = await geckoRequest(() =>
@@ -337,10 +400,10 @@ async function getTrendingTokens(options = {}) {
       tokens.push({
         mintAddress: baseAddress,
         address: baseAddress,
-        name: tokenSymbol, // Will be enriched later
+        name: tokenSymbol, // Will be enriched by caller via Helius
         symbol: tokenSymbol,
         decimals: 9,
-        logoUri: null, // Will be enriched later
+        logoUri: null, // Will be enriched by caller via Helius
         logoURI: null,
         price: parseFloat(attrs.base_token_price_usd) || 0,
         priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
@@ -353,8 +416,9 @@ async function getTrendingTokens(options = {}) {
       });
     }
 
-    // Enrich with full token info (names, logos)
-    if (tokens.length > 0) {
+    // Only enrich via GeckoTerminal if explicitly requested (skipEnrichment=false)
+    // Otherwise, caller should use Helius batch API for better efficiency
+    if (!skipEnrichment && tokens.length > 0) {
       const addresses = tokens.map(t => t.address);
       const tokenInfoMap = await getMultiTokenInfo(addresses);
 
@@ -392,9 +456,10 @@ async function getTrendingTokens(options = {}) {
 /**
  * Get new tokens/pools
  * Endpoint: /networks/{network}/new_pools
+ * Optimized: Set skipEnrichment=true to skip GeckoTerminal enrichment (use Helius batch instead)
  */
-async function getNewTokens(limit = 20) {
-  console.log(`[GeckoTerminal] getNewTokens: limit=${limit}`);
+async function getNewTokens(limit = 20, skipEnrichment = false) {
+  console.log(`[GeckoTerminal] getNewTokens: limit=${limit}, skipEnrichment=${skipEnrichment}`);
 
   try {
     const response = await geckoRequest(() =>
@@ -455,8 +520,9 @@ async function getNewTokens(limit = 20) {
       });
     }
 
-    // Enrich with full token info
-    if (tokens.length > 0) {
+    // Only enrich via GeckoTerminal if explicitly requested
+    // Otherwise, caller should use Helius batch API for better efficiency
+    if (!skipEnrichment && tokens.length > 0) {
       const addresses = tokens.map(t => t.address);
       const tokenInfoMap = await getMultiTokenInfo(addresses);
 

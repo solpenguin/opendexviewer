@@ -777,6 +777,7 @@ const tokenDetail = {
   },
 
   // Render submissions list
+  // SECURITY: Uses DOM methods to prevent XSS attacks
   renderSubmissions(type = 'banner') {
     const container = document.getElementById('submissions-list');
     if (!container) return;
@@ -788,49 +789,117 @@ const tokenDetail = {
       filtered = this.submissions.filter(s => s.submission_type !== 'banner');
     }
 
+    // Clear container
+    container.innerHTML = '';
+
     if (filtered.length === 0) {
-      container.innerHTML = `
-        <div class="no-submissions">
-          <p>No ${type === 'banner' ? 'banners' : 'links'} submitted yet.</p>
-          <a href="submit.html?mint=${this.mint}" class="btn btn-secondary">Be the first to contribute!</a>
-        </div>
-      `;
+      const noSubmissions = document.createElement('div');
+      noSubmissions.className = 'no-submissions';
+
+      const text = document.createElement('p');
+      text.textContent = `No ${type === 'banner' ? 'banners' : 'links'} submitted yet.`;
+
+      const submitLink = document.createElement('a');
+      submitLink.href = `submit.html?mint=${encodeURIComponent(this.mint)}`;
+      submitLink.className = 'btn btn-secondary';
+      submitLink.textContent = 'Be the first to contribute!';
+
+      noSubmissions.appendChild(text);
+      noSubmissions.appendChild(submitLink);
+      container.appendChild(noSubmissions);
       return;
     }
 
-    container.innerHTML = filtered.map(s => `
-      <div class="submission-card">
-        <div class="submission-content">
-          ${s.submission_type === 'banner'
-            ? `<img src="${this.escapeHtml(s.content_url)}" class="submission-preview" alt="Banner preview" loading="lazy">`
-            : `
-              <div class="submission-link-info">
-                <span class="submission-type-badge">${s.submission_type}</span>
-                <a href="${this.escapeHtml(s.content_url)}" target="_blank" rel="noopener noreferrer" class="submission-url">${this.escapeHtml(s.content_url)}</a>
-              </div>
-            `
-          }
-        </div>
-        <div class="submission-meta">
-          <div class="submission-votes">
-            <button class="vote-btn vote-up ${s.userVote === 'up' ? 'voted' : ''}" onclick="voting.vote(${s.id}, 'up')">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="18 15 12 9 6 15"></polyline>
-              </svg>
-              <span>${s.upvotes || 0}</span>
-            </button>
-            <span class="submission-score ${(s.score || 0) >= 0 ? 'positive' : 'negative'}">${s.score || 0}</span>
-            <button class="vote-btn vote-down ${s.userVote === 'down' ? 'voted' : ''}" onclick="voting.vote(${s.id}, 'down')">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-              <span>${s.downvotes || 0}</span>
-            </button>
-          </div>
-          <span class="submission-date">${utils.formatTimeAgo(s.created_at)}</span>
-        </div>
-      </div>
-    `).join('');
+    // Build submission cards using DOM methods for XSS safety
+    filtered.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'submission-card';
+
+      // Content section
+      const content = document.createElement('div');
+      content.className = 'submission-content';
+
+      if (s.submission_type === 'banner') {
+        const img = document.createElement('img');
+        img.src = s.content_url;
+        img.className = 'submission-preview';
+        img.alt = 'Banner preview';
+        img.loading = 'lazy';
+        // Safe fallback for failed images
+        img.onerror = function() { this.style.display = 'none'; };
+        content.appendChild(img);
+      } else {
+        const linkInfo = document.createElement('div');
+        linkInfo.className = 'submission-link-info';
+
+        const typeBadge = document.createElement('span');
+        typeBadge.className = 'submission-type-badge';
+        typeBadge.textContent = s.submission_type; // Safe: textContent escapes
+
+        const link = document.createElement('a');
+        link.href = s.content_url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'submission-url';
+        link.textContent = s.content_url; // Safe: textContent escapes
+
+        linkInfo.appendChild(typeBadge);
+        linkInfo.appendChild(link);
+        content.appendChild(linkInfo);
+      }
+
+      // Meta section
+      const meta = document.createElement('div');
+      meta.className = 'submission-meta';
+
+      const votes = document.createElement('div');
+      votes.className = 'submission-votes';
+
+      // Upvote button
+      const upBtn = document.createElement('button');
+      upBtn.className = `vote-btn vote-up ${s.userVote === 'up' ? 'voted' : ''}`;
+      const submissionId = parseInt(s.id);
+      upBtn.addEventListener('click', () => voting.vote(submissionId, 'up'));
+      upBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+        <span>${parseInt(s.upvotes) || 0}</span>
+      `;
+
+      // Score
+      const score = document.createElement('span');
+      const scoreValue = parseInt(s.score) || 0;
+      score.className = `submission-score ${scoreValue >= 0 ? 'positive' : 'negative'}`;
+      score.textContent = String(scoreValue);
+
+      // Downvote button
+      const downBtn = document.createElement('button');
+      downBtn.className = `vote-btn vote-down ${s.userVote === 'down' ? 'voted' : ''}`;
+      downBtn.addEventListener('click', () => voting.vote(submissionId, 'down'));
+      downBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+        <span>${parseInt(s.downvotes) || 0}</span>
+      `;
+
+      votes.appendChild(upBtn);
+      votes.appendChild(score);
+      votes.appendChild(downBtn);
+
+      // Date
+      const date = document.createElement('span');
+      date.className = 'submission-date';
+      date.textContent = utils.formatTimeAgo(s.created_at);
+
+      meta.appendChild(votes);
+      meta.appendChild(date);
+
+      card.appendChild(content);
+      card.appendChild(meta);
+      container.appendChild(card);
+    });
   },
 
   // Escape HTML to prevent XSS

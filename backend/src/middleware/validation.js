@@ -15,6 +15,52 @@ function isValidUrl(string) {
   }
 }
 
+// URL allowlist for submission types
+const URL_ALLOWLISTS = {
+  twitter: ['twitter.com', 'x.com', 'mobile.twitter.com'],
+  telegram: ['t.me', 'telegram.me', 'telegram.org'],
+  discord: ['discord.gg', 'discord.com', 'discordapp.com'],
+  banner: null, // Any image host allowed
+  website: null // Any website allowed
+};
+
+// Known malicious/spam domains (expandable)
+const BLOCKED_DOMAINS = [
+  'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', // URL shorteners (hide destination)
+  'is.gd', 'v.gd', 'shorte.st', 'adf.ly',
+  'localhost', '127.0.0.1', '0.0.0.0' // Local addresses
+];
+
+// Validate URL is not a redirect/shortener and matches allowed domains
+function validateUrlDomain(urlString, submissionType) {
+  try {
+    const url = new URL(urlString);
+    const hostname = url.hostname.toLowerCase();
+
+    // Block known malicious/redirect domains
+    for (const blocked of BLOCKED_DOMAINS) {
+      if (hostname === blocked || hostname.endsWith('.' + blocked)) {
+        return { valid: false, message: 'URL shorteners are not allowed. Please use the direct URL.' };
+      }
+    }
+
+    // Check allowlist for specific submission types
+    const allowlist = URL_ALLOWLISTS[submissionType];
+    if (allowlist) {
+      const isAllowed = allowlist.some(domain =>
+        hostname === domain || hostname.endsWith('.' + domain)
+      );
+      if (!isAllowed) {
+        return { valid: false, message: `URL must be from: ${allowlist.join(', ')}` };
+      }
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, message: 'Invalid URL format' };
+  }
+}
+
 // Sanitize string input
 function sanitizeString(str, maxLength = 255) {
   if (typeof str !== 'string') return '';
@@ -50,6 +96,9 @@ function validateWallet(req, res, next) {
   next();
 }
 
+// Maximum URL length to prevent abuse
+const MAX_URL_LENGTH = 2000;
+
 // Validate submission input
 function validateSubmission(req, res, next) {
   const { tokenMint, submissionType, contentUrl } = req.body;
@@ -76,39 +125,48 @@ function validateSubmission(req, res, next) {
     });
   }
 
-  // Validate URL
+  // Validate URL length
+  if (contentUrl.length > MAX_URL_LENGTH) {
+    return res.status(400).json({ error: `URL too long (max ${MAX_URL_LENGTH} characters)` });
+  }
+
+  // Validate basic URL format
   if (!isValidUrl(contentUrl)) {
     return res.status(400).json({ error: 'Invalid URL format' });
   }
 
-  // Additional URL validation based on type
-  const urlLower = contentUrl.toLowerCase();
-
-  if (submissionType === 'twitter' && !urlLower.includes('twitter.com') && !urlLower.includes('x.com')) {
-    return res.status(400).json({ error: 'URL must be a Twitter/X link' });
+  // Validate URL domain (blocks shorteners, validates allowlists)
+  const domainValidation = validateUrlDomain(contentUrl, submissionType);
+  if (!domainValidation.valid) {
+    return res.status(400).json({ error: domainValidation.message });
   }
 
-  if (submissionType === 'telegram' && !urlLower.includes('t.me')) {
-    return res.status(400).json({ error: 'URL must be a Telegram link' });
-  }
-
-  if (submissionType === 'discord' && !urlLower.includes('discord')) {
-    return res.status(400).json({ error: 'URL must be a Discord link' });
-  }
-
-  // For banners, check for image extensions or known image hosts
+  // Type-specific validation
   if (submissionType === 'banner') {
-    const isImageUrl = /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(contentUrl) ||
+    // For banners, check for image extensions or known image hosts
+    const urlLower = contentUrl.toLowerCase();
+    const isImageUrl = /\.(jpg|jpeg|png|gif|webp|svg)(\?.*)?$/i.test(contentUrl) ||
       urlLower.includes('imgur.com') ||
+      urlLower.includes('i.imgur.com') ||
       urlLower.includes('cloudinary.com') ||
+      urlLower.includes('imagekit.io') ||
       urlLower.includes('ipfs.io') ||
-      urlLower.includes('arweave.net');
+      urlLower.includes('arweave.net') ||
+      urlLower.includes('nftstorage.link');
 
     if (!isImageUrl) {
       return res.status(400).json({
-        error: 'Banner URL must be a direct image link (PNG, JPG, GIF, WebP)'
+        error: 'Banner URL must be a direct image link (PNG, JPG, GIF, WebP, SVG) or from a known image host'
       });
     }
+  }
+
+  // Sanitize the URL (normalize)
+  try {
+    const normalized = new URL(contentUrl);
+    req.body.contentUrl = normalized.href;
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL format' });
   }
 
   next();
@@ -227,5 +285,8 @@ module.exports = {
   requireDatabase,
   sanitizeString,
   isValidUrl,
-  SOLANA_ADDRESS_REGEX
+  validateUrlDomain,
+  SOLANA_ADDRESS_REGEX,
+  BLOCKED_DOMAINS,
+  MAX_URL_LENGTH
 };

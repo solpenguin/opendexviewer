@@ -22,11 +22,11 @@ const RATE_LIMITS = {
   },
   geckoTerminal: {
     // GeckoTerminal free tier: 30 requests/minute = 1 request every 2 seconds
-    // Being conservative to avoid 429s - use 2.5s minimum interval
-    minInterval: 2500,   // Minimum 2.5s between requests
-    maxJitter: 500,      // Add up to 500ms random jitter
-    burstLimit: 1,       // No bursting - strictly sequential
-    burstWindow: 3000,   // 3 second window
+    // Use 2s minimum to stay under limit while keeping response times reasonable
+    minInterval: 2000,   // Minimum 2s between requests (30/min max)
+    maxJitter: 300,      // Add up to 300ms random jitter
+    burstLimit: 2,       // Allow small bursts for parallel requests
+    burstWindow: 4000,   // 4 second window
     useQueue: true       // Force queue-based processing
   },
   jupiter: {
@@ -171,6 +171,7 @@ async function queueRequest(apiName, requestFn) {
 
 /**
  * Process the request queue for an API
+ * Executes requests with rate limiting delays directly (not through rateLimitedRequest to avoid recursion)
  * @param {string} apiName - Name of the API
  */
 async function processQueue(apiName) {
@@ -183,7 +184,15 @@ async function processQueue(apiName) {
     const { requestFn, resolve, reject } = queue.shift();
 
     try {
-      const result = await rateLimitedRequest(apiName, requestFn);
+      // Apply rate limiting delay directly (not through rateLimitedRequest to avoid recursion)
+      const delay = getRequiredDelay(apiName);
+      if (delay > 0) {
+        await sleep(delay);
+      }
+      recordRequest(apiName);
+
+      // Execute the actual request
+      const result = await requestFn();
       resolve(result);
     } catch (error) {
       reject(error);

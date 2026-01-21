@@ -590,37 +590,85 @@ const submitPage = {
         return;
       }
 
-      container.innerHTML = this.mySubmissions.map(s => `
-        <div class="my-submission-card">
-          <div class="submission-type-icon">
-            ${this.getTypeIcon(s.submission_type)}
-          </div>
-          <div class="submission-info">
-            <div class="submission-title">
-              <span class="type-label">${s.submission_type}</span>
-              <a href="token.html?mint=${s.token_mint}" class="token-link">${this.truncateAddress(s.token_mint)}</a>
-            </div>
-            <a href="${s.content_url}" target="_blank" rel="noopener noreferrer" class="content-url">${this.truncateUrl(s.content_url)}</a>
-          </div>
-          <div class="submission-status-badge status-${s.status}">
-            ${s.status}
-          </div>
-          <div class="submission-score ${(s.score || 0) >= 0 ? 'positive' : 'negative'}">
-            ${s.score > 0 ? '+' : ''}${s.score || 0}
-          </div>
-        </div>
-      `).join('');
+      // SECURITY: Build submission cards safely to prevent XSS
+      container.innerHTML = '';
+      this.mySubmissions.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'my-submission-card';
+
+        // Type icon (safe - from our predefined icons)
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'submission-type-icon';
+        iconDiv.innerHTML = this.getTypeIcon(s.submission_type);
+
+        // Submission info
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'submission-info';
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'submission-title';
+
+        const typeLabel = document.createElement('span');
+        typeLabel.className = 'type-label';
+        typeLabel.textContent = s.submission_type; // Safe: textContent escapes HTML
+
+        const tokenLink = document.createElement('a');
+        tokenLink.className = 'token-link';
+        tokenLink.href = `token.html?mint=${encodeURIComponent(s.token_mint)}`;
+        tokenLink.textContent = this.truncateAddress(s.token_mint);
+
+        titleDiv.appendChild(typeLabel);
+        titleDiv.appendChild(tokenLink);
+
+        const contentLink = document.createElement('a');
+        contentLink.className = 'content-url';
+        contentLink.href = s.content_url;
+        contentLink.target = '_blank';
+        contentLink.rel = 'noopener noreferrer';
+        contentLink.textContent = this.truncateUrl(s.content_url);
+
+        infoDiv.appendChild(titleDiv);
+        infoDiv.appendChild(contentLink);
+
+        // Status badge
+        const statusBadge = document.createElement('div');
+        statusBadge.className = `submission-status-badge status-${utils.escapeHtml(s.status)}`;
+        statusBadge.textContent = s.status;
+
+        // Score
+        const scoreDiv = document.createElement('div');
+        const score = s.score || 0;
+        scoreDiv.className = `submission-score ${score >= 0 ? 'positive' : 'negative'}`;
+        scoreDiv.textContent = score > 0 ? `+${score}` : String(score);
+
+        card.appendChild(iconDiv);
+        card.appendChild(infoDiv);
+        card.appendChild(statusBadge);
+        card.appendChild(scoreDiv);
+
+        container.appendChild(card);
+      });
 
     } catch (error) {
       console.error('Failed to load submissions:', error);
-      container.innerHTML = `
-        <div class="empty-submissions error">
-          <p>Failed to load your submissions</p>
-          <button class="btn btn-secondary btn-sm" onclick="submitPage.loadMySubmissions('${walletAddress}')">
-            Retry
-          </button>
-        </div>
-      `;
+      // SECURITY: Build error UI safely without inline wallet address
+      container.innerHTML = '';
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'empty-submissions error';
+
+      const errorText = document.createElement('p');
+      errorText.textContent = 'Failed to load your submissions';
+
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'btn btn-secondary btn-sm';
+      retryBtn.textContent = 'Retry';
+      retryBtn.addEventListener('click', () => {
+        submitPage.loadMySubmissions(walletAddress);
+      });
+
+      errorDiv.appendChild(errorText);
+      errorDiv.appendChild(retryBtn);
+      container.appendChild(errorDiv);
     }
   },
 

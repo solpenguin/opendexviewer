@@ -18,7 +18,8 @@ const TTL = {
   LONG: 300000,         // 5 minutes
   VERY_LONG: 900000,    // 15 minutes
   HOUR: 3600000,        // 1 hour
-  DAY: 86400000         // 24 hours
+  DAY: 86400000,        // 24 hours
+  ERROR: 60000          // 1 minute - cache failed lookups to prevent repeated API calls
 };
 
 // Cache key generators

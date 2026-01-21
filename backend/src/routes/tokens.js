@@ -9,6 +9,7 @@ const { validateMint, validatePagination, validateSearch, asyncHandler } = requi
 const { searchLimiter } = require('../middleware/rateLimit');
 
 // GET /api/tokens - List tokens (trending, new, gainers, losers)
+// Optimized: Uses Helius batch API for metadata enrichment instead of extra GeckoTerminal calls
 router.get('/', validatePagination, asyncHandler(async (req, res) => {
   const {
     sort = 'volume',
@@ -34,24 +35,27 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
   try {
     // Use GeckoTerminal (free, no API key needed)
-    console.log('[API /tokens] Using GeckoTerminal API');
+    // Optimization: Skip GeckoTerminal enrichment - use Helius batch API instead
+    const useHeliusEnrichment = solanaService.isHeliusConfigured();
+    console.log(`[API /tokens] Using GeckoTerminal API (Helius enrichment: ${useHeliusEnrichment})`);
+
     try {
       switch (filter) {
         case 'new':
-          tokens = await geckoService.getNewTokens(parseInt(limit));
+          tokens = await geckoService.getNewTokens(parseInt(limit), useHeliusEnrichment);
           break;
         case 'gainers':
           // Get trending and sort by price change
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment });
           tokens = tokens?.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
           break;
         case 'losers':
           // Get trending and sort by price change (ascending)
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment });
           tokens = tokens?.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
           break;
         default: // trending
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit) });
+          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment });
       }
     } catch (err) {
       geckoError = err;
@@ -74,6 +78,30 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         if (geckoError) throw geckoError;
         throw jupiterError;
       }
+    }
+
+    // Enrich tokens with Helius batch API if available (more efficient than GeckoTerminal multi-token)
+    // Helius batch: 1 request for up to 1000 tokens
+    // GeckoTerminal multi: 1 request for up to 30 tokens
+    if (useHeliusEnrichment && tokens && tokens.length > 0) {
+      console.log(`[API /tokens] Enriching ${tokens.length} tokens via Helius batch API`);
+      const addresses = tokens.map(t => t.address || t.mintAddress);
+      const heliusMetadata = await solanaService.getTokenMetadataBatch(addresses);
+
+      for (const token of tokens) {
+        const address = token.address || token.mintAddress;
+        const meta = heliusMetadata[address];
+        if (meta) {
+          // Helius provides: name, symbol, decimals, logoUri
+          // Keep GeckoTerminal data for: price, volume, priceChange (more accurate market data)
+          token.name = meta.name || token.name;
+          token.symbol = meta.symbol || token.symbol;
+          token.decimals = meta.decimals || token.decimals;
+          token.logoUri = meta.logoUri || token.logoUri;
+          token.logoURI = meta.logoUri || token.logoURI;
+        }
+      }
+      console.log(`[API /tokens] Helius enriched ${Object.keys(heliusMetadata).length} tokens`);
     }
 
     console.log(`[API /tokens] Received ${tokens?.length || 0} tokens from service`);
@@ -230,204 +258,178 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
 
 // GET /api/tokens/:mint - Get single token details
 // Uses 5-minute cache but requires data < 1 minute old (fresh) for individual token views
+// Optimized: Uses getOrSetWithFreshness for stampede prevention on concurrent requests
 router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = keys.tokenInfo(mint);
 
   console.log(`[API /tokens/:mint] Fetching token: ${mint}`);
 
-  // Check cache with freshness - individual token pages need fresh data (< 1 minute old)
-  const cachedMeta = await cache.getWithMeta(cacheKey);
-  if (cachedMeta && cachedMeta.fresh) {
-    console.log(`[API /tokens/:mint] Returning fresh cached data (age: ${Math.round(cachedMeta.age / 1000)}s)`);
-    return res.json(cachedMeta.value);
-  }
-
-  // If we have stale cached data, we might still use it if the API fetch fails
-  const staleCached = cachedMeta?.value;
-  if (staleCached) {
-    console.log(`[API /tokens/:mint] Cache exists but stale (age: ${Math.round(cachedMeta.age / 1000)}s), fetching fresh data`);
-  }
-
   try {
-    // Fetch holder count from cache first (cached for 24 hours)
-    // This is a separate cache key so it doesn't get invalidated with price data
-    const holderCacheKey = keys.holderCount(mint);
-    let holders = await cache.get(holderCacheKey);
+    // Use getOrSetWithFreshness for stampede prevention
+    // If multiple requests come in for the same token, they share one API fetch
+    const result = await cache.getOrSetWithFreshness(cacheKey, async () => {
+      // Fetch holder count from cache first (cached for 24 hours)
+      // This is a separate cache key so it doesn't get invalidated with price data
+      const holderCacheKey = keys.holderCount(mint);
+      let holders = await cache.get(holderCacheKey);
 
-    // Fetch data in parallel
-    // Strategy: Use Helius for metadata (name, symbol, decimals, supply, basic price)
-    // Use GeckoTerminal only for market data Helius can't provide (volume, price change, liquidity)
-    console.log('[API /tokens/:mint] Fetching from APIs...');
-    const fetchPromises = [
-      // Helius provides: metadata, supply, price (for top 10k tokens)
-      solanaService.isHeliusConfigured()
-        ? solanaService.getTokenMetadata(mint).catch(err => {
-            console.error('[API /tokens/:mint] Helius metadata failed:', err.message);
+      // Fetch data in parallel
+      // Strategy: Use Helius for metadata (name, symbol, decimals, supply, basic price)
+      // Use GeckoTerminal only for market data Helius can't provide (volume, price change, liquidity)
+      console.log('[API /tokens/:mint] Fetching from APIs...');
+      const fetchPromises = [
+        // Helius provides: metadata, supply, price (for top 10k tokens)
+        solanaService.isHeliusConfigured()
+          ? solanaService.getTokenMetadata(mint).catch(err => {
+              console.error('[API /tokens/:mint] Helius metadata failed:', err.message);
+              return null;
+            })
+          : Promise.resolve(null),
+        // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
+        geckoService.getTokenOverview(mint),
+        db.getApprovedSubmissions(mint).catch(() => [])
+      ];
+
+      // If holder count not cached and Helius is configured, fetch it
+      if (holders === undefined && solanaService.isHeliusConfigured()) {
+        fetchPromises.push(
+          solanaService.getTokenHolderCount(mint).catch(err => {
+            console.error('[API /tokens/:mint] Holder count fetch failed:', err.message);
             return null;
           })
-        : Promise.resolve(null),
-      // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
-      geckoService.getTokenOverview(mint),
-      db.getApprovedSubmissions(mint).catch(() => [])
-    ];
-
-    // If holder count not cached and Helius is configured, fetch it
-    if (holders === undefined && solanaService.isHeliusConfigured()) {
-      fetchPromises.push(
-        solanaService.getTokenHolderCount(mint).catch(err => {
-          console.error('[API /tokens/:mint] Holder count fetch failed:', err.message);
-          return null;
-        })
-      );
-    }
-
-    const results = await Promise.all(fetchPromises);
-    const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
-
-    // Cache holder count for 24 hours if we fetched it
-    if (fetchedHolders !== undefined && fetchedHolders !== null) {
-      holders = fetchedHolders;
-      await cache.set(holderCacheKey, holders, TTL.DAY);
-      console.log(`[API /tokens/:mint] Cached holder count: ${holders} for 24 hours`);
-    }
-
-    console.log('[API /tokens/:mint] heliusMetadata:', heliusMetadata ? {
-      name: heliusMetadata.name,
-      symbol: heliusMetadata.symbol,
-      hasPriceData: heliusMetadata.hasPriceData
-    } : null);
-    console.log('[API /tokens/:mint] geckoOverview:', geckoOverview ? {
-      name: geckoOverview.name,
-      price: geckoOverview.price,
-      volume24h: geckoOverview.volume24h
-    } : null);
-
-    // Data priority:
-    // - Metadata (name, symbol, decimals): Helius > GeckoTerminal > Jupiter fallback
-    // - Price: GeckoTerminal (more accurate) > Helius (only top 10k, cached)
-    // - Volume, price change, liquidity: GeckoTerminal only
-    const helius = heliusMetadata || {};
-    const gecko = geckoOverview || {};
-
-    // Calculate supply - prefer Helius (more accurate), fallback to GeckoTerminal
-    let supply = helius.supply || null;
-    let circulatingSupply = supply;
-    if (!supply && gecko.totalSupply) {
-      const decimals = helius.decimals || gecko.decimals || 9;
-      const rawSupply = parseFloat(gecko.totalSupply);
-      supply = rawSupply / Math.pow(10, decimals);
-      circulatingSupply = supply;
-    }
-
-    // Merge data with priority:
-    // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal
-    // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
-    // - Market data (volume, price change, liquidity): GeckoTerminal only
-    const result = {
-      mintAddress: mint,
-      address: mint,
-      // Metadata: prefer Helius (faster, from RPC) then GeckoTerminal
-      name: helius.name || gecko.name || 'Unknown Token',
-      symbol: helius.symbol || gecko.symbol || '???',
-      decimals: helius.decimals || gecko.decimals || 9,
-      logoUri: helius.logoUri || gecko.logoUri || null,
-      logoURI: helius.logoUri || gecko.logoURI || null,
-      // Price: prefer GeckoTerminal (more accurate), fallback to Helius
-      price: gecko.price || helius.price || 0,
-      // Market data: GeckoTerminal only (Helius doesn't provide these)
-      priceChange24h: gecko.priceChange24h || 0,
-      volume24h: gecko.volume24h || 0,
-      liquidity: gecko.liquidity || 0,
-      marketCap: gecko.marketCap || gecko.fdv || 0,
-      fdv: gecko.fdv || 0,
-      // Supply data - prefer Helius
-      supply: supply,
-      circulatingSupply: circulatingSupply,
-      totalSupply: gecko.totalSupply || null,
-      // Holder count from Helius (cached daily)
-      holders: holders || null,
-      // Additional metadata
-      coingeckoId: gecko.coingeckoId || null,
-      // Submissions
-      submissions: {
-        banners: submissions.filter(s => s.submission_type === 'banner'),
-        socials: submissions.filter(s => s.submission_type !== 'banner')
+        );
       }
-    };
 
-    console.log('[API /tokens/:mint] Final result:', {
-      name: result.name,
-      symbol: result.symbol,
-      price: result.price,
-      volume24h: result.volume24h,
-      holders: result.holders
-    });
+      const results = await Promise.all(fetchPromises);
+      const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
-    // Cache for 5 minutes with timestamp for freshness tracking
-    await cache.setWithTimestamp(cacheKey, result, TTL.PRICE_DATA);
+      // Cache holder count for 24 hours if we fetched it
+      if (fetchedHolders !== undefined && fetchedHolders !== null) {
+        holders = fetchedHolders;
+        await cache.set(holderCacheKey, holders, TTL.DAY);
+        console.log(`[API /tokens/:mint] Cached holder count: ${holders} for 24 hours`);
+      }
 
-    // Also save to database for future reference
-    const tokenName = helius.name || gecko.name;
-    const tokenSymbol = helius.symbol || gecko.symbol;
-    if (tokenName && tokenSymbol) {
-      db.upsertToken({
+      console.log('[API /tokens/:mint] heliusMetadata:', heliusMetadata ? {
+        name: heliusMetadata.name,
+        symbol: heliusMetadata.symbol,
+        hasPriceData: heliusMetadata.hasPriceData
+      } : null);
+      console.log('[API /tokens/:mint] geckoOverview:', geckoOverview ? {
+        name: geckoOverview.name,
+        price: geckoOverview.price,
+        volume24h: geckoOverview.volume24h
+      } : null);
+
+      // Data priority:
+      // - Metadata (name, symbol, decimals): Helius > GeckoTerminal > Jupiter fallback
+      // - Price: GeckoTerminal (more accurate) > Helius (only top 10k, cached)
+      // - Volume, price change, liquidity: GeckoTerminal only
+      const helius = heliusMetadata || {};
+      const gecko = geckoOverview || {};
+
+      // Calculate supply - prefer Helius (more accurate), fallback to GeckoTerminal
+      let supply = helius.supply || null;
+      let circulatingSupply = supply;
+      if (!supply && gecko.totalSupply) {
+        const decimals = helius.decimals || gecko.decimals || 9;
+        const rawSupply = parseFloat(gecko.totalSupply);
+        supply = rawSupply / Math.pow(10, decimals);
+        circulatingSupply = supply;
+      }
+
+      // Merge data with priority:
+      // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal
+      // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
+      // - Market data (volume, price change, liquidity): GeckoTerminal only
+      const tokenResult = {
         mintAddress: mint,
-        name: tokenName,
-        symbol: tokenSymbol,
+        address: mint,
+        // Metadata: prefer Helius (faster, from RPC) then GeckoTerminal
+        name: helius.name || gecko.name || 'Unknown Token',
+        symbol: helius.symbol || gecko.symbol || '???',
         decimals: helius.decimals || gecko.decimals || 9,
-        logoUri: helius.logoUri || gecko.logoUri
-      }).catch(err => console.error('Failed to cache token:', err.message));
-    }
+        logoUri: helius.logoUri || gecko.logoUri || null,
+        logoURI: helius.logoUri || gecko.logoURI || null,
+        // Price: prefer GeckoTerminal (more accurate), fallback to Helius
+        price: gecko.price || helius.price || 0,
+        // Market data: GeckoTerminal only (Helius doesn't provide these)
+        priceChange24h: gecko.priceChange24h || 0,
+        volume24h: gecko.volume24h || 0,
+        liquidity: gecko.liquidity || 0,
+        marketCap: gecko.marketCap || gecko.fdv || 0,
+        fdv: gecko.fdv || 0,
+        // Supply data - prefer Helius
+        supply: supply,
+        circulatingSupply: circulatingSupply,
+        totalSupply: gecko.totalSupply || null,
+        // Holder count from Helius (cached daily)
+        holders: holders || null,
+        // Additional metadata
+        coingeckoId: gecko.coingeckoId || null,
+        // Submissions
+        submissions: {
+          banners: submissions.filter(s => s.submission_type === 'banner'),
+          socials: submissions.filter(s => s.submission_type !== 'banner')
+        }
+      };
+
+      console.log('[API /tokens/:mint] Final result:', {
+        name: tokenResult.name,
+        symbol: tokenResult.symbol,
+        price: tokenResult.price,
+        volume24h: tokenResult.volume24h,
+        holders: tokenResult.holders
+      });
+
+      // Also save to database for future reference
+      const tokenName = helius.name || gecko.name;
+      const tokenSymbol = helius.symbol || gecko.symbol;
+      if (tokenName && tokenSymbol) {
+        db.upsertToken({
+          mintAddress: mint,
+          name: tokenName,
+          symbol: tokenSymbol,
+          decimals: helius.decimals || gecko.decimals || 9,
+          logoUri: helius.logoUri || gecko.logoUri
+        }).catch(err => console.error('Failed to cache token:', err.message));
+      }
+
+      return tokenResult;
+    }, true); // requireFresh=true for individual token pages
 
     res.json(result);
   } catch (error) {
     console.error('[API /tokens/:mint] Error fetching token:', error.message);
     console.error('[API /tokens/:mint] Stack:', error.stack);
-
-    // If we have stale cached data, return it as fallback
-    if (staleCached) {
-      console.log('[API /tokens/:mint] Returning stale cached data as fallback');
-      return res.json(staleCached);
-    }
-
     res.status(500).json({ error: 'Failed to fetch token details' });
   }
 }));
 
 // GET /api/tokens/:mint/price - Get price data only
 // Uses 5-minute cache with 1-minute freshness for individual views
+// Optimized: Uses getOrSetWithFreshness for stampede prevention
 router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = keys.tokenPrice(mint);
 
-  // Check cache with freshness - price endpoints need fresh data (< 1 minute old)
-  const cachedMeta = await cache.getWithMeta(cacheKey);
-  if (cachedMeta && cachedMeta.fresh) {
-    return res.json(cachedMeta.value);
-  }
-
-  // Keep stale data as fallback
-  const staleCached = cachedMeta?.value;
-
   try {
-    // Use GeckoTerminal for price data
-    let priceData = await geckoService.getTokenOverview(mint);
+    // Use getOrSetWithFreshness for stampede prevention
+    const priceData = await cache.getOrSetWithFreshness(cacheKey, async () => {
+      // Use GeckoTerminal for price data
+      let data = await geckoService.getTokenOverview(mint);
 
-    // Fallback to Jupiter if GeckoTerminal fails
-    if (!priceData) {
-      priceData = await jupiterService.getTokenPrice(mint);
-    }
+      // Fallback to Jupiter if GeckoTerminal fails
+      if (!data) {
+        data = await jupiterService.getTokenPrice(mint);
+      }
 
-    // Cache for 5 minutes with timestamp for freshness tracking
-    await cache.setWithTimestamp(cacheKey, priceData, TTL.PRICE_DATA);
+      return data;
+    }, true); // requireFresh=true for price endpoints
 
     res.json(priceData);
   } catch (error) {
-    // Return stale data if available
-    if (staleCached) {
-      return res.json(staleCached);
-    }
     console.error('Error fetching price:', error.message);
     res.status(500).json({ error: 'Failed to fetch price data' });
   }
