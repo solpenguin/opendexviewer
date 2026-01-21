@@ -255,10 +255,19 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
     const holderCacheKey = keys.holderCount(mint);
     let holders = await cache.get(holderCacheKey);
 
-    // Fetch data in parallel - use GeckoTerminal for market data
+    // Fetch data in parallel
+    // Strategy: Use Helius for metadata (name, symbol, decimals, supply, basic price)
+    // Use GeckoTerminal only for market data Helius can't provide (volume, price change, liquidity)
     console.log('[API /tokens/:mint] Fetching from APIs...');
     const fetchPromises = [
-      jupiterService.getTokenInfo(mint),
+      // Helius provides: metadata, supply, price (for top 10k tokens)
+      solanaService.isHeliusConfigured()
+        ? solanaService.getTokenMetadata(mint).catch(err => {
+            console.error('[API /tokens/:mint] Helius metadata failed:', err.message);
+            return null;
+          })
+        : Promise.resolve(null),
+      // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
       geckoService.getTokenOverview(mint),
       db.getApprovedSubmissions(mint).catch(() => [])
     ];
@@ -274,7 +283,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
     }
 
     const results = await Promise.all(fetchPromises);
-    const [tokenInfo, geckoOverview, submissions, fetchedHolders] = results;
+    const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
     // Cache holder count for 24 hours if we fetched it
     if (fetchedHolders !== undefined && fetchedHolders !== null) {
@@ -283,43 +292,56 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       console.log(`[API /tokens/:mint] Cached holder count: ${holders} for 24 hours`);
     }
 
-    console.log('[API /tokens/:mint] tokenInfo:', JSON.stringify(tokenInfo, null, 2));
-    console.log('[API /tokens/:mint] geckoOverview:', JSON.stringify(geckoOverview, null, 2));
+    console.log('[API /tokens/:mint] heliusMetadata:', heliusMetadata ? {
+      name: heliusMetadata.name,
+      symbol: heliusMetadata.symbol,
+      hasPriceData: heliusMetadata.hasPriceData
+    } : null);
+    console.log('[API /tokens/:mint] geckoOverview:', geckoOverview ? {
+      name: geckoOverview.name,
+      price: geckoOverview.price,
+      volume24h: geckoOverview.volume24h
+    } : null);
 
-    // Prefer GeckoTerminal data (has price, volume, name, symbol, supply)
-    // Fall back to Jupiter for basic token info
+    // Data priority:
+    // - Metadata (name, symbol, decimals): Helius > GeckoTerminal > Jupiter fallback
+    // - Price: GeckoTerminal (more accurate) > Helius (only top 10k, cached)
+    // - Volume, price change, liquidity: GeckoTerminal only
+    const helius = heliusMetadata || {};
     const gecko = geckoOverview || {};
-    const jupiter = tokenInfo || {};
 
-    // Calculate supply from totalSupply string (GeckoTerminal returns raw amount)
-    let supply = null;
-    let circulatingSupply = null;
-    if (gecko.totalSupply) {
-      const decimals = gecko.decimals || jupiter.decimals || 9;
+    // Calculate supply - prefer Helius (more accurate), fallback to GeckoTerminal
+    let supply = helius.supply || null;
+    let circulatingSupply = supply;
+    if (!supply && gecko.totalSupply) {
+      const decimals = helius.decimals || gecko.decimals || 9;
       const rawSupply = parseFloat(gecko.totalSupply);
       supply = rawSupply / Math.pow(10, decimals);
-      // For now, assume circulating = total (GeckoTerminal doesn't provide circulating)
       circulatingSupply = supply;
     }
 
-    // Merge data - prioritize GeckoTerminal for most fields
+    // Merge data with priority:
+    // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal
+    // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
+    // - Market data (volume, price change, liquidity): GeckoTerminal only
     const result = {
       mintAddress: mint,
       address: mint,
-      // Use GeckoTerminal name/symbol first, fallback to Jupiter
-      name: gecko.name || jupiter.name || 'Unknown Token',
-      symbol: gecko.symbol || jupiter.symbol || '???',
-      decimals: gecko.decimals || jupiter.decimals || 9,
-      logoUri: gecko.logoUri || jupiter.logoUri || null,
-      logoURI: gecko.logoURI || jupiter.logoURI || null,
-      // Price data from GeckoTerminal
-      price: gecko.price || 0,
+      // Metadata: prefer Helius (faster, from RPC) then GeckoTerminal
+      name: helius.name || gecko.name || 'Unknown Token',
+      symbol: helius.symbol || gecko.symbol || '???',
+      decimals: helius.decimals || gecko.decimals || 9,
+      logoUri: helius.logoUri || gecko.logoUri || null,
+      logoURI: helius.logoUri || gecko.logoURI || null,
+      // Price: prefer GeckoTerminal (more accurate), fallback to Helius
+      price: gecko.price || helius.price || 0,
+      // Market data: GeckoTerminal only (Helius doesn't provide these)
       priceChange24h: gecko.priceChange24h || 0,
       volume24h: gecko.volume24h || 0,
       liquidity: gecko.liquidity || 0,
       marketCap: gecko.marketCap || gecko.fdv || 0,
       fdv: gecko.fdv || 0,
-      // Supply data
+      // Supply data - prefer Helius
       supply: supply,
       circulatingSupply: circulatingSupply,
       totalSupply: gecko.totalSupply || null,
@@ -334,21 +356,27 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       }
     };
 
-    console.log('[API /tokens/:mint] Final result:', JSON.stringify(result, null, 2));
+    console.log('[API /tokens/:mint] Final result:', {
+      name: result.name,
+      symbol: result.symbol,
+      price: result.price,
+      volume24h: result.volume24h,
+      holders: result.holders
+    });
 
     // Cache for 5 minutes with timestamp for freshness tracking
     await cache.setWithTimestamp(cacheKey, result, TTL.PRICE_DATA);
 
     // Also save to database for future reference
-    const tokenName = gecko.name || jupiter.name;
-    const tokenSymbol = gecko.symbol || jupiter.symbol;
+    const tokenName = helius.name || gecko.name;
+    const tokenSymbol = helius.symbol || gecko.symbol;
     if (tokenName && tokenSymbol) {
       db.upsertToken({
         mintAddress: mint,
         name: tokenName,
         symbol: tokenSymbol,
-        decimals: gecko.decimals || jupiter.decimals || 9,
-        logoUri: gecko.logoUri || jupiter.logoUri
+        decimals: helius.decimals || gecko.decimals || 9,
+        logoUri: helius.logoUri || gecko.logoUri
       }).catch(err => console.error('Failed to cache token:', err.message));
     }
 
@@ -423,7 +451,8 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
   }
 
   const cacheKey = keys.tokenChart(mint, normalizedInterval);
-  const cacheTTL = normalizedInterval.includes('m') ? TTL.SHORT : TTL.MEDIUM;
+  // Use longer TTL for chart data - minute intervals cache 1min, others cache 2min
+  const cacheTTL = normalizedInterval.includes('m') ? TTL.MEDIUM : TTL.OHLCV;
 
   try {
     // Use getOrSet for caching with stampede prevention
@@ -461,9 +490,10 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
 
   try {
     // Use getOrSet for caching with stampede prevention
+    // OHLCV data cached for 2 minutes to reduce GeckoTerminal API load
     const ohlcvData = await cache.getOrSet(cacheKey, async () => {
       return geckoService.getOHLCV(mint, { interval });
-    }, TTL.SHORT);
+    }, TTL.OHLCV);
 
     res.json(ohlcvData);
   } catch (error) {
@@ -482,9 +512,10 @@ router.get('/:mint/pools', validateMint, asyncHandler(async (req, res) => {
 
   try {
     // Use getOrSet for caching with stampede prevention
+    // Pools data cached for 3 minutes - pool info rarely changes
     const pools = await cache.getOrSet(cacheKey, async () => {
       return geckoService.getTokenPools(mint, { limit: parseInt(limit) });
-    }, TTL.MEDIUM);
+    }, TTL.POOLS);
 
     res.json(pools);
   } catch (error) {

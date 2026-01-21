@@ -1,10 +1,54 @@
 const axios = require('axios');
-const { rateLimitedRequest } = require('./rateLimiter');
+const { rateLimitedRequest, sleep } = require('./rateLimiter');
 
 // GeckoTerminal API - Free, no API key required
 // Docs: https://apiguide.geckoterminal.com/
 const GECKO_API = 'https://api.geckoterminal.com/api/v2';
 const NETWORK = 'solana';
+
+// Retry configuration for 429 errors
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 5000,      // 5 seconds initial delay
+  maxDelay: 30000,      // 30 seconds max delay
+  backoffMultiplier: 2  // Exponential backoff
+};
+
+/**
+ * Execute request with retry logic for 429 (rate limit) errors
+ * Uses exponential backoff with jitter
+ */
+async function withRetry(requestFn, context = 'request') {
+  let lastError;
+
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+
+      // Only retry on 429 (rate limit) errors
+      if (error.response?.status !== 429) {
+        throw error;
+      }
+
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        console.error(`[GeckoTerminal] ${context}: Max retries (${RETRY_CONFIG.maxRetries}) exceeded for 429 error`);
+        throw error;
+      }
+
+      // Calculate delay with exponential backoff and jitter
+      const baseDelay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
+      const jitter = Math.random() * 1000; // 0-1s jitter
+      const delay = Math.min(baseDelay + jitter, RETRY_CONFIG.maxDelay);
+
+      console.log(`[GeckoTerminal] ${context}: Rate limited (429), retry ${attempt + 1}/${RETRY_CONFIG.maxRetries} after ${Math.round(delay)}ms`);
+      await sleep(delay);
+    }
+  }
+
+  throw lastError;
+}
 
 /**
  * In-flight request deduplication
@@ -22,6 +66,7 @@ const POOL_CACHE_TTL = 5 * 60 * 1000;
 /**
  * Execute a deduplicated request - if the same key is already in flight,
  * return the existing promise instead of making a new request
+ * Includes 429 retry logic with exponential backoff
  */
 async function deduplicatedRequest(key, requestFn) {
   // Check if request is already in flight
@@ -29,10 +74,13 @@ async function deduplicatedRequest(key, requestFn) {
     return inFlightRequests.get(key);
   }
 
-  // Create the request promise
+  // Create the request promise with retry wrapper
   const requestPromise = (async () => {
     try {
-      return await rateLimitedRequest('geckoTerminal', requestFn);
+      return await withRetry(
+        () => rateLimitedRequest('geckoTerminal', requestFn),
+        key
+      );
     } finally {
       // Clean up after request completes (success or failure)
       inFlightRequests.delete(key);
@@ -47,9 +95,13 @@ async function deduplicatedRequest(key, requestFn) {
 /**
  * Make a rate-limited request to GeckoTerminal API
  * Free tier: 30 requests/minute
+ * Includes 429 retry logic with exponential backoff
  */
-async function geckoRequest(requestFn) {
-  return rateLimitedRequest('geckoTerminal', requestFn);
+async function geckoRequest(requestFn, context = 'geckoRequest') {
+  return withRetry(
+    () => rateLimitedRequest('geckoTerminal', requestFn),
+    context
+  );
 }
 
 // Get API headers
@@ -122,7 +174,8 @@ async function getMultiTokenInfo(addresses) {
     const response = await geckoRequest(() =>
       axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/multi/${addressList}`, {
         headers: getHeaders()
-      })
+      }),
+      'getMultiTokenInfo'
     );
 
     const tokens = response.data.data || [];
@@ -199,6 +252,37 @@ async function getTokenOverview(mintAddress) {
 }
 
 /**
+ * Get market data only (price, volume, price change, liquidity)
+ * Optimized version when metadata is fetched from Helius
+ * Makes only 1 GeckoTerminal call instead of 2
+ */
+async function getMarketData(mintAddress) {
+  console.log(`[GeckoTerminal] getMarketData: ${mintAddress}`);
+
+  try {
+    // Only fetch token info - pools data is included in price change from token endpoint
+    const tokenInfo = await getTokenInfo(mintAddress);
+
+    if (!tokenInfo) {
+      return null;
+    }
+
+    return {
+      price: tokenInfo.price || 0,
+      volume24h: tokenInfo.volume24h || 0,
+      marketCap: tokenInfo.marketCap || 0,
+      fdv: tokenInfo.fdv || 0,
+      priceChange24h: 0, // Not available from token endpoint alone
+      liquidity: 0,       // Not available from token endpoint alone
+      totalSupply: tokenInfo.totalSupply
+    };
+  } catch (error) {
+    console.error('[GeckoTerminal] getMarketData error:', error.message);
+    return null;
+  }
+}
+
+/**
  * Get trending tokens/pools
  * Endpoint: /networks/{network}/trending_pools
  */
@@ -212,7 +296,8 @@ async function getTrendingTokens(options = {}) {
       axios.get(`${GECKO_API}/networks/${NETWORK}/trending_pools`, {
         params: { page: 1 },
         headers: getHeaders()
-      })
+      }),
+      'getTrendingTokens'
     );
 
     const pools = response.data.data || [];
@@ -316,7 +401,8 @@ async function getNewTokens(limit = 20) {
       axios.get(`${GECKO_API}/networks/${NETWORK}/new_pools`, {
         params: { page: 1 },
         headers: getHeaders()
-      })
+      }),
+      'getNewTokens'
     );
 
     const pools = response.data.data || [];
@@ -411,7 +497,8 @@ async function searchTokens(query, limit = 20) {
           page: 1
         },
         headers: getHeaders()
-      })
+      }),
+      'searchTokens'
     );
 
     const pools = response.data.data || [];
@@ -555,7 +642,8 @@ async function getOHLCV(mintAddress, options = {}) {
           token: 'base'
         },
         headers: getHeaders()
-      })
+      }),
+      'getOHLCV'
     );
 
     const ohlcvList = ohlcvResponse.data.data?.attributes?.ohlcv_list || [];
@@ -636,7 +724,8 @@ async function getTokenPools(mintAddress, options = {}) {
       axios.get(`${GECKO_API}/networks/${NETWORK}/tokens/${mintAddress}/pools`, {
         params: { page: 1 },
         headers: getHeaders()
-      })
+      }),
+      'getTokenPools'
     );
 
     const pools = response.data.data || [];
@@ -690,6 +779,7 @@ module.exports = {
   getTokenPrice,
   getMultiTokenInfo,
   getTokenOverview,
+  getMarketData,
   getTrendingTokens,
   getNewTokens,
   searchTokens,

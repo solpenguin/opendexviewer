@@ -21,10 +21,13 @@ const RATE_LIMITS = {
     burstWindow: 1000    // Within 1 second
   },
   geckoTerminal: {
-    minInterval: 2000,   // Minimum 2s between requests (30 req/min = 0.5 req/sec)
+    // GeckoTerminal free tier: 30 requests/minute = 1 request every 2 seconds
+    // Being conservative to avoid 429s - use 2.5s minimum interval
+    minInterval: 2500,   // Minimum 2.5s between requests
     maxJitter: 500,      // Add up to 500ms random jitter
-    burstLimit: 2,       // Allow up to 2 requests in quick succession
-    burstWindow: 2000    // Within 2 seconds
+    burstLimit: 1,       // No bursting - strictly sequential
+    burstWindow: 3000,   // 3 second window
+    useQueue: true       // Force queue-based processing
   },
   jupiter: {
     minInterval: 100,    // Minimum 100ms between requests (10 req/sec max)
@@ -121,11 +124,19 @@ function sleep(ms) {
 
 /**
  * Execute a rate-limited API request
+ * Uses queue-based processing for APIs with useQueue=true (like GeckoTerminal)
  * @param {string} apiName - Name of the API
  * @param {Function} requestFn - Async function that makes the request
  * @returns {Promise<any>} Result of the request
  */
 async function rateLimitedRequest(apiName, requestFn) {
+  const config = RATE_LIMITS[apiName] || RATE_LIMITS.default;
+
+  // Use queue-based processing for strict rate limiting (GeckoTerminal)
+  if (config.useQueue) {
+    return queueRequest(apiName, requestFn);
+  }
+
   const delay = getRequiredDelay(apiName);
 
   if (delay > 0) {
