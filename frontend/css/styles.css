@@ -774,6 +774,7 @@ a:hover {
 .th-change { width: 110px; text-align: right; }
 .th-volume { width: 140px; text-align: right; }
 .th-mcap { width: 140px; text-align: right; }
+.th-views { width: 90px; text-align: right; }
 
 /* Sortable columns */
 .sortable {
@@ -856,7 +857,8 @@ a:hover {
 .cell-price,
 .cell-change,
 .cell-volume,
-.cell-mcap {
+.cell-mcap,
+.cell-views {
   text-align: right;
   font-family: var(--font-mono);
   font-size: 0.875rem;
@@ -870,6 +872,10 @@ a:hover {
 .cell-volume,
 .cell-mcap {
   color: var(--text-secondary);
+}
+
+.cell-views {
+  color: var(--text-muted);
 }
 
 .change-positive {
@@ -4107,8 +4113,10 @@ a:hover {
 
   .th-volume,
   .th-mcap,
+  .th-views,
   .cell-volume,
-  .cell-mcap {
+  .cell-mcap,
+  .cell-views {
     display: none;
   }
 

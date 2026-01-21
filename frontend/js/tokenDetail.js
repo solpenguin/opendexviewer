@@ -40,6 +40,9 @@ const tokenDetail = {
       this.lastPriceUpdate = Date.now();
       this.updateFreshnessDisplay();
 
+      // Record page view (fire-and-forget, non-blocking)
+      this.recordView();
+
       // Load additional data in parallel
       await Promise.all([
         this.loadChart(this.currentInterval),
@@ -1085,6 +1088,28 @@ const tokenDetail = {
       } else {
         countdown.textContent = '(refreshing...)';
       }
+    }
+  },
+
+  // Record page view (fire-and-forget, non-blocking)
+  async recordView() {
+    try {
+      const result = await api.tokens.recordView(this.mint);
+      // Update display with returned view count
+      if (result && result.views !== undefined) {
+        this.updateViewCount(result.views);
+      }
+    } catch (error) {
+      // Non-critical - silently fail
+      console.warn('View tracking failed:', error.message);
+    }
+  },
+
+  // Update the view count display
+  updateViewCount(views) {
+    const viewsEl = document.getElementById('stat-views');
+    if (viewsEl) {
+      viewsEl.textContent = views.toLocaleString();
     }
   },
 

@@ -41,7 +41,7 @@ const tokenList = {
     const search = utils.getUrlParam('q');
     const rows = utils.getUrlParam('rows');
 
-    if (filter && ['trending', 'new', 'gainers', 'losers', 'watchlist'].includes(filter)) {
+    if (filter && ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'watchlist'].includes(filter)) {
       this.currentFilter = filter;
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.filter === filter);
@@ -397,7 +397,7 @@ const tokenList = {
     if (needsWallet) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="7">
+          <td colspan="8">
             <div class="empty-state">
               <span class="empty-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -414,7 +414,7 @@ const tokenList = {
     } else {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="7">
+          <td colspan="8">
             <div class="empty-state">
               <span class="empty-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -566,7 +566,7 @@ const tokenList = {
     if (tbody) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="6">
+          <td colspan="8">
             <div class="loading-state">
               <div class="loading-spinner"></div>
               <span>Loading tokens...</span>
@@ -585,7 +585,7 @@ const tokenList = {
       const tr = document.createElement('tr');
       tr.className = 'loading-row';
       const td = document.createElement('td');
-      td.colSpan = 6;
+      td.colSpan = 8;
       const div = document.createElement('div');
       div.className = 'error-state';
       const icon = document.createElement('span');
@@ -643,7 +643,7 @@ const tokenList = {
     if (!this.tokens || this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="7">
+          <td colspan="8">
             <div class="empty-state">
               <span class="empty-icon">🔍</span>
               <span>No tokens found</span>
@@ -700,6 +700,7 @@ const tokenList = {
           <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${utils.formatChange(change)}</td>
           <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h)}</td>
           <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap)}</td>
+          <td class="cell-views" data-navigate="${safeAddress}">${token.views ? token.views.toLocaleString() : '—'}</td>
           <td class="cell-watchlist">
             <button
               class="watchlist-btn ${inWatchlist ? 'active' : ''}"

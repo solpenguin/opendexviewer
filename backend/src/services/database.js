@@ -182,6 +182,18 @@ async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(session_token);
       CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
+      -- Token views table for tracking page views
+      CREATE TABLE IF NOT EXISTS token_views (
+        id SERIAL PRIMARY KEY,
+        token_mint VARCHAR(44) UNIQUE NOT NULL,
+        view_count INTEGER DEFAULT 0,
+        last_viewed_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_token_views_mint ON token_views(token_mint);
+      CREATE INDEX IF NOT EXISTS idx_token_views_count ON token_views(view_count DESC);
     `);
 
     isConnected = true;
@@ -911,6 +923,67 @@ async function deleteApiKeyById(keyId) {
   return result.rows[0];
 }
 
+// ==========================================
+// Token View tracking operations
+// ==========================================
+
+// Increment view count for a token (called when token page is loaded)
+async function incrementTokenViews(tokenMint) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `INSERT INTO token_views (token_mint, view_count, last_viewed_at)
+     VALUES ($1, 1, NOW())
+     ON CONFLICT (token_mint) DO UPDATE SET
+       view_count = token_views.view_count + 1,
+       last_viewed_at = NOW()
+     RETURNING view_count`,
+    [tokenMint]
+  );
+  return result.rows[0]?.view_count || 0;
+}
+
+// Get view count for a token
+async function getTokenViews(tokenMint) {
+  if (!pool) return 0;
+
+  const result = await pool.query(
+    `SELECT view_count FROM token_views WHERE token_mint = $1`,
+    [tokenMint]
+  );
+  return result.rows[0]?.view_count || 0;
+}
+
+// Get view counts for multiple tokens (batch)
+async function getTokenViewsBatch(tokenMints) {
+  if (!pool || !tokenMints || tokenMints.length === 0) return {};
+
+  const result = await pool.query(
+    `SELECT token_mint, view_count FROM token_views WHERE token_mint = ANY($1)`,
+    [tokenMints]
+  );
+
+  const viewsMap = {};
+  result.rows.forEach(row => {
+    viewsMap[row.token_mint] = row.view_count;
+  });
+  return viewsMap;
+}
+
+// Get most viewed tokens
+async function getMostViewedTokens(limit = 10) {
+  if (!pool) return [];
+
+  const result = await pool.query(
+    `SELECT token_mint, view_count, last_viewed_at
+     FROM token_views
+     ORDER BY view_count DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
 // Check if database is ready for queries
 function isReady() {
   return pool !== null && isConnected;
@@ -1018,6 +1091,11 @@ module.exports = {
   getAllApiKeys,
   revokeApiKeyById,
   deleteApiKeyById,
+  // Token view tracking
+  incrementTokenViews,
+  getTokenViews,
+  getTokenViewsBatch,
+  getMostViewedTokens,
   // Constants
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,

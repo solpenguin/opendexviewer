@@ -263,6 +263,26 @@ const api = {
       return api.request(`/api/tokens/${mint}/holder/${wallet}`);
     },
 
+    // Record a page view for a token (fire-and-forget, non-blocking)
+    async recordView(mint) {
+      try {
+        return await api.request(`/api/tokens/${mint}/view`, { method: 'POST' });
+      } catch (error) {
+        // Non-critical - silently fail
+        console.warn('View tracking failed:', error.message);
+        return { views: 0 };
+      }
+    },
+
+    // Get view count for a token
+    async getViews(mint) {
+      try {
+        return await api.request(`/api/tokens/${mint}/views`);
+      } catch (error) {
+        return { views: 0 };
+      }
+    },
+
     // Invalidate cache for a specific token (after submission/vote)
     invalidateCache(mint) {
       apiCache.clearPattern(`tokens:detail:${mint}`);

@@ -111,6 +111,15 @@
           </span>
           Losers
         </button>
+        <button class="filter-tab" data-filter="most_viewed">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </span>
+          Most Viewed
+        </button>
         <button class="filter-tab" data-filter="watchlist" id="watchlist-tab">
           <span class="filter-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -161,6 +170,10 @@
                 Market Cap
                 <span class="sort-icon"></span>
               </th>
+              <th class="th-views sortable" data-sort="views">
+                Views
+                <span class="sort-icon"></span>
+              </th>
               <th class="th-watchlist" title="Watchlist">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -170,7 +183,7 @@
           </thead>
           <tbody id="token-list">
             <tr class="loading-row">
-              <td colspan="7">
+              <td colspan="8">
                 <div class="loading-state">
                   <div class="loading-spinner large"></div>
                   <span>Loading tokens...</span>

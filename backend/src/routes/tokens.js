@@ -34,6 +34,70 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   let geckoError = null;
 
   try {
+    // Handle most_viewed filter separately - uses our local database
+    if (filter === 'most_viewed') {
+      console.log('[API /tokens] Fetching most viewed tokens from database');
+      const mostViewed = await db.getMostViewedTokens(parseInt(limit));
+
+      if (mostViewed && mostViewed.length > 0) {
+        // Get the token mints that have views
+        const mints = mostViewed.map(v => v.token_mint);
+
+        // Fetch full token data for these mints
+        const tokenPromises = mints.map(async (mint) => {
+          try {
+            // Try to get cached token data first
+            const cacheKey = keys.tokenInfo(mint);
+            let tokenData = await cache.get(cacheKey);
+
+            if (!tokenData) {
+              // Fetch from GeckoTerminal
+              tokenData = await geckoService.getTokenOverview(mint);
+            }
+
+            // Find the view count for this token
+            const viewInfo = mostViewed.find(v => v.token_mint === mint);
+
+            return {
+              mintAddress: mint,
+              address: mint,
+              name: tokenData?.name || 'Unknown',
+              symbol: tokenData?.symbol || '???',
+              price: tokenData?.price || 0,
+              priceChange24h: tokenData?.priceChange24h || 0,
+              volume24h: tokenData?.volume24h || 0,
+              marketCap: tokenData?.marketCap || 0,
+              logoUri: tokenData?.logoUri || null,
+              logoURI: tokenData?.logoURI || null,
+              views: viewInfo?.view_count || 0
+            };
+          } catch (err) {
+            console.error(`[API /tokens] Failed to fetch token ${mint}:`, err.message);
+            const viewInfo = mostViewed.find(v => v.token_mint === mint);
+            return {
+              mintAddress: mint,
+              address: mint,
+              name: 'Unknown',
+              symbol: '???',
+              price: 0,
+              views: viewInfo?.view_count || 0
+            };
+          }
+        });
+
+        tokens = await Promise.all(tokenPromises);
+        // Filter out any completely failed tokens
+        tokens = tokens.filter(t => t.name !== 'Unknown' || t.views > 0);
+
+        // Cache the result
+        await cache.setWithTimestamp(cacheKey, tokens, TTL.PRICE_DATA);
+        return res.json(tokens);
+      } else {
+        // No viewed tokens yet, return empty array
+        return res.json([]);
+      }
+    }
+
     // Use GeckoTerminal (free, no API key needed)
     // Optimization: Skip GeckoTerminal enrichment - use Helius batch API instead
     const useHeliusEnrichment = solanaService.isHeliusConfigured();
@@ -105,6 +169,18 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     }
 
     console.log(`[API /tokens] Received ${tokens?.length || 0} tokens from service`);
+
+    // Enrich tokens with view counts from database
+    if (tokens && tokens.length > 0) {
+      const addresses = tokens.map(t => t.address || t.mintAddress);
+      const viewCounts = await db.getTokenViewsBatch(addresses);
+
+      for (const token of tokens) {
+        const address = token.address || token.mintAddress;
+        token.views = viewCounts[address] || 0;
+      }
+      console.log(`[API /tokens] Enriched ${Object.keys(viewCounts).length} tokens with view counts`);
+    }
 
     // Log sample token for debugging
     if (tokens && tokens.length > 0) {
@@ -563,6 +639,34 @@ router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => 
   } catch (error) {
     console.error('Error fetching submissions:', error.message);
     res.status(500).json({ error: 'Failed to fetch submissions' });
+  }
+}));
+
+// POST /api/tokens/:mint/view - Record a page view for a token
+// Called when the token detail page loads
+router.post('/:mint/view', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+
+  try {
+    const viewCount = await db.incrementTokenViews(mint);
+    res.json({ views: viewCount });
+  } catch (error) {
+    console.error('Error recording view:', error.message);
+    // Don't fail the request - view tracking is non-critical
+    res.json({ views: 0 });
+  }
+}));
+
+// GET /api/tokens/:mint/views - Get view count for a token
+router.get('/:mint/views', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+
+  try {
+    const viewCount = await db.getTokenViews(mint);
+    res.json({ views: viewCount });
+  } catch (error) {
+    console.error('Error fetching views:', error.message);
+    res.json({ views: 0 });
   }
 }));
 

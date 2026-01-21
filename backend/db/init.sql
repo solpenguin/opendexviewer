@@ -148,7 +148,24 @@ CREATE TRIGGER auto_moderate_on_tally_update
     EXECUTE FUNCTION auto_moderate_submission();
 
 -- =====================================================
--- VIEWS
+-- TOKEN VIEWS TABLE
+-- Tracks page views per token
+-- =====================================================
+CREATE TABLE IF NOT EXISTS token_views (
+    id SERIAL PRIMARY KEY,
+    token_mint VARCHAR(44) NOT NULL,
+    view_count INTEGER DEFAULT 0,
+    last_viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(token_mint)
+);
+
+-- Index for fast lookups
+CREATE INDEX IF NOT EXISTS idx_token_views_mint ON token_views(token_mint);
+CREATE INDEX IF NOT EXISTS idx_token_views_count ON token_views(view_count DESC);
+
+-- =====================================================
+-- VIEWS (SQL Views, not page views)
 -- =====================================================
 
 -- View for submissions with vote counts
