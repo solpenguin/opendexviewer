@@ -208,11 +208,19 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
 
   // Calculate time until eligible for auto-approval (in minutes)
   let minutesUntilEligible = 0;
+  let isFirstSubmission = false;
+  let effectiveReviewMinutes = db.MIN_REVIEW_MINUTES;
+
   if (submission && submission.status === 'pending') {
+    // Check if this token has any approved submissions (determines review period)
+    const approvedSubmissions = await db.getApprovedSubmissions(submission.token_mint);
+    isFirstSubmission = approvedSubmissions.length === 0;
+    effectiveReviewMinutes = isFirstSubmission ? db.FIRST_SUBMISSION_REVIEW_MINUTES : db.MIN_REVIEW_MINUTES;
+
     const createdAt = new Date(submission.created_at);
     const now = new Date();
     const minutesSinceCreation = (now - createdAt) / (1000 * 60);
-    minutesUntilEligible = Math.max(0, db.MIN_REVIEW_MINUTES - minutesSinceCreation);
+    minutesUntilEligible = Math.max(0, effectiveReviewMinutes - minutesSinceCreation);
   }
 
   res.json({
@@ -225,7 +233,10 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
     requirements: {
       approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
       rejectThreshold: db.AUTO_REJECT_THRESHOLD,
-      minReviewMinutes: db.MIN_REVIEW_MINUTES,
+      minReviewMinutes: effectiveReviewMinutes,
+      firstSubmissionReviewMinutes: db.FIRST_SUBMISSION_REVIEW_MINUTES,
+      standardReviewMinutes: db.MIN_REVIEW_MINUTES,
+      isFirstSubmission,
       minVoteBalancePercent: db.MIN_VOTE_BALANCE_PERCENT,
       minutesUntilEligible: parseFloat(minutesUntilEligible.toFixed(2)),
       voteWeightTiers: db.VOTE_WEIGHT_TIERS
@@ -302,6 +313,7 @@ router.get('/requirements', asyncHandler(async (req, res) => {
     approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
     rejectThreshold: db.AUTO_REJECT_THRESHOLD,
     minReviewMinutes: db.MIN_REVIEW_MINUTES,
+    firstSubmissionReviewMinutes: db.FIRST_SUBMISSION_REVIEW_MINUTES,
     minVoteBalancePercent: db.MIN_VOTE_BALANCE_PERCENT,
     voteWeightTiers: db.VOTE_WEIGHT_TIERS,
     description: {
@@ -309,7 +321,7 @@ router.get('/requirements', asyncHandler(async (req, res) => {
       minBalance: `You need at least ${db.MIN_VOTE_BALANCE_PERCENT}% of supply to vote`,
       voteWeight: 'Vote weight scales from 1x (0.1% holdings) to 3x (3%+ holdings)',
       weightTiers: '0.1%=1x, 0.3%=1.5x, 0.75%=2x, 1.5%=2.5x, 3%+=3x',
-      reviewPeriod: `Submissions need ${db.MIN_REVIEW_MINUTES} minute(s) of review before auto-approval`,
+      reviewPeriod: `First submission: ${db.FIRST_SUBMISSION_REVIEW_MINUTES} min review, subsequent: ${db.MIN_REVIEW_MINUTES} min`,
       approvalScore: `Submissions are auto-approved at +${db.AUTO_APPROVE_THRESHOLD} weighted score`,
       rejectionScore: `Submissions are auto-rejected at ${db.AUTO_REJECT_THRESHOLD} weighted score`
     }

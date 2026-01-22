@@ -8,12 +8,15 @@ const MAX_CONNECTION_ATTEMPTS = 5;
 const RETRY_DELAY_MS = 5000;
 
 // Auto-approval threshold (submissions auto-approve when weighted score reaches this)
-// Requires 10% of circulating supply worth of weighted votes to approve
-const AUTO_APPROVE_THRESHOLD = parseInt(process.env.AUTO_APPROVE_THRESHOLD) || 10;
+const AUTO_APPROVE_THRESHOLD = parseInt(process.env.AUTO_APPROVE_THRESHOLD) || 25;
 const AUTO_REJECT_THRESHOLD = parseInt(process.env.AUTO_REJECT_THRESHOLD) || -10;
 
 // Minimum review period before auto-approval (in minutes)
-const MIN_REVIEW_MINUTES = parseInt(process.env.MIN_REVIEW_MINUTES) || 5;
+// Subsequent submissions require longer review (1 hour) to prevent spam/abuse
+const MIN_REVIEW_MINUTES = parseInt(process.env.MIN_REVIEW_MINUTES) || 60;
+
+// Shorter review period for first submission on a token (allows faster initial content)
+const FIRST_SUBMISSION_REVIEW_MINUTES = parseInt(process.env.FIRST_SUBMISSION_REVIEW_MINUTES) || 5;
 
 // Minimum token balance required to vote (as percentage of circulating supply)
 // 0.1% = must hold at least 0.1% of supply to participate in voting
@@ -530,23 +533,34 @@ async function updateVoteTally(submissionId) {
 }
 
 // Auto-moderation based on weighted vote score
-// Includes minimum review period (5 minutes) before auto-approval
+// Includes minimum review period before auto-approval
+// First submission for a token uses shorter review period (5 min vs 30 min)
 async function checkAutoModeration(submissionId, weightedScore) {
   // Check if submission meets the threshold
   if (weightedScore >= AUTO_APPROVE_THRESHOLD) {
     // Check if minimum review period has passed
     const submission = await pool.query(
-      `SELECT created_at FROM submissions WHERE id = $1 AND status = 'pending'`,
+      `SELECT created_at, token_mint FROM submissions WHERE id = $1 AND status = 'pending'`,
       [submissionId]
     );
 
     if (submission.rows.length > 0) {
-      const createdAt = new Date(submission.rows[0].created_at);
+      const { created_at: createdAt, token_mint: tokenMint } = submission.rows[0];
       const now = new Date();
-      const minutesSinceCreation = (now - createdAt) / (1000 * 60);
+      const minutesSinceCreation = (now - new Date(createdAt)) / (1000 * 60);
 
-      // Only auto-approve if minimum review period has passed (5 minutes default)
-      if (minutesSinceCreation >= MIN_REVIEW_MINUTES) {
+      // Check if this token has any approved submissions already
+      const existingApproved = await pool.query(
+        `SELECT 1 FROM submissions WHERE token_mint = $1 AND status = 'approved' LIMIT 1`,
+        [tokenMint]
+      );
+      const isFirstSubmission = existingApproved.rows.length === 0;
+
+      // Use shorter review period for first submission on a token
+      const requiredMinutes = isFirstSubmission ? FIRST_SUBMISSION_REVIEW_MINUTES : MIN_REVIEW_MINUTES;
+
+      // Only auto-approve if minimum review period has passed
+      if (minutesSinceCreation >= requiredMinutes) {
         await pool.query(
           `UPDATE submissions SET status = 'approved' WHERE id = $1 AND status = 'pending'`,
           [submissionId]
@@ -1160,6 +1174,7 @@ module.exports = {
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,
   MIN_REVIEW_MINUTES,
+  FIRST_SUBMISSION_REVIEW_MINUTES,
   MIN_VOTE_BALANCE_PERCENT,
   VOTE_WEIGHT_TIERS
 };

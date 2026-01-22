@@ -40,8 +40,18 @@ const submitPage = {
   // Initialize
   init() {
     this.bindEvents();
-    this.updateWalletUI();
     this.restoreFromUrl();
+
+    // Check if wallet is already initialized
+    if (wallet.initialized) {
+      this.updateWalletUI();
+    } else {
+      // Wait for wallet to be ready
+      window.addEventListener('walletReady', () => {
+        this.updateWalletUI();
+      }, { once: true });
+    }
+
     this.updateFormState();
   },
 

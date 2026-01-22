@@ -2986,6 +2986,27 @@ a:hover {
   top: 80px;
 }
 
+/* Stacked Layout (preview below content) */
+.submit-layout-stacked {
+  display: block;
+}
+
+.submit-layout-stacked .submit-form-container {
+  max-width: 100%;
+}
+
+.submit-preview-inline {
+  position: static;
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.submit-preview-inline .preview-token-page {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
 .preview-header {
   display: flex;
   align-items: center;

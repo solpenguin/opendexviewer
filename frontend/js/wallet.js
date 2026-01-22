@@ -4,6 +4,7 @@ const wallet = {
   address: null,
   provider: null,
   providerName: null,
+  initialized: false,
 
   // Supported wallets configuration
   // Order determines display priority in selection modal
@@ -840,7 +841,7 @@ const wallet = {
   },
 
   // Initialize
-  init() {
+  async init() {
     // Initialize cross-tab sync
     this.initBroadcastChannel();
 
@@ -874,8 +875,14 @@ const wallet = {
       }
     }
 
-    // Try auto-connect
-    this.autoConnect();
+    // Try auto-connect (await it!)
+    await this.autoConnect();
+
+    // Mark as initialized and emit ready event
+    this.initialized = true;
+    window.dispatchEvent(new CustomEvent('walletReady', {
+      detail: { connected: this.connected, address: this.address }
+    }));
 
     // Inject wallet selector styles
     this.injectStyles();

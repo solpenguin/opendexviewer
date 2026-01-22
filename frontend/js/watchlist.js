@@ -232,14 +232,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const originalDisconnect = wallet.disconnect.bind(wallet);
-    wallet.disconnect = function() {
-      originalDisconnect();
+    wallet.disconnect = async function() {
+      await originalDisconnect();
       watchlist.clear();
     };
 
-    // Init if already connected
-    if (wallet.connected) {
+    // Init if already connected (wallet may already be initialized)
+    if (wallet.initialized && wallet.connected) {
       watchlist.init();
+    } else {
+      // Wait for wallet to be ready
+      window.addEventListener('walletReady', (e) => {
+        if (e.detail.connected) {
+          watchlist.init();
+        }
+      }, { once: true });
     }
   }
 });
