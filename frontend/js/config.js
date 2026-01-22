@@ -117,8 +117,9 @@ const config = {
 
   // Centralized localStorage keys (prevents typos and makes refactoring easier)
   storageKeys: {
-    walletConnected: 'opendex_wallet_connected',
-    walletAddress: 'opendex_wallet_address',
+    walletConnection: 'opendex_wallet_connection', // JSON object with wallet, address, timestamp
+    walletConnected: 'opendex_wallet_connected',   // Legacy: boolean string
+    walletAddress: 'opendex_wallet_address',       // Legacy: address string
     theme: 'opendex_theme',
     lastFilter: 'opendex_last_filter'
   }

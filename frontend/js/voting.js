@@ -225,7 +225,7 @@ const voting = {
     // Safely escape all user-controlled values
     const safeRequired = this.escapeHtml(String(required));
     const safeBalance = this.escapeHtml((holderData.balance || 0).toLocaleString());
-    const safePercentage = this.escapeHtml((parseFloat(holderData.percentageHeld) || 0).toFixed(6));
+    const safePercentage = this.escapeHtml((parseFloat(holderData.percentageHeld) || 0).toFixed(4));
 
     const modal = document.createElement('div');
     modal.className = 'voting-modal-overlay';
@@ -254,6 +254,7 @@ const voting = {
             <span>${safeRequired}%</span>
           </div>
         </div>
+        <p class="voting-modal-hint">Vote weight scales with holdings: 0.1%=1x up to 3%+=3x</p>
         <div class="voting-modal-actions">
           <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
         </div>

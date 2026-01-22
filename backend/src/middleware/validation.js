@@ -27,9 +27,32 @@ const URL_ALLOWLISTS = {
 
 // Known malicious/spam domains (expandable)
 const BLOCKED_DOMAINS = [
-  'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', // URL shorteners (hide destination)
-  'is.gd', 'v.gd', 'shorte.st', 'adf.ly',
-  'localhost', '127.0.0.1', '0.0.0.0' // Local addresses
+  // URL shorteners (hide destination)
+  'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'is.gd', 'v.gd', 'shorte.st', 'adf.ly',
+  'ow.ly', 'buff.ly', 'j.mp', 'tiny.cc', 'rb.gy', 'cutt.ly', 'shorturl.at',
+  // Local/private addresses
+  'localhost', '127.0.0.1', '0.0.0.0',
+  // Known crypto scam/phishing patterns
+  'metamask-wallet.com', 'phantom-wallet.com', 'solflare-wallet.com',
+  'claim-airdrop.com', 'free-airdrop.com', 'token-airdrop.com',
+  'solana-airdrop.com', 'sol-airdrop.com', 'crypto-airdrop.com',
+  'connect-wallet.com', 'wallet-connect.com', 'walletconnect-app.com',
+  // Typosquatting common sites
+  'dlscord.com', 'discorrd.com', 'disc0rd.com', 'dlscord.gg',
+  'twiitter.com', 'twltter.com', 'tvvitter.com',
+  'telegran.me', 'telegrarn.me', 'teiegram.me',
+  // Generic suspicious patterns
+  'free-crypto.com', 'crypto-giveaway.com', 'token-giveaway.com'
+];
+
+// Suspicious hostname patterns (regex)
+const SUSPICIOUS_PATTERNS = [
+  /airdrop/i,
+  /giveaway/i,
+  /claim.*token/i,
+  /free.*crypto/i,
+  /wallet.*connect/i,
+  /connect.*wallet/i
 ];
 
 // Validate URL is not a redirect/shortener and matches allowed domains
@@ -41,7 +64,14 @@ function validateUrlDomain(urlString, submissionType) {
     // Block known malicious/redirect domains
     for (const blocked of BLOCKED_DOMAINS) {
       if (hostname === blocked || hostname.endsWith('.' + blocked)) {
-        return { valid: false, message: 'URL shorteners are not allowed. Please use the direct URL.' };
+        return { valid: false, message: 'This URL is not allowed. Please use the official direct URL.' };
+      }
+    }
+
+    // Check for suspicious patterns in hostname
+    for (const pattern of SUSPICIOUS_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { valid: false, message: 'This URL contains suspicious patterns and is not allowed.' };
       }
     }
 
@@ -680,5 +710,6 @@ module.exports = {
   // Constants
   SOLANA_ADDRESS_REGEX,
   BLOCKED_DOMAINS,
+  SUSPICIOUS_PATTERNS,
   MAX_URL_LENGTH
 };

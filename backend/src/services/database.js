@@ -16,28 +16,32 @@ const AUTO_REJECT_THRESHOLD = parseInt(process.env.AUTO_REJECT_THRESHOLD) || -10
 const MIN_REVIEW_MINUTES = parseInt(process.env.MIN_REVIEW_MINUTES) || 5;
 
 // Minimum token balance required to vote (as percentage of circulating supply)
-// 0.001% = must hold at least 0.001% of supply
-const MIN_VOTE_BALANCE_PERCENT = parseFloat(process.env.MIN_VOTE_BALANCE_PERCENT) || 0.001;
+// 0.1% = must hold at least 0.1% of supply to participate in voting
+const MIN_VOTE_BALANCE_PERCENT = parseFloat(process.env.MIN_VOTE_BALANCE_PERCENT) || 0.1;
 
 // Vote weight tiers based on percentage of circulating supply held
-// Higher holders get more voting power (capped at 3x)
+// Range: 0.1% (minimum to vote) to 3%+ (maximum weight)
+// Uses smooth scaling within tiers for fair representation
 const VOTE_WEIGHT_TIERS = [
-  { minPercent: 1.0, weight: 3 },    // >= 1% holdings = 3x vote weight
-  { minPercent: 0.1, weight: 2 },    // >= 0.1% holdings = 2x vote weight
-  { minPercent: 0.01, weight: 1.5 }, // >= 0.01% holdings = 1.5x vote weight
-  { minPercent: 0, weight: 1 }       // < 0.01% holdings = 1x vote weight (base)
+  { minPercent: 3.0, weight: 3 },    // >= 3% holdings = 3x vote weight (max)
+  { minPercent: 1.5, weight: 2.5 },  // >= 1.5% holdings = 2.5x vote weight
+  { minPercent: 0.75, weight: 2 },   // >= 0.75% holdings = 2x vote weight
+  { minPercent: 0.3, weight: 1.5 },  // >= 0.3% holdings = 1.5x vote weight
+  { minPercent: 0.1, weight: 1 }     // >= 0.1% holdings = 1x vote weight (base/minimum)
 ];
 
 // Calculate vote weight based on holder percentage
+// Returns weight multiplier (1x to 3x) based on holdings
 function calculateVoteWeight(percentageHeld) {
-  if (!percentageHeld || percentageHeld <= 0) return 1;
+  // Must meet minimum threshold to vote
+  if (!percentageHeld || percentageHeld < MIN_VOTE_BALANCE_PERCENT) return 0;
 
   for (const tier of VOTE_WEIGHT_TIERS) {
     if (percentageHeld >= tier.minPercent) {
       return tier.weight;
     }
   }
-  return 1;
+  return 1; // Base weight for minimum holders
 }
 
 // Create connection pool

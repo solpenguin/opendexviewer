@@ -307,9 +307,10 @@ router.get('/requirements', asyncHandler(async (req, res) => {
     description: {
       holderRequired: 'You must hold the token to vote on submissions',
       minBalance: `You need at least ${db.MIN_VOTE_BALANCE_PERCENT}% of supply to vote`,
-      voteWeight: 'Larger holders have more voting power (1x-3x based on holdings)',
+      voteWeight: 'Vote weight scales from 1x (0.1% holdings) to 3x (3%+ holdings)',
+      weightTiers: '0.1%=1x, 0.3%=1.5x, 0.75%=2x, 1.5%=2.5x, 3%+=3x',
       reviewPeriod: `Submissions need ${db.MIN_REVIEW_MINUTES} minute(s) of review before auto-approval`,
-      approvalScore: `Submissions are auto-approved at +${db.AUTO_APPROVE_THRESHOLD} weighted score (requires ~10% of supply)`,
+      approvalScore: `Submissions are auto-approved at +${db.AUTO_APPROVE_THRESHOLD} weighted score`,
       rejectionScore: `Submissions are auto-rejected at ${db.AUTO_REJECT_THRESHOLD} weighted score`
     }
   });

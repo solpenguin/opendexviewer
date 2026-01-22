@@ -6,6 +6,7 @@ const submitPage = {
   holderData: null,
   mySubmissions: [],
   walletConnected: false,
+  termsAccepted: false,
 
   // Track validation state for each field
   fieldValidation: {
@@ -15,6 +16,26 @@ const submitPage = {
     discord: { valid: false, url: '' },
     website: { valid: false, url: '' }
   },
+
+  // Blocked domains - URL shorteners and known malicious/phishing domains
+  blockedDomains: [
+    // URL shorteners (hide destination)
+    'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'is.gd', 'v.gd', 'shorte.st', 'adf.ly',
+    'ow.ly', 'buff.ly', 'j.mp', 'tiny.cc', 'rb.gy', 'cutt.ly', 'shorturl.at',
+    // Local/private addresses
+    'localhost', '127.0.0.1', '0.0.0.0',
+    // Known crypto scam/phishing patterns
+    'metamask-wallet.com', 'phantom-wallet.com', 'solflare-wallet.com',
+    'claim-airdrop.com', 'free-airdrop.com', 'token-airdrop.com',
+    'solana-airdrop.com', 'sol-airdrop.com', 'crypto-airdrop.com',
+    'connect-wallet.com', 'wallet-connect.com', 'walletconnect-app.com',
+    // Typosquatting common sites
+    'dlscord.com', 'discorrd.com', 'disc0rd.com', 'dlscord.gg',
+    'twiitter.com', 'twltter.com', 'tvvitter.com',
+    'telegran.me', 'telegrarn.me', 'teiegram.me',
+    // Generic suspicious patterns
+    'free-crypto.com', 'crypto-giveaway.com', 'token-giveaway.com'
+  ],
 
   // Initialize
   init() {
@@ -141,6 +162,15 @@ const submitPage = {
       connectSubmissions.addEventListener('click', () => wallet.connect());
     }
 
+    // View Terms link
+    const viewTermsLink = document.getElementById('view-terms-link');
+    if (viewTermsLink) {
+      viewTermsLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.showTermsModal();
+      });
+    }
+
     // Wallet events
     window.addEventListener('walletConnected', (e) => {
       this.updateWalletUI();
@@ -217,9 +247,35 @@ const submitPage = {
     this.updateFormState();
   },
 
+  // Check if URL is from a blocked domain
+  isBlockedDomain(hostname) {
+    const lowerHostname = hostname.toLowerCase();
+    for (const blocked of this.blockedDomains) {
+      if (lowerHostname === blocked || lowerHostname.endsWith('.' + blocked)) {
+        return true;
+      }
+    }
+    // Check for suspicious patterns in hostname
+    const suspiciousPatterns = [
+      /airdrop/i, /giveaway/i, /claim.*token/i, /free.*crypto/i,
+      /wallet.*connect/i, /connect.*wallet/i
+    ];
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(lowerHostname)) {
+        return true;
+      }
+    }
+    return false;
+  },
+
   // Validate URL for specific type
   validateUrlForType(url, type) {
     const hostname = url.hostname.toLowerCase();
+
+    // First check if domain is blocked
+    if (this.isBlockedDomain(hostname)) {
+      return { valid: false, message: 'This URL is not allowed. Please use the official link.' };
+    }
 
     switch (type) {
       case 'twitter':
@@ -244,6 +300,14 @@ const submitPage = {
 
         if (!hasImageExtension && !isImageHost) {
           return { valid: false, message: 'Please enter a direct image URL (PNG, JPG, GIF, WebP)' };
+        }
+        break;
+      case 'website':
+        // For websites, check for suspicious TLDs and patterns
+        const suspiciousTLDs = ['.xyz', '.top', '.work', '.click', '.link', '.tk', '.ml', '.ga', '.cf', '.gq'];
+        const hasSuspiciousTLD = suspiciousTLDs.some(tld => hostname.endsWith(tld));
+        if (hasSuspiciousTLD) {
+          // Not blocking, but we could warn - for now just allow with extra scrutiny handled by community voting
         }
         break;
     }
@@ -601,6 +665,14 @@ const submitPage = {
     if (!this.holderVerified) {
       toast.error('You must hold this token to submit content for it');
       return;
+    }
+
+    // Show Terms modal if not already accepted this session
+    if (!this.termsAccepted) {
+      const accepted = await this.showTermsModal();
+      if (!accepted) {
+        return;
+      }
     }
 
     // Collect all valid submissions
@@ -1058,6 +1130,112 @@ const submitPage = {
     }
 
     return errorMessage;
+  },
+
+  // Show Terms and Conditions modal
+  showTermsModal() {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content terms-modal">
+          <div class="modal-header">
+            <h3>Terms and Conditions</h3>
+            <p class="modal-subtitle">Please read and accept before submitting</p>
+          </div>
+          <div class="terms-content">
+            <div class="terms-section">
+              <h4>1. Content Guidelines</h4>
+              <ul>
+                <li>You must have the right to share any content you submit (banners, logos, etc.)</li>
+                <li>Do not submit copyrighted material without permission</li>
+                <li>No misleading, fraudulent, or deceptive content</li>
+                <li>No NSFW, offensive, or hateful content</li>
+              </ul>
+            </div>
+            <div class="terms-section">
+              <h4>2. Link Requirements</h4>
+              <ul>
+                <li>All links must point to legitimate, official resources</li>
+                <li>URL shorteners are not allowed - use direct links only</li>
+                <li>No phishing, malware, or scam websites</li>
+                <li>Social links must be official community channels</li>
+              </ul>
+            </div>
+            <div class="terms-section">
+              <h4>3. Verification</h4>
+              <ul>
+                <li>You must hold the token to submit content for it</li>
+                <li>Submissions are verified via wallet signature</li>
+                <li>False or misleading submissions may be rejected by the community</li>
+              </ul>
+            </div>
+            <div class="terms-section">
+              <h4>4. Community Review</h4>
+              <ul>
+                <li>All submissions are subject to community voting</li>
+                <li>Content that receives negative votes may be removed</li>
+                <li>OpenDex reserves the right to remove any content that violates these terms</li>
+              </ul>
+            </div>
+            <div class="terms-section warning">
+              <h4>Warning</h4>
+              <p>Submitting malicious links (phishing, scams, malware) is strictly prohibited and may result in your wallet being blocked from future submissions.</p>
+            </div>
+          </div>
+          <div class="terms-checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" id="terms-checkbox">
+              <span class="checkmark"></span>
+              <span>I have read and agree to these Terms and Conditions</span>
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="terms-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="terms-accept" disabled>Accept & Continue</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const checkbox = modal.querySelector('#terms-checkbox');
+      const acceptBtn = modal.querySelector('#terms-accept');
+      const cancelBtn = modal.querySelector('#terms-cancel');
+
+      checkbox.addEventListener('change', () => {
+        acceptBtn.disabled = !checkbox.checked;
+      });
+
+      acceptBtn.addEventListener('click', () => {
+        this.termsAccepted = true;
+        modal.remove();
+        resolve(true);
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        modal.remove();
+        resolve(false);
+      });
+
+      // Close on overlay click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+          resolve(false);
+        }
+      });
+
+      // Close on Escape
+      const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+          modal.remove();
+          document.removeEventListener('keydown', handleEscape);
+          resolve(false);
+        }
+      };
+      document.addEventListener('keydown', handleEscape);
+    });
   },
 
   // Show error modal for failed submissions

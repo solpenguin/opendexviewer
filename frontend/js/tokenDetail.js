@@ -1058,11 +1058,12 @@ const tokenDetail = {
         weightedScore.setAttribute('data-weighted-score', s.id);
         // Detailed tooltip explaining vote weight system
         weightedScore.title = `Weighted Score: ${weightedScoreValue.toFixed(1)}\n` +
-          'Votes are weighted by holder percentage:\n' +
-          '• ≥1% holdings = 3x weight\n' +
-          '• ≥0.1% holdings = 2x weight\n' +
-          '• ≥0.01% holdings = 1.5x weight\n' +
-          '• <0.01% holdings = 1x weight';
+          'Vote weight by holder percentage:\n' +
+          '• ≥3% holdings = 3x weight (max)\n' +
+          '• ≥1.5% holdings = 2.5x weight\n' +
+          '• ≥0.75% holdings = 2x weight\n' +
+          '• ≥0.3% holdings = 1.5x weight\n' +
+          '• ≥0.1% holdings = 1x weight (min to vote)';
         weightedScore.style.cursor = 'help';
         scoreContainer.appendChild(score);
         scoreContainer.appendChild(weightedScore);
