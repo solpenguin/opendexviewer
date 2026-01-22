@@ -7,9 +7,30 @@ let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 5;
 const RETRY_DELAY_MS = 5000;
 
-// Auto-approval threshold (submissions auto-approve when weighted score reaches this)
-const AUTO_APPROVE_THRESHOLD = parseInt(process.env.AUTO_APPROVE_THRESHOLD) || 25;
+// Auto-approval thresholds based on market cap tiers
+// Lower mcap tokens need fewer votes (smaller communities)
+const APPROVAL_THRESHOLDS = {
+  LOW: { maxMcap: 50000, threshold: 10 },      // < $50k mcap: +10 votes
+  MEDIUM: { maxMcap: 100000, threshold: 15 },  // $50k-$100k mcap: +15 votes
+  HIGH: { threshold: 25 }                       // > $100k mcap: +25 votes
+};
+const AUTO_APPROVE_THRESHOLD = 25; // Default/max threshold (kept for backwards compatibility)
 const AUTO_REJECT_THRESHOLD = parseInt(process.env.AUTO_REJECT_THRESHOLD) || -10;
+
+// Calculate approval threshold based on market cap
+function getApprovalThreshold(marketCap) {
+  if (!marketCap || marketCap <= 0) {
+    // If market cap unknown, use lowest threshold to not penalize new tokens
+    return APPROVAL_THRESHOLDS.LOW.threshold;
+  }
+  if (marketCap <= APPROVAL_THRESHOLDS.LOW.maxMcap) {
+    return APPROVAL_THRESHOLDS.LOW.threshold;
+  }
+  if (marketCap <= APPROVAL_THRESHOLDS.MEDIUM.maxMcap) {
+    return APPROVAL_THRESHOLDS.MEDIUM.threshold;
+  }
+  return APPROVAL_THRESHOLDS.HIGH.threshold;
+}
 
 // Minimum review period before auto-approval (in minutes)
 // Subsequent submissions require longer review (1 hour) to prevent spam/abuse
@@ -505,6 +526,13 @@ async function getVoteTally(submissionId) {
   return result.rows[0];
 }
 
+// Market cap context for auto-moderation (set before vote operations)
+let _moderationMarketCap = null;
+
+function setModerationMarketCap(marketCap) {
+  _moderationMarketCap = marketCap;
+}
+
 async function updateVoteTally(submissionId) {
   // Update vote counts (now includes weighted score)
   const result = await pool.query(
@@ -528,16 +556,24 @@ async function updateVoteTally(submissionId) {
   );
 
   // Auto-approve or auto-reject based on WEIGHTED score
+  // Uses market cap from context for tiered thresholds
   const weightedScore = parseFloat(result.rows[0]?.weighted_score) || 0;
-  await checkAutoModeration(submissionId, weightedScore);
+  await checkAutoModeration(submissionId, weightedScore, _moderationMarketCap);
+
+  // Clear market cap context after use
+  _moderationMarketCap = null;
 }
 
 // Auto-moderation based on weighted vote score
 // Includes minimum review period before auto-approval
-// First submission for a token uses shorter review period (5 min vs 30 min)
-async function checkAutoModeration(submissionId, weightedScore) {
-  // Check if submission meets the threshold
-  if (weightedScore >= AUTO_APPROVE_THRESHOLD) {
+// First submission for a token uses shorter review period (5 min vs 1 hour)
+// Approval threshold varies by market cap tier
+async function checkAutoModeration(submissionId, weightedScore, marketCap = null) {
+  // Get dynamic approval threshold based on market cap
+  const approvalThreshold = getApprovalThreshold(marketCap);
+
+  // Check if submission meets the threshold for its market cap tier
+  if (weightedScore >= approvalThreshold) {
     // Check if minimum review period has passed
     const submission = await pool.query(
       `SELECT created_at, token_mint FROM submissions WHERE id = $1 AND status = 'pending'`,
@@ -1170,9 +1206,13 @@ module.exports = {
   getTokenViews,
   getTokenViewsBatch,
   getMostViewedTokens,
+  // Market cap moderation context
+  setModerationMarketCap,
+  getApprovalThreshold,
   // Constants
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,
+  APPROVAL_THRESHOLDS,
   MIN_REVIEW_MINUTES,
   FIRST_SUBMISSION_REVIEW_MINUTES,
   MIN_VOTE_BALANCE_PERCENT,

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const solanaService = require('../services/solana');
+const geckoTerminal = require('../services/geckoTerminal');
 const { cache, keys, TTL } = require('../services/cache');
 const { validateVote, validateVoteSignature, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
@@ -125,6 +126,28 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
   const voteWeight = db.calculateVoteWeight(voterPercentage);
   const voterBalance = holderData.balance || 0;
 
+  // Fetch market cap for tiered approval thresholds
+  // Try cache first, then fetch from GeckoTerminal
+  let marketCap = null;
+  try {
+    const tokenInfo = await cache.get(keys.tokenInfo(submission.token_mint));
+    if (tokenInfo && tokenInfo.marketCap) {
+      marketCap = tokenInfo.marketCap;
+    } else {
+      // Fetch fresh market data
+      const marketData = await geckoTerminal.getMarketData(submission.token_mint);
+      if (marketData && marketData.marketCap) {
+        marketCap = marketData.marketCap;
+      }
+    }
+  } catch (err) {
+    console.warn('[Votes] Failed to fetch market cap for threshold calculation:', err.message);
+    // Continue with null market cap (will use lowest threshold)
+  }
+
+  // Set market cap context for auto-moderation threshold calculation
+  db.setModerationMarketCap(marketCap);
+
   // Check for existing vote
   const existingVote = await db.getVote(parsedId, voterWallet);
 
@@ -210,6 +233,8 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
   let minutesUntilEligible = 0;
   let isFirstSubmission = false;
   let effectiveReviewMinutes = db.MIN_REVIEW_MINUTES;
+  let marketCap = null;
+  let effectiveApprovalThreshold = db.AUTO_APPROVE_THRESHOLD;
 
   if (submission && submission.status === 'pending') {
     // Check if this token has any approved submissions (determines review period)
@@ -221,6 +246,22 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
     const now = new Date();
     const minutesSinceCreation = (now - createdAt) / (1000 * 60);
     minutesUntilEligible = Math.max(0, effectiveReviewMinutes - minutesSinceCreation);
+
+    // Fetch market cap for tiered threshold display
+    try {
+      const tokenInfo = await cache.get(keys.tokenInfo(submission.token_mint));
+      if (tokenInfo && tokenInfo.marketCap) {
+        marketCap = tokenInfo.marketCap;
+      } else {
+        const marketData = await geckoTerminal.getMarketData(submission.token_mint);
+        if (marketData && marketData.marketCap) {
+          marketCap = marketData.marketCap;
+        }
+      }
+      effectiveApprovalThreshold = db.getApprovalThreshold(marketCap);
+    } catch (err) {
+      // Use default threshold on error
+    }
   }
 
   res.json({
@@ -231,8 +272,10 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
     weightedScore: parseFloat(tally?.weighted_score) || 0,
     // Voting requirements info
     requirements: {
-      approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
+      approvalThreshold: effectiveApprovalThreshold,
       rejectThreshold: db.AUTO_REJECT_THRESHOLD,
+      approvalThresholdTiers: db.APPROVAL_THRESHOLDS,
+      marketCap: marketCap,
       minReviewMinutes: effectiveReviewMinutes,
       firstSubmissionReviewMinutes: db.FIRST_SUBMISSION_REVIEW_MINUTES,
       standardReviewMinutes: db.MIN_REVIEW_MINUTES,
@@ -310,7 +353,8 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
 // GET /api/votes/requirements - Get voting requirements and thresholds
 router.get('/requirements', asyncHandler(async (req, res) => {
   res.json({
-    approvalThreshold: db.AUTO_APPROVE_THRESHOLD,
+    approvalThresholdTiers: db.APPROVAL_THRESHOLDS,
+    approvalThresholdMax: db.AUTO_APPROVE_THRESHOLD,
     rejectThreshold: db.AUTO_REJECT_THRESHOLD,
     minReviewMinutes: db.MIN_REVIEW_MINUTES,
     firstSubmissionReviewMinutes: db.FIRST_SUBMISSION_REVIEW_MINUTES,
@@ -322,7 +366,7 @@ router.get('/requirements', asyncHandler(async (req, res) => {
       voteWeight: 'Vote weight scales from 1x (0.1% holdings) to 3x (3%+ holdings)',
       weightTiers: '0.1%=1x, 0.3%=1.5x, 0.75%=2x, 1.5%=2.5x, 3%+=3x',
       reviewPeriod: `First submission: ${db.FIRST_SUBMISSION_REVIEW_MINUTES} min review, subsequent: ${db.MIN_REVIEW_MINUTES} min`,
-      approvalScore: `Submissions are auto-approved at +${db.AUTO_APPROVE_THRESHOLD} weighted score`,
+      approvalScore: `Approval threshold based on market cap: <$50k = +10, $50k-$100k = +15, >$100k = +25`,
       rejectionScore: `Submissions are auto-rejected at ${db.AUTO_REJECT_THRESHOLD} weighted score`
     }
   });

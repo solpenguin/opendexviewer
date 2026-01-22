@@ -208,13 +208,25 @@
           <div class="step-number">4</div>
           <div class="step-content">
             <h3>Auto-Approval & Rejection</h3>
-            <p>Content is automatically approved when it reaches a weighted score of <strong>+25</strong>, or automatically rejected at <strong>-10</strong>. This ensures popular content appears quickly while spam is removed.</p>
+            <p>Content is automatically approved based on weighted votes, with thresholds that scale by market cap. Smaller tokens need fewer votes since they have smaller communities. Submissions are auto-rejected at <strong>-10</strong> to quickly remove spam.</p>
             <div class="threshold-indicators">
               <div class="threshold approve">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                <span>+25 = Auto-Approve</span>
+                <span>&lt;$50k mcap: +10</span>
+              </div>
+              <div class="threshold approve">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>$50k-$100k: +15</span>
+              </div>
+              <div class="threshold approve">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>&gt;$100k mcap: +25</span>
               </div>
               <div class="threshold reject">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
