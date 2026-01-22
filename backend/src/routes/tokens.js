@@ -27,7 +27,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   // Try cache first - use getWithMeta since we store with setWithTimestamp
   // Note: We refresh view counts even for cached responses since they're cheap to fetch
   const cachedMeta = await cache.getWithMeta(cacheKey);
-  if (cachedMeta && filter !== 'most_viewed') {
+  if (cachedMeta && cachedMeta.value) {
     // Privacy: Don't log cache details
 
     // Refresh view counts from database (cheap query, keeps views up-to-date)
@@ -49,161 +49,126 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
   try {
     // Handle most_viewed filter separately - uses our local database
+    // Optimized: Fetches metadata in batches to avoid rate limiting issues
     if (filter === 'most_viewed') {
-      // Privacy: Don't log database queries
       const mostViewed = await db.getMostViewedTokens(parseInt(limit));
 
-      if (mostViewed && mostViewed.length > 0) {
-        // Get the token mints that have views
-        const mints = mostViewed.map(v => v.token_mint);
-
-        // Try to batch fetch metadata from Helius first (most efficient)
-        let heliusMetadata = {};
-        if (solanaService.isHeliusConfigured()) {
-          try {
-            heliusMetadata = await solanaService.getTokenMetadataBatch(mints);
-            // Helius batch completed
-          } catch (err) {
-            console.error('[API /tokens] Helius batch failed:', err.message);
-          }
-        }
-
-        // Fetch full token data for these mints
-        const tokenPromises = mints.map(async (mint) => {
-          try {
-            const viewInfo = mostViewed.find(v => v.token_mint === mint);
-            const viewCount = viewInfo?.view_count || 0;
-
-            // Priority 1: Check Helius batch result
-            if (heliusMetadata[mint] && heliusMetadata[mint].name) {
-              const helius = heliusMetadata[mint];
-              // Get price data from GeckoTerminal (Helius doesn't have market data)
-              let priceData = {};
-              try {
-                priceData = await geckoService.getTokenOverview(mint) || {};
-              } catch (e) {
-                // Price data is optional, continue without it
-              }
-              return {
-                mintAddress: mint,
-                address: mint,
-                name: helius.name,
-                symbol: helius.symbol || '???',
-                price: priceData.price || 0,
-                priceChange24h: priceData.priceChange24h || 0,
-                volume24h: priceData.volume24h || 0,
-                marketCap: priceData.marketCap || 0,
-                logoUri: helius.logoUri || priceData.logoUri || null,
-                logoURI: helius.logoUri || priceData.logoURI || null,
-                views: viewCount
-              };
-            }
-
-            // Priority 2: Check local database (tokens are saved when detail pages are viewed)
-            const localToken = await db.getToken(mint);
-            if (localToken && localToken.name) {
-              // Get price data from GeckoTerminal
-              let priceData = {};
-              try {
-                priceData = await geckoService.getTokenOverview(mint) || {};
-              } catch (e) {
-                // Price data is optional
-              }
-              return {
-                mintAddress: mint,
-                address: mint,
-                name: localToken.name,
-                symbol: localToken.symbol || '???',
-                price: priceData.price || 0,
-                priceChange24h: priceData.priceChange24h || 0,
-                volume24h: priceData.volume24h || 0,
-                marketCap: priceData.marketCap || 0,
-                logoUri: localToken.logo_uri || priceData.logoUri || null,
-                logoURI: localToken.logo_uri || priceData.logoURI || null,
-                views: viewCount
-              };
-            }
-
-            // Priority 3: Try to get from API cache
-            const tokenCacheKey = keys.tokenInfo(mint);
-            const cachedMeta = await cache.getWithMeta(tokenCacheKey);
-            if (cachedMeta && cachedMeta.value && cachedMeta.value.name) {
-              const tokenData = cachedMeta.value;
-              return {
-                mintAddress: mint,
-                address: mint,
-                name: tokenData.name,
-                symbol: tokenData.symbol || '???',
-                price: tokenData.price || 0,
-                priceChange24h: tokenData.priceChange24h || 0,
-                volume24h: tokenData.volume24h || 0,
-                marketCap: tokenData.marketCap || 0,
-                logoUri: tokenData.logoUri || null,
-                logoURI: tokenData.logoURI || null,
-                views: viewCount
-              };
-            }
-
-            // Priority 4: Fetch from GeckoTerminal
-            const tokenData = await geckoService.getTokenOverview(mint);
-            if (tokenData && tokenData.name) {
-              return {
-                mintAddress: mint,
-                address: mint,
-                name: tokenData.name,
-                symbol: tokenData.symbol || '???',
-                price: tokenData.price || 0,
-                priceChange24h: tokenData.priceChange24h || 0,
-                volume24h: tokenData.volume24h || 0,
-                marketCap: tokenData.marketCap || 0,
-                logoUri: tokenData.logoUri || null,
-                logoURI: tokenData.logoURI || null,
-                views: viewCount
-              };
-            }
-
-            // Final fallback: return minimal data with truncated address as name
-            return {
-              mintAddress: mint,
-              address: mint,
-              name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-              symbol: '???',
-              price: 0,
-              priceChange24h: 0,
-              volume24h: 0,
-              marketCap: 0,
-              logoUri: null,
-              logoURI: null,
-              views: viewCount
-            };
-          } catch (err) {
-            // Privacy: Don't log token addresses
-            const viewInfo = mostViewed.find(v => v.token_mint === mint);
-            return {
-              mintAddress: mint,
-              address: mint,
-              name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-              symbol: '???',
-              price: 0,
-              priceChange24h: 0,
-              volume24h: 0,
-              marketCap: 0,
-              logoUri: null,
-              logoURI: null,
-              views: viewInfo?.view_count || 0
-            };
-          }
-        });
-
-        tokens = await Promise.all(tokenPromises);
-
-        // Cache the result (shorter TTL for most_viewed since it changes frequently)
-        await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
-        return res.json(tokens);
-      } else {
-        // No viewed tokens yet, return empty array
+      if (!mostViewed || mostViewed.length === 0) {
         return res.json([]);
       }
+
+      // Get the token mints that have views
+      const mints = mostViewed.map(v => v.token_mint);
+      const viewCountMap = {};
+      mostViewed.forEach(v => { viewCountMap[v.token_mint] = v.view_count; });
+
+      // Step 1: Batch fetch from local database (fast, no API calls)
+      const localTokens = await db.getTokensBatch(mints);
+      const localTokenMap = {};
+      if (localTokens) {
+        localTokens.forEach(t => {
+          if (t && t.mint_address) localTokenMap[t.mint_address] = t;
+        });
+      }
+
+      // Step 2: Batch fetch metadata from Helius for tokens not in local DB
+      const missingMints = mints.filter(m => !localTokenMap[m]?.name);
+      let heliusMetadata = {};
+      if (missingMints.length > 0 && solanaService.isHeliusConfigured()) {
+        try {
+          heliusMetadata = await solanaService.getTokenMetadataBatch(missingMints);
+        } catch (err) {
+          // Helius batch failed, continue without it
+        }
+      }
+
+      // Step 3: Check cache for any remaining tokens
+      const stillMissing = missingMints.filter(m => !heliusMetadata[m]?.name);
+      const cacheResults = {};
+      for (const mint of stillMissing) {
+        const tokenCacheKey = keys.tokenInfo(mint);
+        const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+        if (cachedMeta?.value?.name) {
+          cacheResults[mint] = cachedMeta.value;
+        }
+      }
+
+      // Step 4: Build token list from available data (NO individual API calls)
+      // Price data will be fetched on-demand when user clicks on token detail
+      tokens = mints.map(mint => {
+        const viewCount = viewCountMap[mint] || 0;
+        const local = localTokenMap[mint];
+        const helius = heliusMetadata[mint];
+        const cached = cacheResults[mint];
+
+        // Use best available data source
+        if (local?.name) {
+          return {
+            mintAddress: mint,
+            address: mint,
+            name: local.name,
+            symbol: local.symbol || '???',
+            price: local.price || 0,
+            priceChange24h: local.price_change_24h || 0,
+            volume24h: local.volume_24h || 0,
+            marketCap: local.market_cap || 0,
+            logoUri: local.logo_uri || null,
+            logoURI: local.logo_uri || null,
+            views: viewCount
+          };
+        }
+
+        if (helius?.name) {
+          return {
+            mintAddress: mint,
+            address: mint,
+            name: helius.name,
+            symbol: helius.symbol || '???',
+            price: 0,
+            priceChange24h: 0,
+            volume24h: 0,
+            marketCap: 0,
+            logoUri: helius.logoUri || null,
+            logoURI: helius.logoUri || null,
+            views: viewCount
+          };
+        }
+
+        if (cached?.name) {
+          return {
+            mintAddress: mint,
+            address: mint,
+            name: cached.name,
+            symbol: cached.symbol || '???',
+            price: cached.price || 0,
+            priceChange24h: cached.priceChange24h || 0,
+            volume24h: cached.volume24h || 0,
+            marketCap: cached.marketCap || 0,
+            logoUri: cached.logoUri || null,
+            logoURI: cached.logoURI || null,
+            views: viewCount
+          };
+        }
+
+        // Fallback: minimal data (user can click to get full details)
+        return {
+          mintAddress: mint,
+          address: mint,
+          name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+          symbol: '???',
+          price: 0,
+          priceChange24h: 0,
+          volume24h: 0,
+          marketCap: 0,
+          logoUri: null,
+          logoURI: null,
+          views: viewCount
+        };
+      });
+
+      // Cache the result (1 minute - balances freshness with performance)
+      await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
+      return res.json(tokens);
     }
 
     // Use GeckoTerminal (free, no API key needed)

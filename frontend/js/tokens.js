@@ -716,7 +716,8 @@ const tokenList = {
     tbody.innerHTML = this.tokens.map((token, index) => {
       const rank = (this.currentPage - 1) * this.pageSize + index + 1;
       const change = token.priceChange24h || 0;
-      const changeClass = change >= 0 ? 'change-positive' : 'change-negative';
+      // Don't show positive/negative class if price is 0 (data pending)
+      const changeClass = token.price === 0 ? '' : (change >= 0 ? 'change-positive' : 'change-negative');
       // Handle different property names from various API responses
       const rawAddress = token.mintAddress || token.address || token.mint || '';
       // Validate and sanitize Solana address - only allow valid base58 characters
@@ -747,14 +748,14 @@ const tokenList = {
               >
               <div class="token-info">
                 <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}</span>
-                <span class="token-symbol-cell">${this.escapeHtml(token.symbol || '???')}</span>
+                <span class="token-symbol-cell ${token.symbol === '???' ? 'symbol-pending' : ''}">${this.escapeHtml(token.symbol || '???')}</span>
               </div>
             </div>
           </td>
-          <td class="cell-price" data-navigate="${safeAddress}">${utils.formatPrice(token.price)}</td>
-          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${utils.formatChange(change)}</td>
-          <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h)}</td>
-          <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap)}</td>
+          <td class="cell-price" data-navigate="${safeAddress}">${utils.formatPrice(token.price, 6, token.price === 0)}</td>
+          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${utils.formatChange(change, token.price === 0)}</td>
+          <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h, '$', token.price === 0)}</td>
+          <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap, '$', token.price === 0)}</td>
           <td class="cell-views" data-navigate="${safeAddress}">${token.views > 0 ? token.views.toLocaleString() : '0'}</td>
           <td class="cell-watchlist">
             <button

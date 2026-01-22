@@ -846,6 +846,12 @@ a:hover {
   font-weight: 500;
 }
 
+/* Pending symbol indicator (when symbol is ???) */
+.token-symbol-cell.symbol-pending {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 /* Table cells */
 .cell-rank {
   text-align: center;
@@ -876,6 +882,36 @@ a:hover {
 
 .cell-views {
   color: var(--text-muted);
+}
+
+/* Pending data indicator - shown when price data hasn't been fetched yet */
+.data-pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0.6;
+  animation: pendingPulse 2s ease-in-out infinite;
+}
+
+.data-pending svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes pendingPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* Show pointer cursor on rows with pending data to indicate they're clickable */
+.token-row:has(.data-pending) {
+  cursor: pointer;
+}
+
+.token-row:has(.data-pending):hover .data-pending {
+  opacity: 1;
+  color: var(--accent-primary);
 }
 
 .change-positive {

@@ -330,6 +330,18 @@ async function getToken(mintAddress) {
   return result.rows[0];
 }
 
+// Batch fetch tokens by mint addresses (efficient for most_viewed)
+async function getTokensBatch(mintAddresses) {
+  if (!pool || !mintAddresses || mintAddresses.length === 0) return [];
+
+  // Use ANY() for efficient batch lookup
+  const result = await pool.query(
+    'SELECT * FROM tokens WHERE mint_address = ANY($1)',
+    [mintAddresses]
+  );
+  return result.rows;
+}
+
 // Search tokens by name, symbol, or mint address
 // Max query length to prevent DoS via expensive LIKE queries
 const MAX_SEARCH_QUERY_LENGTH = 100;
@@ -1327,6 +1339,7 @@ module.exports = {
   safeQuery,
   upsertToken,
   getToken,
+  getTokensBatch,
   searchTokens,
   createSubmission,
   getSubmission,

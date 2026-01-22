@@ -129,7 +129,7 @@ async function addAnalyticsJob(jobName, data = {}, options = {}) {
 
 /**
  * Schedule recurring session cleanup job
- * Runs every hour to clean up expired admin sessions
+ * Runs every 30 minutes to clean up expired admin sessions
  */
 async function scheduleSessionCleanup() {
   if (!isInitialized && !initialize()) return null;
@@ -143,19 +143,19 @@ async function scheduleSessionCleanup() {
       }
     }
 
-    // Schedule new recurring job (every hour)
+    // Schedule new recurring job (every 30 minutes for better storage hygiene)
     const job = await queues[QUEUE_NAMES.MAINTENANCE].add(
       'cleanup-sessions',
       {},
       {
         repeat: {
-          pattern: '0 * * * *' // Every hour at minute 0
+          pattern: '0,30 * * * *' // Every 30 minutes (at :00 and :30)
         },
         jobId: 'session-cleanup-recurring'
       }
     );
 
-    console.log('[JobQueue] Scheduled recurring session cleanup job');
+    console.log('[JobQueue] Scheduled recurring session cleanup job (every 30 min)');
     return job;
   } catch (err) {
     console.error('[JobQueue] Failed to schedule session cleanup:', err.message);
@@ -166,11 +166,20 @@ async function scheduleSessionCleanup() {
 /**
  * Batch view count updates
  * Collects view increments and flushes them periodically
+ * Buffer is capped to prevent unbounded memory growth
  */
 const viewCountBuffer = new Map(); // tokenMint -> count
+const VIEW_BUFFER_MAX_SIZE = parseInt(process.env.VIEW_BUFFER_MAX_SIZE) || 50000;
 let viewFlushScheduled = false;
 
 async function incrementViewCount(tokenMint) {
+  // Check if buffer is at capacity - force immediate flush if so
+  if (viewCountBuffer.size >= VIEW_BUFFER_MAX_SIZE && !viewCountBuffer.has(tokenMint)) {
+    // Buffer full with new token - trigger immediate flush
+    console.warn(`[JobQueue] View buffer at capacity (${VIEW_BUFFER_MAX_SIZE}), forcing flush`);
+    await flushViewCounts();
+  }
+
   // Buffer the view count locally
   const current = viewCountBuffer.get(tokenMint) || 0;
   viewCountBuffer.set(tokenMint, current + 1);

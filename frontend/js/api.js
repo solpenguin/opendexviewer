@@ -617,12 +617,18 @@ const utils = {
     return div.innerHTML;
   },
 
+  // Pending data indicator (timer icon) - shown when data hasn't been fetched yet
+  pendingIndicator: '<span class="data-pending" title="Click to load price data"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>',
+
   // Format currency with smart decimals
-  formatPrice(price, decimals = 6) {
-    if (!price || price === 0) return '$0.00';
+  // showPending: if true, shows timer icon for $0 values instead of "$0.00"
+  formatPrice(price, decimals = 6, showPending = false) {
+    if (!price || price === 0) {
+      return showPending ? this.pendingIndicator : '$0.00';
+    }
 
     const num = Number(price);
-    if (isNaN(num)) return '$0.00';
+    if (isNaN(num)) return showPending ? this.pendingIndicator : '$0.00';
 
     if (num < 0.000001) {
       return `$${num.toExponential(2)}`;
@@ -651,11 +657,15 @@ const utils = {
   },
 
   // Format large numbers with suffix
-  formatNumber(num, prefix = '$') {
-    if (!num && num !== 0) return '--';
+  // showPending: if true, shows timer icon for $0/null values
+  formatNumber(num, prefix = '$', showPending = false) {
+    if (!num && num !== 0) return showPending ? this.pendingIndicator : '--';
 
     const n = Number(num);
-    if (isNaN(n)) return '--';
+    if (isNaN(n)) return showPending ? this.pendingIndicator : '--';
+
+    // Show pending for zero values when flag is set
+    if (n === 0 && showPending) return this.pendingIndicator;
 
     if (n >= 1e12) return `${prefix}${(n / 1e12).toFixed(2)}T`;
     if (n >= 1e9) return `${prefix}${(n / 1e9).toFixed(2)}B`;
@@ -666,11 +676,12 @@ const utils = {
   },
 
   // Format percentage change
-  formatChange(change) {
-    if (change === null || change === undefined) return '--';
+  // showPending: if true, shows timer icon for null/undefined values
+  formatChange(change, showPending = false) {
+    if (change === null || change === undefined) return showPending ? this.pendingIndicator : '--';
 
     const num = Number(change);
-    if (isNaN(num)) return '--';
+    if (isNaN(num)) return showPending ? this.pendingIndicator : '--';
 
     const formatted = Math.abs(num).toFixed(2);
     const prefix = num >= 0 ? '+' : '-';

@@ -47,7 +47,7 @@ async function initializeJobQueue() {
 // Fallback cleanup for when Redis/worker is not available
 let cleanupIntervalId = null;
 function startFallbackCleanup() {
-  const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes (reduced from 1 hour for better storage hygiene)
 
   // Clean up expired sessions immediately on startup
   if (db.isReady()) {

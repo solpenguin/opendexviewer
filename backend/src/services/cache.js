@@ -35,12 +35,14 @@ const keys = {
 };
 
 /**
- * In-memory cache implementation (fallback)
+ * In-memory cache implementation with LRU eviction (fallback)
+ * Bounded to prevent unbounded memory growth
  */
 class MemoryCache {
-  constructor() {
+  constructor(maxSize = 10000) {
     this.cache = new Map();
-    this.stats = { hits: 0, misses: 0, sets: 0 };
+    this.maxSize = maxSize;
+    this.stats = { hits: 0, misses: 0, sets: 0, evictions: 0 };
 
     // Clean up expired entries every minute
     this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
@@ -60,11 +62,27 @@ class MemoryCache {
       return undefined;
     }
 
+    // LRU: Move accessed key to end of Map (most recently used)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+
     this.stats.hits++;
     return entry.value;
   }
 
   async set(key, value, ttlMs = 60000) {
+    // If key exists, delete it first (to update position in LRU order)
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+
+    // Evict oldest entries if at capacity
+    while (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      this.cache.delete(oldestKey);
+      this.stats.evictions++;
+    }
+
     this.cache.set(key, {
       value,
       expiry: Date.now() + ttlMs,
@@ -121,9 +139,11 @@ class MemoryCache {
     return {
       type: 'memory',
       size: this.cache.size,
+      maxSize: this.maxSize,
       hits: this.stats.hits,
       misses: this.stats.misses,
       sets: this.stats.sets,
+      evictions: this.stats.evictions,
       hitRate: total > 0 ? (this.stats.hits / total * 100).toFixed(2) + '%' : '0%'
     };
   }

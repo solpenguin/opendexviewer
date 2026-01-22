@@ -86,8 +86,30 @@ const RATE_LIMITS = {
   }
 };
 
-// Burst tracking
+// Burst tracking with periodic cleanup
 const burstCounters = new Map();
+const BURST_CLEANUP_INTERVAL_MS = 60000; // Clean up old burst counters every minute
+const BURST_MAX_AGE_MS = 10000; // Remove burst counters older than 10 seconds
+
+// Periodic cleanup to prevent burst counter accumulation
+setInterval(() => {
+  const now = Date.now();
+  let removed = 0;
+  for (const [key, data] of burstCounters) {
+    // If key is just a timestamp-based key, calculate age
+    const [, windowStr] = key.split(':');
+    const windowTime = parseInt(windowStr);
+    // Use largest burst window (4000ms for GeckoTerminal) as base
+    const estimatedKeyTime = windowTime * 4000;
+    if (now - estimatedKeyTime > BURST_MAX_AGE_MS) {
+      burstCounters.delete(key);
+      removed++;
+    }
+  }
+  if (removed > 0 && burstCounters.size > 100) {
+    console.log(`[RateLimiter] Cleanup: removed ${removed} old burst counters, ${burstCounters.size} remaining`);
+  }
+}, BURST_CLEANUP_INTERVAL_MS);
 
 /**
  * Add random jitter to prevent thundering herd
@@ -140,12 +162,16 @@ function recordRequest(apiName) {
   const currentCount = burstCounters.get(burstKey) || 0;
   burstCounters.set(burstKey, currentCount + 1);
 
-  // Clean up old burst counters
+  // Clean up old burst counters (keep last 2 windows for safety margin)
+  const currentWindow = Math.floor(now / config.burstWindow);
   for (const [key] of burstCounters) {
-    const [, windowStr] = key.split(':');
-    const window = parseInt(windowStr);
-    if (window < Math.floor(now / config.burstWindow) - 1) {
-      burstCounters.delete(key);
+    const [keyApi, windowStr] = key.split(':');
+    // Only clean up counters for the same API to avoid config mismatch
+    if (keyApi === apiName) {
+      const window = parseInt(windowStr);
+      if (window < currentWindow - 2) {
+        burstCounters.delete(key);
+      }
     }
   }
 }
