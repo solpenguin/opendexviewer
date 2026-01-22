@@ -787,7 +787,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       }
 
       return tokenResult;
-    }, true); // requireFresh=true for individual token pages
+    }); // Use standard caching with stampede prevention (was requireFresh=true)
 
     res.json(result);
   } catch (error) {
@@ -816,7 +816,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
       }
 
       return data;
-    }, true); // requireFresh=true for price endpoints
+    }); // Use standard caching with stampede prevention (was requireFresh=true)
 
     res.json(priceData);
   } catch (error) {
@@ -1005,7 +1005,7 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
     let percentageHeld = null;
 
     // Try to get token info for supply data
-    const tokenInfo = await cache.get(keys.token(mint));
+    const tokenInfo = await cache.get(keys.tokenInfo(mint));
     if (tokenInfo) {
       totalSupply = tokenInfo.supply || tokenInfo.totalSupply;
       liquidity = tokenInfo.liquidity;

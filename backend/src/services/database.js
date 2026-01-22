@@ -429,7 +429,7 @@ async function getApprovedSubmissions(tokenMint) {
   return getSubmissionsByToken(tokenMint, { status: 'approved' });
 }
 
-// Vote operations
+// Vote operations - Optimized with delta-based tally updates for high concurrency
 async function createVote({ submissionId, voterWallet, voteType, voterBalance = 0, voterPercentage = 0 }) {
   const client = await pool.connect();
   try {
@@ -438,7 +438,24 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
     // Calculate vote weight based on holder percentage
     const voteWeight = calculateVoteWeight(voterPercentage);
 
-    // Use ON CONFLICT to handle race conditions gracefully
+    // Check if vote already exists to calculate delta
+    const existingVote = await client.query(
+      `SELECT vote_type, vote_weight FROM votes
+       WHERE submission_id = $1 AND voter_wallet = $2`,
+      [submissionId, voterWallet]
+    );
+
+    const isNewVote = existingVote.rows.length === 0;
+    const oldVoteType = existingVote.rows[0]?.vote_type;
+    const oldVoteWeight = existingVote.rows[0]?.vote_weight || 0;
+
+    // Skip if vote unchanged
+    if (!isNewVote && oldVoteType === voteType) {
+      await client.query('COMMIT');
+      return existingVote.rows[0];
+    }
+
+    // Insert or update the vote
     const result = await client.query(
       `INSERT INTO votes (submission_id, voter_wallet, vote_type, vote_weight, voter_balance, voter_percentage)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -452,24 +469,45 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
       [submissionId, voterWallet, voteType, voteWeight, voterBalance, voterPercentage]
     );
 
-    // Update tally within the same transaction (now includes weighted score)
+    // Delta-based tally update (O(1) instead of O(n) full scan)
+    // Calculate the delta values based on vote change
+    let upvoteDelta = 0;
+    let downvoteDelta = 0;
+    let weightedDelta = 0;
+
+    if (isNewVote) {
+      // New vote
+      if (voteType === 'up') {
+        upvoteDelta = 1;
+        weightedDelta = voteWeight;
+      } else {
+        downvoteDelta = 1;
+        weightedDelta = -voteWeight;
+      }
+    } else {
+      // Changed vote (up->down or down->up)
+      if (oldVoteType === 'up' && voteType === 'down') {
+        upvoteDelta = -1;
+        downvoteDelta = 1;
+        weightedDelta = -oldVoteWeight - voteWeight;
+      } else if (oldVoteType === 'down' && voteType === 'up') {
+        upvoteDelta = 1;
+        downvoteDelta = -1;
+        weightedDelta = oldVoteWeight + voteWeight;
+      }
+    }
+
+    // Apply delta update to tally (atomic, no full scan)
     await client.query(
       `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
-       SELECT
-         $1,
-         COUNT(*) FILTER (WHERE vote_type = 'up'),
-         COUNT(*) FILTER (WHERE vote_type = 'down'),
-         COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
-         COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
-         NOW()
-       FROM votes WHERE submission_id = $1
+       VALUES ($1, GREATEST(0, $2), GREATEST(0, $3), $2 - $3, $4, NOW())
        ON CONFLICT (submission_id) DO UPDATE SET
-         upvotes = EXCLUDED.upvotes,
-         downvotes = EXCLUDED.downvotes,
-         score = EXCLUDED.score,
-         weighted_score = EXCLUDED.weighted_score,
+         upvotes = GREATEST(0, vote_tallies.upvotes + $2),
+         downvotes = GREATEST(0, vote_tallies.downvotes + $3),
+         score = (vote_tallies.upvotes + $2) - (vote_tallies.downvotes + $3),
+         weighted_score = vote_tallies.weighted_score + $4,
          updated_at = NOW()`,
-      [submissionId]
+      [submissionId, upvoteDelta, downvoteDelta, weightedDelta]
     );
 
     await client.query('COMMIT');

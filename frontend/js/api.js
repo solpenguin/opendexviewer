@@ -7,6 +7,8 @@ const API_BASE_URL = (typeof config !== 'undefined' && config.api?.baseUrl)
 // TTLs are configurable via config.js (config.cache.*)
 const apiCache = {
   cache: new Map(),
+  accessOrder: [], // Track access order for true LRU eviction
+  maxSize: 500,    // Increased from 100 for better cache hit rates
 
   // Cache TTLs in milliseconds - pulled from config.js with fallback defaults
   // Priority: Community updates (submissions) are primary, price/volume is secondary
@@ -29,6 +31,15 @@ const apiCache = {
     return `${endpoint}${paramStr ? '?' + paramStr : ''}`;
   },
 
+  // Update access order for LRU (move key to end = most recently used)
+  touchAccessOrder(key) {
+    const idx = this.accessOrder.indexOf(key);
+    if (idx !== -1) {
+      this.accessOrder.splice(idx, 1);
+    }
+    this.accessOrder.push(key);
+  },
+
   // Get cached value if fresh
   get(key) {
     const entry = this.cache.get(key);
@@ -37,8 +48,14 @@ const apiCache = {
     const age = Date.now() - entry.timestamp;
     if (age > entry.ttl) {
       this.cache.delete(key);
+      // Remove from access order
+      const idx = this.accessOrder.indexOf(key);
+      if (idx !== -1) this.accessOrder.splice(idx, 1);
       return null;
     }
+
+    // Update access order (LRU touch)
+    this.touchAccessOrder(key);
 
     return {
       data: entry.data,
@@ -47,18 +64,24 @@ const apiCache = {
     };
   },
 
-  // Set cache entry
+  // Set cache entry with proper LRU eviction
   set(key, data, ttl) {
+    // If key already exists, just update it
+    const exists = this.cache.has(key);
+
     this.cache.set(key, {
       data: data,
       timestamp: Date.now(),
       ttl: ttl
     });
 
-    // Limit cache size (LRU-style cleanup)
-    if (this.cache.size > 100) {
-      const oldest = this.cache.keys().next().value;
-      this.cache.delete(oldest);
+    // Update access order
+    this.touchAccessOrder(key);
+
+    // LRU eviction: remove least recently used entries when over limit
+    while (this.cache.size > this.maxSize && this.accessOrder.length > 0) {
+      const lruKey = this.accessOrder.shift(); // Remove oldest (front of array)
+      this.cache.delete(lruKey);
     }
   },
 
@@ -96,6 +119,9 @@ const apiCache = {
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
         this.cache.delete(key);
+        // Also remove from access order
+        const idx = this.accessOrder.indexOf(key);
+        if (idx !== -1) this.accessOrder.splice(idx, 1);
       }
     }
   },
@@ -103,6 +129,7 @@ const apiCache = {
   // Clear all cache
   clear() {
     this.cache.clear();
+    this.accessOrder = [];
   }
 };
 

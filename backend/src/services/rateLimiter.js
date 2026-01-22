@@ -32,8 +32,8 @@ const RATE_LIMITS = {
     burstLimit: 2,       // Allow small bursts for parallel requests
     burstWindow: 4000,   // 4 second window
     useQueue: true,      // Force queue-based processing
-    maxQueueSize: 200,   // Limit queue size for GeckoTerminal (strict rate limit)
-    queueTimeout: 45000  // 45s timeout for queued requests
+    maxQueueSize: 2000,  // Increased queue size for high concurrency (was 200)
+    queueTimeout: 60000  // 60s timeout for queued requests (was 45s)
   },
   jupiter: {
     minInterval: 100,    // Minimum 100ms between requests (10 req/sec max)

@@ -29,9 +29,21 @@ const tokenList = {
   async init() {
     this.bindEvents();
     this.restoreState();
+    this.initSortUI(); // Initialize sort column header UI
     await this.loadTokens();
     this.startAutoRefresh();
     this.startFreshnessTimer();
+  },
+
+  // Initialize sort column header UI to match current sort state
+  initSortUI() {
+    // Find the column header that matches the current sort
+    const activeHeader = document.querySelector(`.sortable[data-sort="${this.currentSort}"]`);
+    if (activeHeader) {
+      activeHeader.classList.add('active');
+      const icon = activeHeader.querySelector('.sort-icon');
+      if (icon) icon.className = `sort-icon ${this.sortOrder}`;
+    }
   },
 
   // Restore state from URL params
@@ -166,7 +178,15 @@ const tokenList = {
         const icon = th.querySelector('.sort-icon');
         if (icon) icon.className = `sort-icon ${this.sortOrder}`;
 
-        this.loadTokens();
+        // Re-sort existing data and re-render (no need to fetch again)
+        // This makes sorting instant and reduces API calls
+        if (this.tokens && this.tokens.length > 0) {
+          this.sortTokens();
+          this.render();
+        } else {
+          // No data loaded yet, fetch it
+          this.loadTokens();
+        }
       });
     });
 
@@ -281,6 +301,10 @@ const tokenList = {
         });
       }
 
+      // Apply client-side sorting (API may return pre-sorted data from external sources)
+      // This ensures the user's sort selection is always respected
+      this.sortTokens();
+
       this.render();
       this.hideApiError();
       this.lastUpdateTime = Date.now();
@@ -369,12 +393,8 @@ const tokenList = {
         }));
       }
 
-      // Sort watchlist by volume or user preference
-      this.tokens.sort((a, b) => {
-        const aVal = a.volume24h || 0;
-        const bVal = b.volume24h || 0;
-        return this.sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
-      });
+      // Apply user's sort preference to watchlist
+      this.sortTokens();
 
       this.render();
       this.hideApiError();
@@ -620,6 +640,42 @@ const tokenList = {
     if (banner) {
       banner.style.display = 'none';
     }
+  },
+
+  // Sort tokens array based on current sort field and order
+  // Maps sort keys to token properties and handles null/undefined values
+  sortTokens() {
+    if (!this.tokens || this.tokens.length === 0) return;
+
+    // Map sort field names to token property names
+    const sortFieldMap = {
+      'price': 'price',
+      'change': 'priceChange24h',
+      'volume': 'volume24h',
+      'mcap': 'marketCap',
+      'views': 'views'
+    };
+
+    const field = sortFieldMap[this.currentSort] || 'marketCap';
+    const isDesc = this.sortOrder === 'desc';
+
+    console.log(`[TokenList] Sorting by ${field} (${this.sortOrder})`);
+
+    this.tokens.sort((a, b) => {
+      // Get values, treating null/undefined as 0 for numeric comparison
+      let aVal = a[field];
+      let bVal = b[field];
+
+      // Handle null/undefined - treat as 0 for numeric fields
+      if (aVal === null || aVal === undefined) aVal = 0;
+      if (bVal === null || bVal === undefined) bVal = 0;
+
+      // For numeric comparison
+      const diff = bVal - aVal;
+
+      // Return based on sort direction
+      return isDesc ? diff : -diff;
+    });
   },
 
   // Render token list
