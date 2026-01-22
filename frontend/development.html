@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Development - OpenDex</title>
+  <meta name="description" content="OpenDex development roadmap, tokenomics, and project updates. Follow our journey building the open-source Solana token viewer.">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <img src="OpenDEX_Logo.png" alt="OpenDex Logo" class="logo-img" width="28" height="28">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">Beta</span>
+      </a>
+
+      <nav class="nav">
+        <a href="/" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+        <a href="about.html" class="nav-link">About</a>
+        <a href="development.html" class="nav-link active">Development</a>
+        <a href="api.html" class="nav-link">API</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main about-page">
+    <!-- Page Hero -->
+    <section class="submit-hero">
+      <div class="submit-hero-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 20V10"/>
+          <path d="M18 20V4"/>
+          <path d="M6 20v-4"/>
+        </svg>
+      </div>
+      <h1>Development</h1>
+      <p>Tokenomics, roadmap, and project updates for OpenDex</p>
+    </section>
+
+    <!-- Tokenomics Section -->
+    <section class="about-section tokenomics-section">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v12"/>
+            <path d="M6 12h12"/>
+          </svg>
+        </div>
+        <h2>Tokenomics</h2>
+        <p>Fair and transparent token distribution</p>
+      </div>
+
+      <div class="tokenomics-grid">
+        <div class="tokenomics-card developer">
+          <div class="tokenomics-percentage">10%</div>
+          <div class="tokenomics-label">Developer Locked</div>
+          <div class="tokenomics-bar">
+            <div class="tokenomics-bar-fill" style="width: 10%;"></div>
+          </div>
+          <p class="tokenomics-desc">Reserved for development, locked to ensure long-term commitment and alignment with the community.</p>
+        </div>
+
+        <div class="tokenomics-card bonding">
+          <div class="tokenomics-percentage">90%</div>
+          <div class="tokenomics-label">Bonding Curve</div>
+          <div class="tokenomics-bar">
+            <div class="tokenomics-bar-fill" style="width: 90%;"></div>
+          </div>
+          <p class="tokenomics-desc">Available through the bonding curve for fair, decentralized distribution to the community.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Development Phases Section -->
+    <section class="about-section development-phases-section">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <h2>Development Roadmap</h2>
+        <p>Our journey building the open-source Solana token viewer</p>
+      </div>
+
+      <div class="process-steps">
+        <div class="process-step active">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Develop V2.0 Based on User Feedback</h3>
+            <p>Incorporating initial user feedback to refine the platform. Improving usability, fixing bugs, and enhancing core features based on real-world usage.</p>
+            <span class="phase-status in-progress">In Progress</span>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Upgrade Servers and API Access</h3>
+            <p>Scaling infrastructure with improved server capacity, faster response times, and enhanced API reliability. Building a robust foundation for growth.</p>
+            <span class="phase-status upcoming">Upcoming</span>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Independent Token Price Database</h3>
+            <p>Developing our own token price aggregation system to remove reliance on external APIs. Direct on-chain data collection for maximum accuracy and uptime.</p>
+            <span class="phase-status upcoming">Upcoming</span>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h3>Enhanced User Experience</h3>
+            <p>Introducing new features including advanced charting tools, portfolio tracking, price alerts, watchlists, and mobile-optimized interfaces.</p>
+            <span class="phase-status upcoming">Upcoming</span>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">5</div>
+          <div class="step-content">
+            <h3>Multi-Chain Expansion</h3>
+            <p>Expanding beyond Solana to support additional blockchain networks. Bringing the same community-driven experience to new ecosystems.</p>
+            <span class="phase-status upcoming">Upcoming</span>
+          </div>
+        </div>
+
+        <div class="process-step">
+          <div class="step-number">6</div>
+          <div class="step-content">
+            <h3>Monetization and Growth</h3>
+            <p>Sustainable revenue through premium features, advertising partnerships, and promotional tools for token projects while keeping core features free.</p>
+            <span class="phase-status upcoming">Upcoming</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Twitter/X Feed Section -->
+    <section class="about-section twitter-section">
+      <div class="about-header">
+        <div class="about-icon twitter-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </div>
+        <h2>Latest Updates</h2>
+        <p>Follow @TheSolPenguin for the latest news and announcements</p>
+      </div>
+
+      <div class="twitter-embed-container">
+        <a class="twitter-timeline"
+           data-theme="dark"
+           data-chrome="noheader nofooter noborders transparent"
+           data-height="500"
+           href="https://twitter.com/TheSolPenguin">
+          Loading tweets from @TheSolPenguin...
+        </a>
+        <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank">GitHub</a>
+        <span class="separator">|</span>
+        <a href="api.html">Developer API</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/wallet.js"></script>
+</body>
+</html>
