@@ -108,6 +108,18 @@ const adminApi = {
   async getTokens(params = {}) {
     const query = new URLSearchParams(params).toString();
     return this.request(`/admin/tokens${query ? `?${query}` : ''}`);
+  },
+
+  // Settings
+  async getSettings() {
+    return this.request('/admin/settings');
+  },
+
+  async updateSettings(settings) {
+    return this.request('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(settings)
+    });
   }
 };
 
@@ -188,6 +200,9 @@ const adminPanel = {
     // Modal
     document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.hideModal());
     document.getElementById('confirm-cancel')?.addEventListener('click', () => this.hideModal());
+
+    // Development mode toggle
+    document.getElementById('dev-mode-toggle')?.addEventListener('change', (e) => this.toggleDevMode(e.target.checked));
   },
 
   bindPagination(type) {
@@ -289,6 +304,9 @@ const adminPanel = {
         break;
       case 'tokens':
         this.loadTokens();
+        break;
+      case 'settings':
+        this.loadSettings();
         break;
     }
   },
@@ -657,6 +675,56 @@ const adminPanel = {
       hour: '2-digit',
       minute: '2-digit'
     });
+  },
+
+  // Load settings
+  async loadSettings() {
+    try {
+      const result = await adminApi.getSettings();
+      const { developmentMode } = result.data;
+
+      // Update toggle state
+      const toggle = document.getElementById('dev-mode-toggle');
+      if (toggle) {
+        toggle.checked = developmentMode;
+      }
+
+      // Update warning visibility
+      this.updateDevModeWarning(developmentMode);
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+      toast.error('Failed to load settings');
+    }
+  },
+
+  // Toggle development mode
+  async toggleDevMode(enabled) {
+    try {
+      const result = await adminApi.updateSettings({ developmentMode: enabled });
+      const { developmentMode } = result.data;
+
+      // Update warning visibility
+      this.updateDevModeWarning(developmentMode);
+
+      toast.success(`Development mode ${developmentMode ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to update development mode:', error);
+      toast.error('Failed to update development mode');
+
+      // Revert toggle on error
+      const toggle = document.getElementById('dev-mode-toggle');
+      if (toggle) {
+        toggle.checked = !enabled;
+      }
+    }
+  },
+
+  // Update development mode warning display
+  updateDevModeWarning(enabled) {
+    const warning = document.getElementById('dev-mode-warning');
+    if (warning) {
+      warning.style.display = enabled ? 'flex' : 'none';
+    }
   }
 };
 

@@ -495,6 +495,13 @@ const api = {
         }
       });
     }
+  },
+
+  // Admin settings (public endpoint for development mode check)
+  admin: {
+    async getDevelopmentMode() {
+      return api.request('/admin/settings/development-mode');
+    }
   }
 };
 

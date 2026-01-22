@@ -2,6 +2,7 @@
 const submitPage = {
   tokenValid: false,
   holderVerified: false,
+  developmentMode: false, // When true, bypasses holder verification
   tokenData: null,
   holderData: null,
   mySubmissions: [],
@@ -38,9 +39,12 @@ const submitPage = {
   ],
 
   // Initialize
-  init() {
+  async init() {
     this.bindEvents();
     this.restoreFromUrl();
+
+    // Check development mode (bypasses holder verification)
+    await this.checkDevelopmentMode();
 
     // Check if wallet is already initialized
     if (wallet.initialized) {
@@ -53,6 +57,43 @@ const submitPage = {
     }
 
     this.updateFormState();
+  },
+
+  // Check if development mode is enabled
+  async checkDevelopmentMode() {
+    try {
+      const result = await api.admin.getDevelopmentMode();
+      this.developmentMode = result.developmentMode === true;
+
+      if (this.developmentMode) {
+        console.log('[Submit] Development mode enabled - holder verification bypassed');
+        this.showDevModeIndicator();
+      }
+    } catch (error) {
+      // Development mode check failed, default to disabled
+      this.developmentMode = false;
+      console.log('[Submit] Development mode check failed, defaulting to disabled');
+    }
+  },
+
+  // Show development mode indicator
+  showDevModeIndicator() {
+    const indicator = document.createElement('div');
+    indicator.className = 'dev-mode-indicator';
+    indicator.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <span>Development Mode - Holder verification bypassed</span>
+    `;
+
+    // Insert after the hero section
+    const hero = document.querySelector('.submit-hero');
+    if (hero && hero.parentNode) {
+      hero.parentNode.insertBefore(indicator, hero.nextSibling);
+    }
   },
 
   // Update wallet UI based on current state
@@ -628,8 +669,10 @@ const submitPage = {
     // Count valid submissions
     const validCount = Object.values(this.fieldValidation).filter(f => f.valid).length;
 
-    // Requirements: wallet connected, token valid, at least one valid field, and must hold the token
-    const canSubmit = this.walletConnected && this.tokenValid && validCount > 0 && this.holderVerified;
+    // Requirements: wallet connected, token valid, at least one valid field
+    // Holder verification is bypassed in development mode
+    const holderOk = this.holderVerified || this.developmentMode;
+    const canSubmit = this.walletConnected && this.tokenValid && validCount > 0 && holderOk;
 
     if (submitBtn) {
       submitBtn.disabled = !canSubmit;
@@ -650,7 +693,7 @@ const submitPage = {
         formStatus.textContent = 'Connect your wallet to submit content';
       } else if (!this.tokenValid) {
         formStatus.textContent = 'Enter a valid token address to continue';
-      } else if (!this.holderVerified) {
+      } else if (!holderOk) {
         formStatus.textContent = 'You must hold this token to submit content for it';
       } else if (validCount === 0) {
         formStatus.textContent = 'Fill in at least one content field';
@@ -672,7 +715,9 @@ const submitPage = {
       return;
     }
 
-    if (!this.holderVerified) {
+    // Check holder verification (bypassed in development mode)
+    const holderOk = this.holderVerified || this.developmentMode;
+    if (!holderOk) {
       toast.error('You must hold this token to submit content for it');
       return;
     }

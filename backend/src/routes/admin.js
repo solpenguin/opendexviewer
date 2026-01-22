@@ -431,6 +431,65 @@ router.get('/tokens',
 );
 
 // ==========================================
+// Development Mode Settings
+// ==========================================
+
+// In-memory settings store (persists for server lifetime)
+// In production, you'd want to store this in database
+const adminSettings = {
+  developmentMode: false
+};
+
+/**
+ * GET /admin/settings
+ * Get current admin settings including development mode
+ */
+router.get('/settings',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        developmentMode: adminSettings.developmentMode
+      }
+    });
+  })
+);
+
+/**
+ * PATCH /admin/settings
+ * Update admin settings
+ */
+router.patch('/settings',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    const { developmentMode } = req.body;
+
+    if (typeof developmentMode === 'boolean') {
+      adminSettings.developmentMode = developmentMode;
+      console.log(`[Admin] Development mode ${developmentMode ? 'ENABLED' : 'DISABLED'} by ${req.ip}`);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        developmentMode: adminSettings.developmentMode
+      }
+    });
+  })
+);
+
+/**
+ * GET /admin/settings/development-mode (public endpoint - no auth required)
+ * Check if development mode is enabled (for frontend to check)
+ */
+router.get('/settings/development-mode', asyncHandler(async (req, res) => {
+  res.json({
+    developmentMode: adminSettings.developmentMode
+  });
+}));
+
+// ==========================================
 // Maintenance
 // ==========================================
 
