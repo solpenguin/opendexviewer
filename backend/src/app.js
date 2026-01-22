@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const crypto = require('crypto');
+
+// Import circuit breaker for health checks
+const { getAllStatuses: getCircuitBreakerStatuses, CircuitBreakerError } = require('./services/circuitBreaker');
 
 // Import routes
 const tokenRoutes = require('./routes/tokens');
@@ -19,13 +23,32 @@ const { defaultLimiter } = require('./middleware/rateLimit');
 // Import database for cleanup jobs
 const db = require('./services/database');
 
+// Import job queue for background processing
+const jobQueue = require('./services/jobQueue');
+
 const app = express();
 
-// Periodic cleanup job for expired admin sessions (runs every hour)
-const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-let cleanupIntervalId = null;
+// Initialize job queue and schedule background jobs
+// Jobs are processed by a separate worker process (src/worker.js)
+async function initializeJobQueue() {
+  const initialized = jobQueue.initialize();
 
-function startCleanupJobs() {
+  if (initialized) {
+    // Schedule recurring session cleanup (runs every hour via worker)
+    await jobQueue.scheduleSessionCleanup();
+    console.log('[App] Job queue initialized - background jobs will be handled by worker');
+  } else {
+    // Fallback: Run cleanup in main process if Redis not available
+    console.log('[App] Job queue not available - using in-process cleanup');
+    startFallbackCleanup();
+  }
+}
+
+// Fallback cleanup for when Redis/worker is not available
+let cleanupIntervalId = null;
+function startFallbackCleanup() {
+  const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
   // Clean up expired sessions immediately on startup
   if (db.isReady()) {
     db.cleanupExpiredAdminSessions()
@@ -52,8 +75,8 @@ function startCleanupJobs() {
   }, CLEANUP_INTERVAL_MS);
 }
 
-// Start cleanup jobs after a short delay (allow DB to initialize)
-setTimeout(startCleanupJobs, 5000);
+// Initialize job queue after a short delay (allow DB/Redis to connect)
+setTimeout(initializeJobQueue, 5000);
 const PORT = process.env.PORT || 3000;
 
 // Trust proxy (for Render and other PaaS)
@@ -87,11 +110,12 @@ app.use(cors(corsOptions));
 // SECURITY: Helmet sets various HTTP headers for security
 app.use(helmet({
   // Content Security Policy - controls what resources can be loaded
+  // SECURITY: No unsafe-inline for scripts - all event handlers use addEventListener
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for static HTML site
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      scriptSrc: ["'self'"], // No unsafe-inline - all scripts use addEventListener
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // unsafe-inline needed for dynamic styles
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"], // Allow images from HTTPS sources
       connectSrc: ["'self'", "https://api.mainnet-beta.solana.com", "https://*.helius-rpc.com", "https://api.geckoterminal.com", "https://quote-api.jup.ag"],
@@ -136,6 +160,13 @@ const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
 app.use((req, res, next) => {
   req.setTimeout(REQUEST_TIMEOUT);
   res.setTimeout(REQUEST_TIMEOUT);
+  next();
+});
+
+// Request ID middleware - for tracing and debugging
+app.use((req, res, next) => {
+  req.requestId = crypto.randomBytes(8).toString('hex');
+  res.setHeader('X-Request-ID', req.requestId);
   next();
 });
 
@@ -199,17 +230,28 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
+// Global error handler with request ID tracking and circuit breaker support
 app.use((err, req, res, next) => {
-  // Log full error details server-side for debugging
-  console.error('Error:', err.stack || err.message);
+  const requestId = req.requestId || 'unknown';
+  const timestamp = new Date().toISOString();
+
+  // Log full error details server-side for debugging (with request ID for correlation)
+  console.error(`[${timestamp}] [${requestId}] Error:`, err.stack || err.message);
 
   // SECURITY: Categorize errors with safe user-facing messages
   // Don't leak internal error details in production
   let statusCode = err.status || 500;
   let userMessage = 'Internal server error';
+  let errorCode = 'INTERNAL_ERROR';
+  let retryAfter = null;
 
-  if (process.env.NODE_ENV !== 'production') {
+  // Handle circuit breaker errors specially
+  if (err.isCircuitBreakerError) {
+    statusCode = 503;
+    userMessage = 'Service temporarily unavailable';
+    errorCode = 'SERVICE_UNAVAILABLE';
+    retryAfter = Math.ceil(err.retryAfter / 1000); // Convert to seconds
+  } else if (process.env.NODE_ENV !== 'production') {
     // In development, show actual error
     userMessage = err.message;
   } else {
@@ -217,33 +259,79 @@ app.use((err, req, res, next) => {
     if (err.message?.includes('not found')) {
       statusCode = 404;
       userMessage = 'Resource not found';
+      errorCode = 'NOT_FOUND';
     } else if (err.message?.includes('validation') || err.message?.includes('invalid')) {
       statusCode = 400;
       userMessage = 'Invalid request';
-    } else if (err.message?.includes('rate limit') || err.message?.includes('too many')) {
+      errorCode = 'VALIDATION_ERROR';
+    } else if (err.message?.includes('rate limit') || err.message?.includes('too many') || err.message?.includes('queue full')) {
       statusCode = 429;
-      userMessage = 'Too many requests';
+      userMessage = 'Too many requests - please try again later';
+      errorCode = 'RATE_LIMITED';
+      retryAfter = 30; // Default retry after 30 seconds
+    } else if (err.message?.includes('timeout') || err.message?.includes('timed out')) {
+      statusCode = 504;
+      userMessage = 'Request timed out';
+      errorCode = 'TIMEOUT';
     } else if (err.message?.includes('unauthorized') || err.message?.includes('permission')) {
       statusCode = 403;
       userMessage = 'Access denied';
+      errorCode = 'FORBIDDEN';
     }
     // All other errors get generic message to prevent info leakage
   }
 
+  // Set Retry-After header for rate limit and service unavailable errors
+  if (retryAfter) {
+    res.setHeader('Retry-After', retryAfter);
+  }
+
   res.status(statusCode).json({
     error: userMessage,
+    code: errorCode,
+    requestId: requestId,
+    timestamp: timestamp,
+    ...(retryAfter && { retryAfter }),
     ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
   });
 });
 
 // Graceful shutdown
-function gracefulShutdown(signal) {
+async function gracefulShutdown(signal) {
   console.log(`${signal} received. Shutting down gracefully...`);
 
-  // Clear cleanup interval
+  // Clear cleanup interval (fallback mode)
   if (cleanupIntervalId) {
     clearInterval(cleanupIntervalId);
     cleanupIntervalId = null;
+  }
+
+  // Flush any buffered view counts to database directly
+  // (Can't use job queue since we're shutting down)
+  try {
+    const viewBuffer = jobQueue.getViewCountBuffer();
+    if (viewBuffer.size > 0) {
+      console.log(`[Shutdown] Flushing ${viewBuffer.size} buffered view counts...`);
+      for (const [tokenMint, count] of viewBuffer) {
+        await db.pool.query(`
+          INSERT INTO token_views (token_mint, view_count, last_viewed_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (token_mint) DO UPDATE SET
+            view_count = token_views.view_count + $2,
+            last_viewed_at = NOW()
+        `, [tokenMint, count]);
+      }
+      console.log('[Shutdown] View counts flushed');
+    }
+  } catch (err) {
+    console.error('[Shutdown] Failed to flush view counts:', err.message);
+  }
+
+  // Shutdown job queue connections
+  try {
+    await jobQueue.shutdown();
+  } catch (err) {
+    console.error('[Shutdown] Job queue shutdown error:', err.message);
   }
 
   process.exit(0);
@@ -253,6 +341,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start server
+// Privacy: Don't log which API keys are configured - reveals infrastructure details
 app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════╗
@@ -260,10 +349,7 @@ app.listen(PORT, () => {
 ╠════════════════════════════════════════════╣
 ║  Port: ${PORT.toString().padEnd(36)}║
 ║  Mode: ${(process.env.NODE_ENV || 'development').padEnd(36)}║
-║  Database: ${process.env.DATABASE_URL ? 'Connected'.padEnd(32) : 'Not configured'.padEnd(32)}║
-║  Helius: ${process.env.HELIUS_API_KEY ? 'Enabled'.padEnd(34) : 'Disabled'.padEnd(34)}║
-║  Birdeye: ${process.env.BIRDEYE_API_KEY ? 'Enabled'.padEnd(33) : 'Disabled'.padEnd(33)}║
-║  Admin: ${process.env.ADMIN_PASSWORD ? 'Enabled'.padEnd(35) : 'Disabled'.padEnd(35)}║
+║  Status: ${'Ready'.padEnd(34)}║
 ╚════════════════════════════════════════════╝
   `);
 });

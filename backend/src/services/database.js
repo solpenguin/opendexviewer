@@ -185,6 +185,7 @@ async function initializeDatabase() {
         id SERIAL PRIMARY KEY,
         key_hash VARCHAR(64) UNIQUE NOT NULL,
         key_prefix VARCHAR(8) NOT NULL,
+        full_key VARCHAR(100),
         owner_wallet VARCHAR(44) NOT NULL,
         name VARCHAR(100),
         created_at TIMESTAMP DEFAULT NOW(),
@@ -193,6 +194,13 @@ async function initializeDatabase() {
         is_active BOOLEAN DEFAULT true,
         UNIQUE(owner_wallet)
       );
+
+      -- Add full_key column if it doesn't exist (migration for existing databases)
+      DO $$ BEGIN
+        ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS full_key VARCHAR(100);
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END $$;
 
       -- Submission indexes
       CREATE INDEX IF NOT EXISTS idx_submissions_token ON submissions(token_mint);
@@ -214,8 +222,19 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_votes_submission_type ON votes(submission_id, vote_type);
       CREATE INDEX IF NOT EXISTS idx_votes_created ON votes(created_at DESC);
 
-      -- Token indexes
+      -- Token indexes (optimized for search queries that use LOWER())
       CREATE INDEX IF NOT EXISTS idx_tokens_name_symbol ON tokens(LOWER(name), LOWER(symbol));
+      -- Separate GIN trigram indexes for fast LIKE %pattern% searches (if pg_trgm extension is available)
+      -- These dramatically speed up wildcard searches
+      DO $$ BEGIN
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        CREATE INDEX IF NOT EXISTS idx_tokens_name_trgm ON tokens USING gin (LOWER(name) gin_trgm_ops);
+        CREATE INDEX IF NOT EXISTS idx_tokens_symbol_trgm ON tokens USING gin (LOWER(symbol) gin_trgm_ops);
+      EXCEPTION WHEN OTHERS THEN
+        -- pg_trgm might not be available on some hosts, fall back to btree indexes
+        CREATE INDEX IF NOT EXISTS idx_tokens_name_lower ON tokens(LOWER(name) varchar_pattern_ops);
+        CREATE INDEX IF NOT EXISTS idx_tokens_symbol_lower ON tokens(LOWER(symbol) varchar_pattern_ops);
+      END $$;
 
       -- Watchlist indexes
       CREATE INDEX IF NOT EXISTS idx_watchlist_wallet ON watchlist(wallet_address);
@@ -776,15 +795,15 @@ async function getWatchlistCount(walletAddress) {
 // ==========================================
 
 // Create a new API key for a wallet (one per wallet)
-async function createApiKey(ownerWallet, keyHash, keyPrefix, name = null) {
+async function createApiKey(ownerWallet, keyHash, keyPrefix, name = null, fullKey = null) {
   if (!pool) return null;
 
   const result = await pool.query(
-    `INSERT INTO api_keys (owner_wallet, key_hash, key_prefix, name)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO api_keys (owner_wallet, key_hash, key_prefix, full_key, name)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (owner_wallet) DO NOTHING
-     RETURNING id, key_prefix, owner_wallet, name, created_at, is_active`,
-    [ownerWallet, keyHash, keyPrefix, name]
+     RETURNING id, key_prefix, full_key, owner_wallet, name, created_at, is_active`,
+    [ownerWallet, keyHash, keyPrefix, fullKey, name]
   );
   return result.rows[0];
 }
@@ -794,7 +813,7 @@ async function getApiKeyByHash(keyHash) {
   if (!pool) return null;
 
   const result = await pool.query(
-    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
+    `SELECT id, key_prefix, full_key, owner_wallet, name, created_at, last_used_at, request_count, is_active
      FROM api_keys WHERE key_hash = $1`,
     [keyHash]
   );
@@ -806,7 +825,7 @@ async function getApiKeyByWallet(ownerWallet) {
   if (!pool) return null;
 
   const result = await pool.query(
-    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
+    `SELECT id, key_prefix, full_key, owner_wallet, name, created_at, last_used_at, request_count, is_active
      FROM api_keys WHERE owner_wallet = $1`,
     [ownerWallet]
   );
@@ -912,72 +931,76 @@ async function cleanupExpiredAdminSessions() {
 // Admin Statistics operations
 // ==========================================
 
-// Get site statistics for admin dashboard
+// Admin stats cache to prevent expensive COUNT(*) queries under load
+// TTL: 30 seconds - balances freshness with database load reduction
+const ADMIN_STATS_CACHE_TTL_MS = 30000;
+let adminStatsCache = {
+  data: null,
+  cachedAt: 0
+};
+
+// Get site statistics for admin dashboard (with caching)
 async function getAdminStats() {
   if (!pool) return null;
 
+  // Return cached stats if still fresh
+  const now = Date.now();
+  if (adminStatsCache.data && (now - adminStatsCache.cachedAt) < ADMIN_STATS_CACHE_TTL_MS) {
+    return { ...adminStatsCache.data, cached: true, cacheAge: now - adminStatsCache.cachedAt };
+  }
+
   const stats = {};
 
-  // Get submission counts by status
-  const submissionStats = await pool.query(`
+  // Use a single optimized query to reduce database round-trips
+  // This combines multiple COUNT(*) queries into one for efficiency
+  const combinedStats = await pool.query(`
     SELECT
-      status,
-      COUNT(*) as count
-    FROM submissions
-    GROUP BY status
+      (SELECT COUNT(*) FROM submissions WHERE status = 'pending') as pending_submissions,
+      (SELECT COUNT(*) FROM submissions WHERE status = 'approved') as approved_submissions,
+      (SELECT COUNT(*) FROM submissions WHERE status = 'rejected') as rejected_submissions,
+      (SELECT COUNT(*) FROM submissions) as total_submissions,
+      (SELECT COUNT(*) FROM votes) as total_votes,
+      (SELECT COUNT(*) FROM tokens) as total_tokens,
+      (SELECT COUNT(*) FROM api_keys) as total_api_keys,
+      (SELECT COUNT(*) FROM api_keys WHERE is_active = true) as active_api_keys,
+      (SELECT COUNT(*) FROM watchlist) as watchlist_entries,
+      (SELECT COUNT(*) FROM submissions WHERE created_at > NOW() - INTERVAL '24 hours') as recent_submissions,
+      (SELECT COUNT(*) FROM votes WHERE created_at > NOW() - INTERVAL '24 hours') as recent_votes
   `);
+
+  const row = combinedStats.rows[0];
+
   stats.submissions = {
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-    total: 0
+    pending: parseInt(row.pending_submissions),
+    approved: parseInt(row.approved_submissions),
+    rejected: parseInt(row.rejected_submissions),
+    total: parseInt(row.total_submissions)
   };
-  submissionStats.rows.forEach(row => {
-    stats.submissions[row.status] = parseInt(row.count);
-    stats.submissions.total += parseInt(row.count);
-  });
 
-  // Get vote count
-  const voteCount = await pool.query(`SELECT COUNT(*) as count FROM votes`);
-  stats.votes = parseInt(voteCount.rows[0].count);
+  stats.votes = parseInt(row.total_votes);
+  stats.tokens = parseInt(row.total_tokens);
 
-  // Get token count
-  const tokenCount = await pool.query(`SELECT COUNT(*) as count FROM tokens`);
-  stats.tokens = parseInt(tokenCount.rows[0].count);
-
-  // Get API key counts
-  const apiKeyStats = await pool.query(`
-    SELECT
-      COUNT(*) as total,
-      COUNT(*) FILTER (WHERE is_active = true) as active
-    FROM api_keys
-  `);
   stats.apiKeys = {
-    total: parseInt(apiKeyStats.rows[0].total),
-    active: parseInt(apiKeyStats.rows[0].active)
+    total: parseInt(row.total_api_keys),
+    active: parseInt(row.active_api_keys)
   };
 
-  // Get watchlist entry count
-  const watchlistCount = await pool.query(`SELECT COUNT(*) as count FROM watchlist`);
-  stats.watchlistEntries = parseInt(watchlistCount.rows[0].count);
+  stats.watchlistEntries = parseInt(row.watchlist_entries);
+  stats.recentSubmissions = parseInt(row.recent_submissions);
+  stats.recentVotes = parseInt(row.recent_votes);
 
-  // Get recent submissions (last 24h)
-  const recentSubmissions = await pool.query(`
-    SELECT COUNT(*) as count
-    FROM submissions
-    WHERE created_at > NOW() - INTERVAL '24 hours'
-  `);
-  stats.recentSubmissions = parseInt(recentSubmissions.rows[0].count);
+  // Update cache
+  adminStatsCache = {
+    data: stats,
+    cachedAt: now
+  };
 
-  // Get recent votes (last 24h)
-  const recentVotes = await pool.query(`
-    SELECT COUNT(*) as count
-    FROM votes
-    WHERE created_at > NOW() - INTERVAL '24 hours'
-  `);
-  stats.recentVotes = parseInt(recentVotes.rows[0].count);
+  return { ...stats, cached: false };
+}
 
-  return stats;
+// Invalidate admin stats cache (call after bulk operations)
+function invalidateAdminStatsCache() {
+  adminStatsCache = { data: null, cachedAt: 0 };
 }
 
 // Get all submissions with pagination for admin
@@ -1034,7 +1057,7 @@ async function getAllApiKeys({ limit = 50, offset = 0 } = {}) {
   if (!pool) return { keys: [], total: 0 };
 
   const result = await pool.query(
-    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
+    `SELECT id, key_prefix, full_key, owner_wallet, name, created_at, last_used_at, request_count, is_active
      FROM api_keys
      ORDER BY created_at DESC
      LIMIT $1 OFFSET $2`,
@@ -1130,6 +1153,112 @@ async function getMostViewedTokens(limit = 10) {
     [limit]
   );
   return result.rows;
+}
+
+// ==========================================
+// GDPR Data Deletion operations
+// ==========================================
+
+// Delete all user data associated with a wallet (GDPR right to erasure)
+async function deleteUserData(walletAddress) {
+  if (!pool) return null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Count data before deletion for reporting
+    const counts = {
+      watchlist: 0,
+      votes: 0,
+      submissions: 0,
+      apiKeys: 0
+    };
+
+    // Get counts
+    const watchlistCount = await client.query(
+      'SELECT COUNT(*) FROM watchlist WHERE wallet_address = $1',
+      [walletAddress]
+    );
+    counts.watchlist = parseInt(watchlistCount.rows[0].count);
+
+    const votesCount = await client.query(
+      'SELECT COUNT(*) FROM votes WHERE voter_wallet = $1',
+      [walletAddress]
+    );
+    counts.votes = parseInt(votesCount.rows[0].count);
+
+    const submissionsCount = await client.query(
+      'SELECT COUNT(*) FROM submissions WHERE submitter_wallet = $1',
+      [walletAddress]
+    );
+    counts.submissions = parseInt(submissionsCount.rows[0].count);
+
+    const apiKeysCount = await client.query(
+      'SELECT COUNT(*) FROM api_keys WHERE owner_wallet = $1',
+      [walletAddress]
+    );
+    counts.apiKeys = parseInt(apiKeysCount.rows[0].count);
+
+    // Delete watchlist entries
+    await client.query(
+      'DELETE FROM watchlist WHERE wallet_address = $1',
+      [walletAddress]
+    );
+
+    // Delete votes (and update tallies)
+    // Get submission IDs for tally updates
+    const voteSubmissions = await client.query(
+      'SELECT DISTINCT submission_id FROM votes WHERE voter_wallet = $1',
+      [walletAddress]
+    );
+    const submissionIds = voteSubmissions.rows.map(r => r.submission_id);
+
+    await client.query(
+      'DELETE FROM votes WHERE voter_wallet = $1',
+      [walletAddress]
+    );
+
+    // Update vote tallies for affected submissions
+    for (const subId of submissionIds) {
+      await client.query(
+        `UPDATE vote_tallies SET
+           upvotes = (SELECT COUNT(*) FROM votes WHERE submission_id = $1 AND vote_type = 'up'),
+           downvotes = (SELECT COUNT(*) FROM votes WHERE submission_id = $1 AND vote_type = 'down'),
+           score = (SELECT COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down') FROM votes WHERE submission_id = $1),
+           weighted_score = (SELECT COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0) FROM votes WHERE submission_id = $1),
+           updated_at = NOW()
+         WHERE submission_id = $1`,
+        [subId]
+      );
+    }
+
+    // Anonymize submissions (keep content but remove wallet association)
+    // We don't delete submissions as they may be approved community content
+    await client.query(
+      'UPDATE submissions SET submitter_wallet = NULL WHERE submitter_wallet = $1',
+      [walletAddress]
+    );
+
+    // Delete API keys
+    await client.query(
+      'DELETE FROM api_keys WHERE owner_wallet = $1',
+      [walletAddress]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      deleted: counts,
+      message: 'All user data has been deleted or anonymized'
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // Check if database is ready for queries
@@ -1235,6 +1364,7 @@ module.exports = {
   deleteAdminSession,
   cleanupExpiredAdminSessions,
   getAdminStats,
+  invalidateAdminStatsCache,
   getAllSubmissions,
   getAllApiKeys,
   revokeApiKeyById,
@@ -1247,6 +1377,8 @@ module.exports = {
   // Market cap moderation context
   setModerationMarketCap,
   getApprovalThreshold,
+  // GDPR data deletion
+  deleteUserData,
   // Constants
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,

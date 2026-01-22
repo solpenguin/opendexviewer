@@ -4,6 +4,9 @@ const db = require('../services/database');
 const solanaService = require('../services/solana');
 const jupiterService = require('../services/jupiter');
 const { cache } = require('../services/cache');
+const { getAllStatuses: getCircuitBreakerStatuses } = require('../services/circuitBreaker');
+const { getQueueMetrics } = require('../services/rateLimiter');
+const jobQueue = require('../services/jobQueue');
 
 // GET /health - Basic health check
 router.get('/', async (req, res) => {
@@ -83,6 +86,94 @@ router.get('/detailed', async (req, res) => {
     }
   } catch (error) {
     health.checks.jupiter_api = {
+      status: 'error',
+      error: error.message
+    };
+  }
+
+  // Circuit breaker status - shows which external APIs are being protected
+  try {
+    const circuitBreakers = getCircuitBreakerStatuses();
+    health.checks.circuit_breakers = {
+      status: 'ok'
+    };
+
+    // Check if any breakers are open (indicating external API issues)
+    let hasOpenBreaker = false;
+    for (const [name, status] of Object.entries(circuitBreakers)) {
+      health.checks.circuit_breakers[name] = status;
+      if (status.state === 'OPEN') {
+        hasOpenBreaker = true;
+      }
+    }
+
+    if (hasOpenBreaker) {
+      health.checks.circuit_breakers.status = 'degraded';
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.checks.circuit_breakers = {
+      status: 'error',
+      error: error.message
+    };
+  }
+
+  // Queue metrics - shows request backpressure status
+  try {
+    const queueMetrics = getQueueMetrics();
+    health.checks.request_queues = {
+      status: queueMetrics.underPressure ? 'degraded' : 'ok',
+      totalQueued: queueMetrics.totalQueued,
+      totalRejections: queueMetrics.totalRejections,
+      underPressure: queueMetrics.underPressure,
+      queues: queueMetrics.queues
+    };
+
+    if (queueMetrics.underPressure) {
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.checks.request_queues = {
+      status: 'error',
+      error: error.message
+    };
+  }
+
+  // Memory usage
+  const memUsage = process.memoryUsage();
+  health.checks.memory = {
+    status: 'ok',
+    heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+    heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+    rssMB: Math.round(memUsage.rss / 1024 / 1024),
+    externalMB: Math.round(memUsage.external / 1024 / 1024)
+  };
+
+  // Warn if heap usage is high (>85% of total)
+  if (memUsage.heapUsed / memUsage.heapTotal > 0.85) {
+    health.checks.memory.status = 'warning';
+    health.checks.memory.warning = 'High heap usage';
+  }
+
+  // Job queue / worker status
+  try {
+    const jobQueueStats = await jobQueue.getQueueStats();
+    const workerActive = await jobQueue.isWorkerActive();
+
+    health.checks.job_queue = {
+      status: jobQueueStats.initialized ? (jobQueueStats.healthy ? 'ok' : 'degraded') : 'disabled',
+      initialized: jobQueueStats.initialized,
+      workerActive,
+      ...jobQueueStats.queues && { queues: jobQueueStats.queues },
+      viewBufferSize: jobQueueStats.viewBufferSize || 0
+    };
+
+    // Warn if worker is not processing jobs (queues building up)
+    if (jobQueueStats.initialized && !workerActive) {
+      health.checks.job_queue.warning = 'No active worker processing jobs';
+    }
+  } catch (error) {
+    health.checks.job_queue = {
       status: 'error',
       error: error.message
     };

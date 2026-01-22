@@ -13,8 +13,39 @@ const requestQueues = new Map();
 const isProcessing = new Map();
 
 // Queue size limits to prevent unbounded growth under high load
-const MAX_QUEUE_SIZE = parseInt(process.env.API_QUEUE_MAX_SIZE) || 500;
-const QUEUE_TIMEOUT_MS = parseInt(process.env.API_QUEUE_TIMEOUT_MS) || 30000;
+// REDUCED from 500/2000 to prevent cascading failures at high concurrency
+const MAX_QUEUE_SIZE = parseInt(process.env.API_QUEUE_MAX_SIZE) || 200;
+const QUEUE_TIMEOUT_MS = parseInt(process.env.API_QUEUE_TIMEOUT_MS) || 15000;
+
+// Track queue metrics for monitoring and backpressure
+const queueMetrics = {
+  rejections: new Map(), // API name -> rejection count
+  lastRejectionTime: new Map(), // API name -> timestamp
+  totalRejections: 0,
+
+  recordRejection(apiName) {
+    const count = (this.rejections.get(apiName) || 0) + 1;
+    this.rejections.set(apiName, count);
+    this.lastRejectionTime.set(apiName, Date.now());
+    this.totalRejections++;
+  },
+
+  getMetrics(apiName) {
+    return {
+      rejections: this.rejections.get(apiName) || 0,
+      lastRejection: this.lastRejectionTime.get(apiName) || null,
+      totalRejections: this.totalRejections
+    };
+  },
+
+  // Check if API is under backpressure (rejecting requests)
+  isUnderPressure(apiName) {
+    const lastRejection = this.lastRejectionTime.get(apiName);
+    if (!lastRejection) return false;
+    // Under pressure if rejected in last 30 seconds
+    return (Date.now() - lastRejection) < 30000;
+  }
+};
 
 // Rate limit configurations per API (requests per second)
 const RATE_LIMITS = {
@@ -32,8 +63,8 @@ const RATE_LIMITS = {
     burstLimit: 2,       // Allow small bursts for parallel requests
     burstWindow: 4000,   // 4 second window
     useQueue: true,      // Force queue-based processing
-    maxQueueSize: 2000,  // Increased queue size for high concurrency (was 200)
-    queueTimeout: 60000  // 60s timeout for queued requests (was 45s)
+    maxQueueSize: 500,   // REDUCED from 2000 to prevent memory issues under high load
+    queueTimeout: 30000  // REDUCED from 60s to fail faster and provide backpressure
   },
   jupiter: {
     minInterval: 100,    // Minimum 100ms between requests (10 req/sec max)
@@ -176,8 +207,11 @@ async function queueRequest(apiName, requestFn) {
 
     // Reject if queue is full to prevent unbounded growth
     if (queue.length >= maxQueueSize) {
-      console.warn(`[RateLimiter] ${apiName} queue full (${queue.length}/${maxQueueSize}), rejecting request`);
-      reject(new Error(`API queue full - server overloaded. Try again later.`));
+      queueMetrics.recordRejection(apiName);
+      console.warn(`[RateLimiter] ${apiName} queue full (${queue.length}/${maxQueueSize}), rejecting request (total rejections: ${queueMetrics.totalRejections})`);
+      const error = new Error(`API queue full - server overloaded. Try again later.`);
+      error.retryAfter = 30; // Suggest retry after 30 seconds
+      reject(error);
       return;
     }
 
@@ -302,12 +336,62 @@ function getStatus(apiName) {
   };
 }
 
+/**
+ * Get all queue statuses for monitoring
+ * @returns {Object} Status of all API queues
+ */
+function getAllQueueStatuses() {
+  const statuses = {};
+  for (const apiName of Object.keys(RATE_LIMITS)) {
+    statuses[apiName] = {
+      ...getStatus(apiName),
+      ...queueMetrics.getMetrics(apiName),
+      underPressure: queueMetrics.isUnderPressure(apiName)
+    };
+  }
+  return statuses;
+}
+
+/**
+ * Get queue metrics for health monitoring
+ * @returns {Object} Queue metrics summary
+ */
+function getQueueMetrics() {
+  const queues = {};
+  let totalQueued = 0;
+  let underPressure = false;
+
+  for (const apiName of Object.keys(RATE_LIMITS)) {
+    const queueLength = (requestQueues.get(apiName) || []).length;
+    const isUnderPressure = queueMetrics.isUnderPressure(apiName);
+
+    queues[apiName] = {
+      queueLength,
+      rejections: queueMetrics.rejections.get(apiName) || 0,
+      underPressure: isUnderPressure
+    };
+
+    totalQueued += queueLength;
+    if (isUnderPressure) underPressure = true;
+  }
+
+  return {
+    queues,
+    totalQueued,
+    totalRejections: queueMetrics.totalRejections,
+    underPressure
+  };
+}
+
 module.exports = {
   rateLimitedRequest,
   queueRequest,
   batchRequests,
   getRequiredDelay,
   getStatus,
+  getAllQueueStatuses,
+  getQueueMetrics,
+  queueMetrics,
   sleep,
   RATE_LIMITS
 };

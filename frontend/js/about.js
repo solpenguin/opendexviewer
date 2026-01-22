@@ -1,6 +1,6 @@
 // About Page - API Key Management
 const apiKeyManager = {
-  currentKey: null, // Temporarily stores the full key after creation
+  currentKey: null, // Stores the current API key
 
   init() {
     this.bindEvents();
@@ -26,10 +26,16 @@ const apiKeyManager = {
       revokeBtn.addEventListener('click', () => this.revokeKey());
     }
 
-    // Copy API key button
+    // Copy API key button (in info card)
     const copyBtn = document.getElementById('copy-api-key-btn');
     if (copyBtn) {
       copyBtn.addEventListener('click', () => this.copyKey());
+    }
+
+    // Copy API key button (in created card)
+    const copyCreatedBtn = document.getElementById('copy-api-key-created-btn');
+    if (copyCreatedBtn) {
+      copyCreatedBtn.addEventListener('click', () => this.copyKey());
     }
 
     // Done button (after key creation)
@@ -74,13 +80,19 @@ const apiKeyManager = {
         if (infoCard) {
           infoCard.style.display = 'block';
 
-          // Update the info
-          const prefixEl = document.getElementById('api-key-prefix');
+          // Store the key for copy functionality
+          this.currentKey = response.data.apiKey;
+
+          // Update the display with full API key
+          const keyDisplayEl = document.getElementById('api-key-display');
           const createdEl = document.getElementById('api-key-created-date');
           const lastUsedEl = document.getElementById('api-key-last-used');
           const requestsEl = document.getElementById('api-key-requests');
 
-          if (prefixEl) prefixEl.textContent = response.data.keyPrefix + '...';
+          if (keyDisplayEl) {
+            // Show full key or fallback to prefix if full key not available (legacy keys)
+            keyDisplayEl.textContent = response.data.apiKey || (response.data.keyPrefix + '...');
+          }
           if (createdEl) createdEl.textContent = new Date(response.data.createdAt).toLocaleDateString();
           if (lastUsedEl) {
             lastUsedEl.textContent = response.data.lastUsedAt
@@ -120,7 +132,7 @@ const apiKeyManager = {
       const response = await api.apiKeys.register(wallet.address, name);
 
       if (response.success && response.data.apiKey) {
-        // Store the key temporarily
+        // Store the key
         this.currentKey = response.data.apiKey;
 
         // Show the created card with the full key
@@ -169,10 +181,7 @@ const apiKeyManager = {
   },
 
   finishKeyCreation() {
-    // Clear the temporary key
-    this.currentKey = null;
-
-    // Refresh the UI to show the info card
+    // Refresh the UI to show the info card (key is preserved)
     this.updateUI();
   },
 
@@ -181,11 +190,11 @@ const apiKeyManager = {
       return;
     }
 
-    // For revocation, we need the user to provide their API key
-    // Since we don't store it, we'll prompt them
-    const apiKey = prompt('Enter your API key to confirm revocation:');
+    // Use the stored key for revocation
+    const apiKey = this.currentKey;
 
     if (!apiKey) {
+      toast.error('Unable to revoke - API key not found');
       return;
     }
 
@@ -200,6 +209,7 @@ const apiKeyManager = {
       const response = await api.apiKeys.revoke(apiKey);
 
       if (response.success) {
+        this.currentKey = null;
         toast.success('API key revoked successfully');
         this.updateUI();
       } else {

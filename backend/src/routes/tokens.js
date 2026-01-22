@@ -7,6 +7,7 @@ const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
 const { validateMint, validatePagination, validateSearch, asyncHandler } = require('../middleware/validation');
 const { searchLimiter } = require('../middleware/rateLimit');
+const jobQueue = require('../services/jobQueue');
 
 // GET /api/tokens - List tokens (trending, new, gainers, losers)
 // Optimized: Uses Helius batch API for metadata enrichment instead of extra GeckoTerminal calls
@@ -19,7 +20,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     filter = 'trending'
   } = req.query;
 
-  console.log(`[API /tokens] Request: filter=${filter}, sort=${sort}, order=${order}, limit=${limit}, offset=${offset}`);
+  // Privacy: Don't log request parameters
 
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
@@ -27,7 +28,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   // Note: We refresh view counts even for cached responses since they're cheap to fetch
   const cachedMeta = await cache.getWithMeta(cacheKey);
   if (cachedMeta && filter !== 'most_viewed') {
-    console.log(`[API /tokens] Returning ${cachedMeta.value?.length || 0} cached tokens (age: ${Math.round(cachedMeta.age / 1000)}s)`);
+    // Privacy: Don't log cache details
 
     // Refresh view counts from database (cheap query, keeps views up-to-date)
     let tokens = cachedMeta.value;
@@ -49,7 +50,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   try {
     // Handle most_viewed filter separately - uses our local database
     if (filter === 'most_viewed') {
-      console.log('[API /tokens] Fetching most viewed tokens from database');
+      // Privacy: Don't log database queries
       const mostViewed = await db.getMostViewedTokens(parseInt(limit));
 
       if (mostViewed && mostViewed.length > 0) {
@@ -61,7 +62,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         if (solanaService.isHeliusConfigured()) {
           try {
             heliusMetadata = await solanaService.getTokenMetadataBatch(mints);
-            console.log(`[API /tokens] Helius batch returned ${Object.keys(heliusMetadata).length} tokens`);
+            // Helius batch completed
           } catch (err) {
             console.error('[API /tokens] Helius batch failed:', err.message);
           }
@@ -162,7 +163,6 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
             }
 
             // Final fallback: return minimal data with truncated address as name
-            console.warn(`[API /tokens] No metadata found for most_viewed token: ${mint}`);
             return {
               mintAddress: mint,
               address: mint,
@@ -177,7 +177,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
               views: viewCount
             };
           } catch (err) {
-            console.error(`[API /tokens] Failed to fetch token ${mint}:`, err.message);
+            // Privacy: Don't log token addresses
             const viewInfo = mostViewed.find(v => v.token_mint === mint);
             return {
               mintAddress: mint,
@@ -214,7 +214,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     // GeckoTerminal returns ~20 tokens per page
     const geckoPageSize = 20;
     const geckoPage = Math.floor(parseInt(offset) / geckoPageSize) + 1;
-    console.log(`[API /tokens] Using GeckoTerminal API (page: ${geckoPage}, Helius enrichment: ${useHeliusEnrichment})`);
+    // Privacy: Don't log API usage details
 
     try {
       switch (filter) {
@@ -236,12 +236,12 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       }
     } catch (err) {
       geckoError = err;
-      console.error('[API /tokens] GeckoTerminal failed:', err.message);
+      // Privacy: Don't log error details
     }
 
     // If GeckoTerminal returns empty or failed, fallback to Jupiter
     if (!tokens || tokens.length === 0) {
-      console.log('[API /tokens] GeckoTerminal returned empty/failed, falling back to Jupiter');
+      // Privacy: Don't log fallback details
       try {
         tokens = await jupiterService.getTrendingTokens({
           sort,
@@ -250,7 +250,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
           offset: parseInt(offset)
         });
       } catch (jupiterError) {
-        console.error('[API /tokens] Jupiter fallback also failed:', jupiterError.message);
+        // Privacy: Don't log error details
         // If both failed and we had a GeckoTerminal error, throw that
         if (geckoError) throw geckoError;
         throw jupiterError;
@@ -261,7 +261,6 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     // Helius batch: 1 request for up to 1000 tokens
     // GeckoTerminal multi: 1 request for up to 30 tokens
     if (useHeliusEnrichment && tokens && tokens.length > 0) {
-      console.log(`[API /tokens] Enriching ${tokens.length} tokens via Helius batch API`);
       const addresses = tokens.map(t => t.address || t.mintAddress);
       const heliusMetadata = await solanaService.getTokenMetadataBatch(addresses);
 
@@ -278,10 +277,9 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
           token.logoURI = meta.logoUri || token.logoURI;
         }
       }
-      console.log(`[API /tokens] Helius enriched ${Object.keys(heliusMetadata).length} tokens`);
     }
 
-    console.log(`[API /tokens] Received ${tokens?.length || 0} tokens from service`);
+    // Privacy: Don't log token counts or data
 
     // Enrich tokens with view counts from database
     if (tokens && tokens.length > 0) {
@@ -292,12 +290,6 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         const address = token.address || token.mintAddress;
         token.views = viewCounts[address] || 0;
       }
-      console.log(`[API /tokens] Enriched ${Object.keys(viewCounts).length} tokens with view counts`);
-    }
-
-    // Log sample token for debugging
-    if (tokens && tokens.length > 0) {
-      console.log('[API /tokens] Sample token:', JSON.stringify(tokens[0], null, 2));
     }
 
     // Cache for 5 minutes (rolling cache for list views)
@@ -305,9 +297,8 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
     res.json(tokens);
   } catch (error) {
-    console.error('[API /tokens] Error fetching tokens:', error.message);
-    console.error('[API /tokens] Stack:', error.stack);
-    res.status(500).json({ error: 'Failed to fetch tokens', details: error.message });
+    // Privacy: Don't log error details or stack traces
+    res.status(500).json({ error: 'Failed to fetch tokens' });
   }
 }));
 
@@ -346,7 +337,7 @@ router.post('/batch', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'No valid mint addresses provided' });
   }
 
-  console.log(`[API /tokens/batch] Fetching ${validMints.length} tokens`);
+  // Privacy: Don't log batch request details
 
   try {
     // Check cache for each mint
@@ -363,7 +354,7 @@ router.post('/batch', asyncHandler(async (req, res) => {
       }
     }
 
-    console.log(`[API /tokens/batch] Cache: ${results.length} hits, ${uncachedMints.length} misses`);
+    // Privacy: Don't log cache statistics
 
     // Batch fetch uncached tokens
     if (uncachedMints.length > 0) {
@@ -372,9 +363,8 @@ router.post('/batch', asyncHandler(async (req, res) => {
       if (solanaService.isHeliusConfigured()) {
         try {
           heliusData = await solanaService.getTokenMetadataBatch(uncachedMints);
-          console.log(`[API /tokens/batch] Helius returned ${Object.keys(heliusData).length} tokens`);
         } catch (err) {
-          console.error('[API /tokens/batch] Helius batch error:', err.message);
+          // Privacy: Don't log error details
         }
       }
 
@@ -402,9 +392,8 @@ router.post('/batch', asyncHandler(async (req, res) => {
       if (stillNeeded.length > 0 && stillNeeded.length <= 30) {
         try {
           geckoData = await geckoService.getMultiTokenInfo(stillNeeded);
-          console.log(`[API /tokens/batch] GeckoTerminal returned ${Object.keys(geckoData).length} tokens`);
         } catch (err) {
-          console.error('[API /tokens/batch] GeckoTerminal batch error:', err.message);
+          // Privacy: Don't log error details
         }
       }
 
@@ -485,11 +474,10 @@ router.post('/batch', asyncHandler(async (req, res) => {
       return null;
     }).filter(Boolean);
 
-    console.log(`[API /tokens/batch] Returning ${response.length} tokens`);
     return res.json(response);
 
   } catch (error) {
-    console.error('[API /tokens/batch] Error:', error.message);
+    // Privacy: Don't log error details
     return res.status(500).json({ error: 'Failed to fetch token batch' });
   }
 }));
@@ -548,10 +536,10 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
               symbol: externalInfo.symbol,
               decimals: externalInfo.decimals,
               logoUri: externalInfo.logoUri
-            }).catch(err => console.error('Failed to cache token:', err.message));
+            }).catch(() => { /* Privacy: Don't log error details */ });
           }
         } catch (err) {
-          console.error('External token lookup failed:', err.message);
+          // Privacy: Don't log error details
         }
       }
 
@@ -575,7 +563,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
           }
         }
       } catch (err) {
-        console.error('Local search failed:', err.message);
+        // Privacy: Don't log error details
       }
     }
 
@@ -610,7 +598,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
           }
         }
       } catch (err) {
-        console.error('External search failed:', err.message);
+        // Privacy: Don't log error details
       }
     }
 
@@ -619,7 +607,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
 
     res.json(results);
   } catch (error) {
-    console.error('Error searching tokens:', error.message);
+    // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to search tokens' });
   }
 }));
@@ -631,7 +619,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = keys.tokenInfo(mint);
 
-  console.log(`[API /tokens/:mint] Fetching token: ${mint}`);
+  // Privacy: Don't log token addresses
 
   try {
     // Use getOrSetWithFreshness for stampede prevention
@@ -645,14 +633,10 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       // Fetch data in parallel
       // Strategy: Use Helius for metadata (name, symbol, decimals, supply, basic price)
       // Use GeckoTerminal only for market data Helius can't provide (volume, price change, liquidity)
-      console.log('[API /tokens/:mint] Fetching from APIs...');
       const fetchPromises = [
         // Helius provides: metadata, supply, price (for top 10k tokens)
         solanaService.isHeliusConfigured()
-          ? solanaService.getTokenMetadata(mint).catch(err => {
-              console.error('[API /tokens/:mint] Helius metadata failed:', err.message);
-              return null;
-            })
+          ? solanaService.getTokenMetadata(mint).catch(() => null)
           : Promise.resolve(null),
         // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
         geckoService.getTokenOverview(mint),
@@ -664,10 +648,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       if (holders === undefined) {
         fetchPromises.push(
           // Try Jupiter first (has holderCount in search response)
-          jupiterService.getTokenHolderCount(mint).catch(err => {
-            console.error('[API /tokens/:mint] Jupiter holder count failed:', err.message);
-            return null;
-          })
+          jupiterService.getTokenHolderCount(mint).catch(() => null)
         );
       }
 
@@ -679,16 +660,11 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
 
       // If Jupiter didn't return a valid holder count (or returned a suspicious value), try Helius
       if ((finalHolders === null || finalHolders === undefined || finalHolders <= 1) && solanaService.isHeliusConfigured()) {
-        console.log('[API /tokens/:mint] Jupiter holder count unavailable or suspicious, trying Helius fallback');
-        const heliusHolders = await solanaService.getTokenHolderCount(mint).catch(err => {
-          console.error('[API /tokens/:mint] Helius holder count failed:', err.message);
-          return null;
-        });
+        const heliusHolders = await solanaService.getTokenHolderCount(mint).catch(() => null);
 
         // Use Helius count if it's better than Jupiter's
         if (heliusHolders !== null && heliusHolders > (finalHolders || 0)) {
           finalHolders = heliusHolders;
-          console.log(`[API /tokens/:mint] Using Helius holder count: ${heliusHolders}`);
         }
       }
 
@@ -698,19 +674,9 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         holders = finalHolders;
         const holderTTL = finalHolders <= 1 ? TTL.HOUR : TTL.DAY;
         await cache.set(holderCacheKey, holders, holderTTL);
-        console.log(`[API /tokens/:mint] Cached holder count: ${holders} for ${holderTTL === TTL.HOUR ? '1 hour' : '24 hours'}`);
       }
 
-      console.log('[API /tokens/:mint] heliusMetadata:', heliusMetadata ? {
-        name: heliusMetadata.name,
-        symbol: heliusMetadata.symbol,
-        hasPriceData: heliusMetadata.hasPriceData
-      } : null);
-      console.log('[API /tokens/:mint] geckoOverview:', geckoOverview ? {
-        name: geckoOverview.name,
-        price: geckoOverview.price,
-        volume24h: geckoOverview.volume24h
-      } : null);
+      // Privacy: Don't log API response details
 
       // Data priority:
       // - Metadata (name, symbol, decimals): Helius > GeckoTerminal > Jupiter fallback
@@ -765,14 +731,6 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         }
       };
 
-      console.log('[API /tokens/:mint] Final result:', {
-        name: tokenResult.name,
-        symbol: tokenResult.symbol,
-        price: tokenResult.price,
-        volume24h: tokenResult.volume24h,
-        holders: tokenResult.holders
-      });
-
       // Also save to database for future reference
       const tokenName = helius.name || gecko.name;
       const tokenSymbol = helius.symbol || gecko.symbol;
@@ -783,7 +741,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
           symbol: tokenSymbol,
           decimals: helius.decimals || gecko.decimals || 9,
           logoUri: helius.logoUri || gecko.logoUri
-        }).catch(err => console.error('Failed to cache token:', err.message));
+        }).catch(() => { /* Privacy: Don't log error details */ });
       }
 
       return tokenResult;
@@ -791,8 +749,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[API /tokens/:mint] Error fetching token:', error.message);
-    console.error('[API /tokens/:mint] Stack:', error.stack);
+    // Privacy: Don't log error details or stack traces
     res.status(500).json({ error: 'Failed to fetch token details' });
   }
 }));
@@ -820,7 +777,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
 
     res.json(priceData);
   } catch (error) {
-    console.error('Error fetching price:', error.message);
+    // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch price data' });
   }
 }));
@@ -867,7 +824,7 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
 
     res.json(chartData);
   } catch (error) {
-    console.error('Error fetching chart data:', error.message);
+    // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch chart data' });
   }
 }));
@@ -889,7 +846,7 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
 
     res.json(ohlcvData);
   } catch (error) {
-    console.error('Error fetching OHLCV:', error.message);
+    // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch OHLCV data' });
   }
 }));
@@ -911,7 +868,7 @@ router.get('/:mint/pools', validateMint, asyncHandler(async (req, res) => {
 
     res.json(pools);
   } catch (error) {
-    console.error('Error fetching pools:', error.message);
+    // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch pools data' });
   }
 }));
@@ -929,23 +886,34 @@ router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => 
     const submissions = await db.getSubmissionsByToken(mint, options);
     res.json(submissions);
   } catch (error) {
-    console.error('Error fetching submissions:', error.message);
+    // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch submissions' });
   }
 }));
 
 // POST /api/tokens/:mint/view - Record a page view for a token
 // Called when the token detail page loads
+// Uses job queue to batch view updates for better performance
 router.post('/:mint/view', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
 
   try {
-    const viewCount = await db.incrementTokenViews(mint);
-    res.json({ views: viewCount });
+    // Use job queue for batched view counting (non-blocking)
+    // Falls back to direct DB write if job queue not available
+    const bufferedCount = await jobQueue.incrementViewCount(mint);
+
+    // Return current known count (may be slightly stale but fast)
+    const dbCount = await db.getTokenViews(mint);
+    res.json({ views: dbCount + (bufferedCount || 0) });
   } catch (error) {
-    console.error('Error recording view:', error.message);
-    // Don't fail the request - view tracking is non-critical
-    res.json({ views: 0 });
+    // Fallback: Direct database update if job queue fails
+    try {
+      const viewCount = await db.incrementTokenViews(mint);
+      res.json({ views: viewCount });
+    } catch (fallbackError) {
+      // Privacy: Don't log error details - view tracking is non-critical
+      res.json({ views: 0 });
+    }
   }
 }));
 
@@ -957,7 +925,7 @@ router.get('/:mint/views', validateMint, asyncHandler(async (req, res) => {
     const viewCount = await db.getTokenViews(mint);
     res.json({ views: viewCount });
   } catch (error) {
-    console.error('Error fetching views:', error.message);
+    // Privacy: Don't log error details
     res.json({ views: 0 });
   }
 }));
@@ -1040,7 +1008,7 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
 
     res.json(result);
   } catch (error) {
-    console.error('Error checking holder balance:', error.message);
+    // Privacy: Don't log error details
     // Return a valid response even on error - just no balance data
     res.json({
       wallet,

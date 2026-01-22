@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
-const { asyncHandler, requireDatabase } = require('../middleware/validation');
-const { walletLimiter } = require('../middleware/rateLimit');
+const { asyncHandler, requireDatabase, validateWalletSignature } = require('../middleware/validation');
+const { walletLimiter, strictLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
 router.use(requireDatabase);
@@ -164,5 +164,50 @@ router.get('/:wallet/count', asyncHandler(async (req, res) => {
     count
   });
 }));
+
+// ==========================================
+// GDPR Data Deletion (Right to Erasure)
+// ==========================================
+
+/**
+ * DELETE /api/watchlist/user-data
+ * Delete all user data associated with a wallet (GDPR compliance)
+ * Requires wallet signature for security
+ *
+ * This endpoint deletes:
+ * - Watchlist entries
+ * - Votes (and updates affected tallies)
+ * - API keys
+ * - Anonymizes submissions (removes wallet association but keeps content)
+ */
+router.delete('/user-data',
+  strictLimiter,
+  validateWalletSignature,
+  asyncHandler(async (req, res) => {
+    const { wallet } = req.body;
+
+    if (!isValidWallet(wallet)) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+
+    try {
+      const result = await db.deleteUserData(wallet);
+
+      if (!result) {
+        return res.status(500).json({ error: 'Failed to delete user data' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Your data has been deleted or anonymized',
+        deleted: result.deleted,
+        note: 'Submissions have been anonymized (wallet association removed) but content preserved for community benefit'
+      });
+    } catch (error) {
+      // Privacy: Don't log error details
+      res.status(500).json({ error: 'Failed to delete user data' });
+    }
+  })
+);
 
 module.exports = router;

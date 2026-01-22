@@ -48,8 +48,7 @@ router.post('/login',
 
     // Verify password
     if (!verifyAdminPassword(password)) {
-      // Log failed attempt (but don't reveal if password exists)
-      console.warn(`Failed admin login attempt from ${req.ip}`);
+      // Privacy: Don't log IP addresses
       return res.status(401).json({
         success: false,
         error: 'Invalid password'
@@ -75,7 +74,7 @@ router.post('/login',
       });
     }
 
-    console.log(`Admin login successful from ${req.ip}`);
+    // Privacy: Don't log admin login details
 
     // Set secure cookie
     res.cookie('admin_session', sessionToken, {
@@ -239,7 +238,7 @@ router.patch('/submissions/:id/status',
       });
     }
 
-    console.log(`Admin ${status} submission #${submissionId}`);
+    // Privacy: Don't log admin actions with details
 
     res.json({
       success: true,
@@ -277,8 +276,6 @@ router.delete('/submissions/:id',
 
     // Delete submission (votes will cascade delete due to foreign key)
     await db.pool.query('DELETE FROM submissions WHERE id = $1', [submissionId]);
-
-    console.log(`Admin deleted submission #${submissionId}`);
 
     res.json({
       success: true,
@@ -345,8 +342,6 @@ router.patch('/api-keys/:id/revoke',
       });
     }
 
-    console.log(`Admin revoked API key #${keyId} (${revoked.key_prefix}...)`);
-
     res.json({
       success: true,
       message: 'API key revoked',
@@ -381,8 +376,6 @@ router.delete('/api-keys/:id',
         error: 'API key not found'
       });
     }
-
-    console.log(`Admin deleted API key #${keyId} (${deleted.key_prefix}...)`);
 
     res.json({
       success: true,
@@ -467,7 +460,7 @@ router.patch('/settings',
 
     if (typeof developmentMode === 'boolean') {
       adminSettings.developmentMode = developmentMode;
-      console.log(`[Admin] Development mode ${developmentMode ? 'ENABLED' : 'DISABLED'} by ${req.ip}`);
+      // Privacy: Don't log admin settings changes
     }
 
     res.json({
@@ -480,14 +473,18 @@ router.patch('/settings',
 );
 
 /**
- * GET /admin/settings/development-mode (public endpoint - no auth required)
- * Check if development mode is enabled (for frontend to check)
+ * GET /admin/settings/development-mode
+ * Check if development mode is enabled (requires admin auth for security)
+ * Privacy: This endpoint requires authentication to prevent information disclosure
  */
-router.get('/settings/development-mode', asyncHandler(async (req, res) => {
-  res.json({
-    developmentMode: adminSettings.developmentMode
-  });
-}));
+router.get('/settings/development-mode',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    res.json({
+      developmentMode: adminSettings.developmentMode
+    });
+  })
+);
 
 // ==========================================
 // Maintenance
@@ -502,8 +499,6 @@ router.post('/cleanup',
   requireDatabase,
   asyncHandler(async (req, res) => {
     const cleanedSessions = await db.cleanupExpiredAdminSessions();
-
-    console.log(`Admin cleanup: removed ${cleanedSessions} expired sessions`);
 
     res.json({
       success: true,

@@ -204,12 +204,14 @@ const voting = {
         <h3>Token Holder Required</h3>
         <p>You must hold this token to vote on community submissions. This ensures only genuine stakeholders can influence content decisions.</p>
         <div class="voting-modal-actions">
-          <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
+          <button class="btn btn-primary voting-modal-close">Got it</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    // CSP-compliant event listeners
+    modal.querySelector('.voting-modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   },
 
   // Escape HTML to prevent XSS
@@ -256,12 +258,14 @@ const voting = {
         </div>
         <p class="voting-modal-hint">Vote weight scales with holdings: 0.1%=1x up to 3%+=3x</p>
         <div class="voting-modal-actions">
-          <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
+          <button class="btn btn-primary voting-modal-close">Got it</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    // CSP-compliant event listeners
+    modal.querySelector('.voting-modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   },
 
   // Update vote UI (buttons and counts)
@@ -528,12 +532,14 @@ const voting = {
           </div>
         </div>
         <div class="voting-modal-actions">
-          <button class="btn btn-primary" onclick="this.closest('.voting-modal-overlay').remove()">Got it</button>
+          <button class="btn btn-primary voting-modal-close">Got it</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    // CSP-compliant event listeners
+    modal.querySelector('.voting-modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   },
 
   // Reset all vote states (e.g., on wallet disconnect)
@@ -621,3 +627,11 @@ window.addEventListener('walletDisconnected', () => {
 
   document.head.appendChild(style);
 })();
+
+// Bind voting info button (CSP-compliant - no inline onclick)
+document.addEventListener('DOMContentLoaded', () => {
+  const votingInfoBtn = document.getElementById('voting-info-btn');
+  if (votingInfoBtn) {
+    votingInfoBtn.addEventListener('click', () => voting.showVotingInfoModal());
+  }
+});

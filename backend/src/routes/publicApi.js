@@ -232,9 +232,9 @@ router.post('/keys/register',
     // Generate new key
     const { key, prefix, hash } = generateApiKey();
 
-    // Store in database
+    // Store in database (including full key for later retrieval)
     const sanitizedName = name ? name.slice(0, 100).replace(/[<>]/g, '') : null;
-    const created = await db.createApiKey(wallet, hash, prefix, sanitizedName);
+    const created = await db.createApiKey(wallet, hash, prefix, sanitizedName, key);
 
     if (!created) {
       return res.status(500).json({
@@ -243,10 +243,10 @@ router.post('/keys/register',
       });
     }
 
-    // Return the full key ONLY on creation (never stored or shown again)
+    // Return the full key on creation
     res.status(201).json({
       success: true,
-      message: 'API key created successfully. Save this key - it will not be shown again!',
+      message: 'API key created successfully',
       data: {
         apiKey: key,
         keyPrefix: prefix,
@@ -316,8 +316,11 @@ router.get('/keys/status/:wallet',
       success: true,
       data: {
         hasKey: true,
+        apiKey: keyInfo.full_key,
         keyPrefix: keyInfo.key_prefix,
         createdAt: keyInfo.created_at,
+        lastUsedAt: keyInfo.last_used_at,
+        requestCount: keyInfo.request_count,
         isActive: keyInfo.is_active
       }
     });

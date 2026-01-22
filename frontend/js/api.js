@@ -133,38 +133,76 @@ const apiCache = {
   }
 };
 
+// Default request timeout (10 seconds) - prevents hung requests
+const DEFAULT_REQUEST_TIMEOUT = (typeof config !== 'undefined' && config.api?.timeout) || 10000;
+
 // API Client
 const api = {
-  // Generic fetch wrapper with exponential backoff retry logic
+  // Generic fetch wrapper with timeout and exponential backoff retry logic
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
-    const maxRetries = options.retries || (typeof config !== 'undefined' ? config.api.retries : 2);
+    const maxRetries = options.retries || (typeof config !== 'undefined' ? config.api?.retries : 2) || 2;
+    const timeout = options.timeout || DEFAULT_REQUEST_TIMEOUT;
     let lastError;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Create AbortController for request timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
       try {
         const response = await fetch(url, {
           ...options,
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             ...options.headers
           }
         });
 
+        clearTimeout(timeoutId);
+
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || `HTTP ${response.status}`);
+          // Check for Retry-After header on 429/503 errors
+          const retryAfter = response.headers.get('Retry-After');
+          const error = new Error(data.error || `HTTP ${response.status}`);
+          error.status = response.status;
+          error.code = data.code;
+          error.retryAfter = retryAfter ? parseInt(retryAfter) : null;
+          throw error;
         }
 
         return data;
       } catch (error) {
-        lastError = error;
+        clearTimeout(timeoutId);
+
+        // Handle abort (timeout)
+        if (error.name === 'AbortError') {
+          lastError = new Error(`Request timed out after ${timeout}ms`);
+          lastError.code = 'TIMEOUT';
+        } else {
+          lastError = error;
+        }
+
+        // Don't retry on 4xx errors (client errors) except 429 (rate limit)
+        if (error.status >= 400 && error.status < 500 && error.status !== 429) {
+          break;
+        }
+
         if (attempt < maxRetries - 1) {
-          // Exponential backoff with jitter to prevent thundering herd
-          const baseDelay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
-          const jitter = Math.random() * 1000; // 0-1s random jitter
-          await new Promise(r => setTimeout(r, baseDelay + jitter));
+          // Use Retry-After header if available, otherwise exponential backoff
+          let delay;
+          if (error.retryAfter) {
+            delay = error.retryAfter * 1000;
+          } else {
+            // Exponential backoff with jitter to prevent thundering herd
+            const baseDelay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
+            const jitter = Math.random() * 1000; // 0-1s random jitter
+            delay = baseDelay + jitter;
+          }
+          await new Promise(r => setTimeout(r, delay));
         }
       }
     }
@@ -752,6 +790,77 @@ const utils = {
       else if (child) el.appendChild(child);
     });
     return el;
+  },
+
+  // Mobile/Touch Device Detection
+  isTouchDevice() {
+    return (('ontouchstart' in window) ||
+      (navigator.maxTouchPoints > 0) ||
+      (navigator.msMaxTouchPoints > 0));
+  },
+
+  // Check if device is mobile based on screen width
+  isMobile() {
+    return window.innerWidth <= 768;
+  },
+
+  // Check if device is in landscape orientation
+  isLandscape() {
+    return window.innerWidth > window.innerHeight;
+  },
+
+  // Add touch feedback class on touch
+  addTouchFeedback(element, activeClass = 'touch-active') {
+    if (!element || !this.isTouchDevice()) return;
+
+    element.addEventListener('touchstart', () => {
+      element.classList.add(activeClass);
+    }, { passive: true });
+
+    element.addEventListener('touchend', () => {
+      setTimeout(() => element.classList.remove(activeClass), 100);
+    }, { passive: true });
+
+    element.addEventListener('touchcancel', () => {
+      element.classList.remove(activeClass);
+    }, { passive: true });
+  },
+
+  // Prevent double-tap zoom on specific element
+  preventDoubleTapZoom(element) {
+    if (!element) return;
+    let lastTap = 0;
+    element.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        e.preventDefault();
+      }
+      lastTap = now;
+    }, { passive: false });
+  },
+
+  // Initialize mobile optimizations
+  initMobileOptimizations() {
+    // Add touch class to body if touch device
+    if (this.isTouchDevice()) {
+      document.body.classList.add('touch-device');
+    }
+
+    // Update on orientation change
+    window.addEventListener('orientationchange', () => {
+      document.body.classList.toggle('landscape', this.isLandscape());
+    });
+
+    // Set initial orientation class
+    document.body.classList.toggle('landscape', this.isLandscape());
+
+    // Handle viewport height changes (iOS Safari address bar)
+    const setVh = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+    setVh();
+    window.addEventListener('resize', this.debounce(setVh, 100));
   }
 };
 

@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "node --watch src/app.js",
+    "worker": "node src/worker.js",
+    "worker:dev": "node --watch src/worker.js",
     "db:migrate": "node db/migrate.js",
     "db:migrate:seed": "node db/migrate.js --seed",
     "db:status": "node db/migrate.js --status",
@@ -27,6 +29,7 @@
     "@solana/web3.js": "^1.87.0",
     "axios": "^1.6.0",
     "bs58": "^5.0.0",
+    "bullmq": "^5.1.0",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",

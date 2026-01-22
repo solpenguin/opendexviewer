@@ -24,7 +24,7 @@ function sanitizeSubmissionOutput(submission) {
     token_mint: submission.token_mint,
     submission_type: submission.submission_type,
     content_url: submission.content_url,
-    submitter_wallet: submission.submitter_wallet,
+    // Privacy: Don't expose submitter_wallet in public responses
     status: submission.status,
     created_at: submission.created_at,
     // Vote data

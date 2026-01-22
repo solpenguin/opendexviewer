@@ -75,7 +75,7 @@ async function verifyHolderStatus(wallet, tokenMint) {
 
     return result;
   } catch (error) {
-    console.error('[Votes] Holder verification failed:', error.message);
+    // Privacy: Don't log error details
     // Return a failed verification - don't allow voting if we can't verify
     return {
       wallet,
@@ -141,8 +141,7 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
       }
     }
   } catch (err) {
-    console.warn('[Votes] Failed to fetch market cap for threshold calculation:', err.message);
-    // Continue with null market cap (will use lowest threshold)
+    // Privacy: Don't log error details - continue with null market cap (will use lowest threshold)
   }
 
   // Set market cap context for auto-moderation threshold calculation
@@ -208,12 +207,8 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
       score: tally?.score || 0,
       weightedScore: parseFloat(tally?.weighted_score) || 0
     },
-    submissionStatus: updatedSubmission?.status || 'unknown',
-    voterInfo: {
-      balance: voterBalance,
-      percentage: voterPercentage,
-      weight: voteWeight
-    }
+    submissionStatus: updatedSubmission?.status || 'unknown'
+    // Privacy: Don't expose voterInfo (balance, percentage, weight) in response
   });
 }));
 
@@ -305,10 +300,8 @@ router.get('/check', asyncHandler(async (req, res) => {
   res.json({
     hasVoted: !!vote,
     voteType: vote?.vote_type || null,
-    voteWeight: vote?.vote_weight ? parseFloat(vote.vote_weight) : null,
-    voterBalance: vote?.voter_balance ? parseFloat(vote.voter_balance) : null,
-    voterPercentage: vote?.voter_percentage ? parseFloat(vote.voter_percentage) : null,
     votedAt: vote?.created_at || null
+    // Privacy: Don't expose voteWeight, voterBalance, voterPercentage in response
   });
 }));
 

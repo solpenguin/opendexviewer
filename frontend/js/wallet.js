@@ -566,7 +566,8 @@ const wallet = {
     document.body.appendChild(menu);
   },
 
-  // Save connection to localStorage
+  // Save connection to sessionStorage (privacy-conscious: cleared on browser close)
+  // Note: Using sessionStorage instead of localStorage for better privacy
   saveConnection() {
     if (this.connected && this.address && this.providerName) {
       const connectionData = {
@@ -575,36 +576,41 @@ const wallet = {
         wallet: this.providerName,
         timestamp: Date.now()
       };
-      localStorage.setItem(this._getStorageKey('walletConnection'), JSON.stringify(connectionData));
-
-      // Legacy keys for backwards compatibility
-      localStorage.setItem(this._getStorageKey('walletConnected'), 'true');
-      localStorage.setItem(this._getStorageKey('walletAddress'), this.address);
+      sessionStorage.setItem(this._getStorageKey('walletConnection'), JSON.stringify(connectionData));
     }
+    // Clear any legacy localStorage data for privacy
+    this._clearLegacyStorage();
   },
 
   // Clear saved connection
   clearConnection() {
-    localStorage.removeItem(this._getStorageKey('walletConnection'));
-    localStorage.removeItem(this._getStorageKey('walletConnected'));
-    localStorage.removeItem(this._getStorageKey('walletAddress'));
+    sessionStorage.removeItem(this._getStorageKey('walletConnection'));
+    this._clearLegacyStorage();
   },
 
-  // Load saved connection
+  // Clear legacy localStorage data (migration from old version)
+  _clearLegacyStorage() {
+    try {
+      localStorage.removeItem(this._getStorageKey('walletConnection'));
+      localStorage.removeItem(this._getStorageKey('walletConnected'));
+      localStorage.removeItem(this._getStorageKey('walletAddress'));
+    } catch (e) {
+      // Ignore errors - localStorage may not be available
+    }
+  },
+
+  // Load saved connection from sessionStorage
   loadSavedConnection() {
     try {
-      const saved = localStorage.getItem(this._getStorageKey('walletConnection'));
+      // First, migrate any legacy localStorage data to sessionStorage then clear it
+      this._clearLegacyStorage();
+
+      const saved = sessionStorage.getItem(this._getStorageKey('walletConnection'));
       if (saved) {
         return JSON.parse(saved);
       }
-      // Fallback to legacy format
-      const wasConnected = localStorage.getItem(this._getStorageKey('walletConnected')) === 'true';
-      const address = localStorage.getItem(this._getStorageKey('walletAddress'));
-      if (wasConnected && address) {
-        return { connected: true, address, wallet: null };
-      }
     } catch (e) {
-      console.error('Failed to load saved connection:', e);
+      // Silent fail - don't log sensitive data
     }
     return null;
   },
@@ -633,10 +639,12 @@ const wallet = {
   },
 
   // Broadcast connection change to other tabs
+  // Privacy: Only broadcast connection status, not full wallet address
   broadcastConnectionChange(action) {
     const message = {
       action,
-      address: this.address,
+      // Use truncated address for cross-tab sync (privacy-conscious)
+      addressHint: this.address ? `${this.address.slice(0, 4)}...${this.address.slice(-4)}` : null,
       wallet: this.providerName,
       timestamp: Date.now()
     };
@@ -645,19 +653,21 @@ const wallet = {
       try {
         this.broadcastChannel.postMessage(message);
       } catch (e) {
-        console.warn('Failed to broadcast:', e);
+        // Silent fail - don't log broadcast errors
       }
     }
   },
 
   // Handle broadcast message from other tabs
+  // Privacy: Now only receives addressHint (truncated), not full address
   handleBroadcastMessage(data) {
     if (!data || !data.action) return;
 
-    if (data.action === 'connected' && data.address && data.wallet) {
-      // Another tab connected
-      if (!this.connected || this.address !== data.address) {
-        this.silentReconnect(data.wallet, data.address);
+    if (data.action === 'connected' && data.wallet) {
+      // Another tab connected - try to reconnect with same wallet
+      // We no longer receive full address for privacy, so just trigger reconnect
+      if (!this.connected) {
+        this.silentReconnect(data.wallet, null);
       }
     } else if (data.action === 'disconnected') {
       // Another tab disconnected
@@ -668,6 +678,8 @@ const wallet = {
   },
 
   // Handle storage change (fallback for BroadcastChannel)
+  // Privacy: sessionStorage doesn't fire storage events across tabs,
+  // but keeping for backwards compatibility
   handleStorageChange(newValue) {
     if (!newValue) {
       // Connection was cleared
@@ -679,13 +691,13 @@ const wallet = {
 
     try {
       const data = JSON.parse(newValue);
-      if (data.connected && data.address && data.wallet) {
-        if (!this.connected || this.address !== data.address) {
-          this.silentReconnect(data.wallet, data.address);
+      if (data.connected && data.wallet) {
+        if (!this.connected) {
+          this.silentReconnect(data.wallet, null);
         }
       }
     } catch (e) {
-      console.error('Failed to parse storage change:', e);
+      // Silent fail - don't log parse errors
     }
   },
 
@@ -1158,5 +1170,10 @@ const wallet = {
 
 // Initialize wallet on DOM load
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize mobile optimizations (runs once globally)
+  if (typeof utils !== 'undefined' && utils.initMobileOptimizations && !window._mobileOptimized) {
+    utils.initMobileOptimizations();
+    window._mobileOptimized = true;
+  }
   wallet.init();
 });

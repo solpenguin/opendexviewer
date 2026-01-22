@@ -1,57 +1,116 @@
 const axios = require('axios');
+const { circuitBreakers } = require('./circuitBreaker');
 
-// RPC endpoint - Helius recommended, fallback to public
-const RPC_URL = process.env.HELIUS_RPC_URL ||
-  (process.env.HELIUS_API_KEY
-    ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
-    : 'https://api.mainnet-beta.solana.com');
+// RPC endpoint configuration with failover
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
+
+// Primary and fallback RPC endpoints
+const RPC_ENDPOINTS = [
+  // Primary: Helius (if configured)
+  HELIUS_API_KEY && `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
+  // Secondary: Custom Helius RPC URL
+  process.env.HELIUS_RPC_URL,
+  // Tertiary: Public Solana RPC (rate limited but always available)
+  'https://api.mainnet-beta.solana.com'
+].filter(Boolean);
+
+// Current RPC index for failover
+let currentRpcIndex = 0;
+let lastRpcFailure = null;
+const RPC_FAILOVER_COOLDOWN_MS = 60000; // 1 minute before trying failed endpoint again
+
+// Get current RPC URL with failover logic
+function getCurrentRpcUrl() {
+  // If primary has been failing, check if cooldown has passed
+  if (currentRpcIndex > 0 && lastRpcFailure) {
+    const elapsed = Date.now() - lastRpcFailure;
+    if (elapsed > RPC_FAILOVER_COOLDOWN_MS) {
+      // Try to recover to primary
+      currentRpcIndex = 0;
+      lastRpcFailure = null;
+      console.log('[Solana] Attempting to recover to primary RPC endpoint');
+    }
+  }
+  return RPC_ENDPOINTS[currentRpcIndex] || RPC_ENDPOINTS[0];
+}
+
+// Failover to next RPC endpoint
+function failoverToNextRpc() {
+  if (currentRpcIndex < RPC_ENDPOINTS.length - 1) {
+    currentRpcIndex++;
+    lastRpcFailure = Date.now();
+    console.log(`[Solana] Failing over to RPC endpoint ${currentRpcIndex + 1}/${RPC_ENDPOINTS.length}`);
+    return true;
+  }
+  return false;
+}
+
+// Legacy export for backwards compatibility
+const RPC_URL = RPC_ENDPOINTS[0];
 
 // Helius DAS API endpoint (for getTokenAccounts)
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const HELIUS_DAS_URL = HELIUS_API_KEY
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : null;
 
-// Make RPC call with defensive error handling
-async function rpcCall(method, params = []) {
-  try {
-    const response = await axios.post(RPC_URL, {
-      jsonrpc: '2.0',
-      id: 1,
-      method,
-      params
-    }, {
-      timeout: 30000 // 30 second timeout
-    });
+// Make RPC call with circuit breaker, failover, and retry logic
+async function rpcCall(method, params = [], retryCount = 0) {
+  const MAX_RETRIES = 2;
 
-    // Defensive check for malformed responses
-    if (!response || !response.data) {
-      throw new Error('Empty or malformed RPC response');
-    }
+  // Use circuit breaker for RPC calls
+  return circuitBreakers.solanaRpc.execute(async () => {
+    const rpcUrl = getCurrentRpcUrl();
 
-    if (response.data.error) {
-      const errorMsg = response.data.error.message || response.data.error.code || 'Unknown RPC error';
-      throw new Error(errorMsg);
-    }
+    try {
+      const response = await axios.post(rpcUrl, {
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params
+      }, {
+        timeout: 15000 // 15 second timeout (reduced from 30s for faster failover)
+      });
 
-    return response.data.result;
-  } catch (error) {
-    // Handle axios-specific errors
-    if (error.code === 'ECONNABORTED') {
-      console.error(`RPC timeout (${method}): Request timed out`);
-      throw new Error(`RPC timeout for ${method}`);
+      // Defensive check for malformed responses
+      if (!response || !response.data) {
+        throw new Error('Empty or malformed RPC response');
+      }
+
+      if (response.data.error) {
+        const errorMsg = response.data.error.message || response.data.error.code || 'Unknown RPC error';
+        throw new Error(errorMsg);
+      }
+
+      return response.data.result;
+    } catch (error) {
+      // Handle connection errors with failover
+      const isConnectionError =
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ECONNRESET' ||
+        error.code === 'ECONNREFUSED' ||
+        !error.response;
+
+      if (isConnectionError && retryCount < MAX_RETRIES) {
+        // Try failover to next endpoint
+        if (failoverToNextRpc()) {
+          console.log(`[Solana] Retrying ${method} with failover endpoint (attempt ${retryCount + 1})`);
+          return rpcCall(method, params, retryCount + 1);
+        }
+      }
+
+      // Log error for debugging
+      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+        console.error(`[Solana] RPC timeout (${method}): Request timed out`);
+      } else if (error.response) {
+        console.error(`[Solana] RPC error (${method}): HTTP ${error.response.status}`);
+      } else if (error.request) {
+        console.error(`[Solana] RPC error (${method}): No response received`);
+      }
+
+      throw error;
     }
-    if (error.response) {
-      // Server responded with error status
-      console.error(`RPC error (${method}): HTTP ${error.response.status}`);
-    } else if (error.request) {
-      // Request made but no response received
-      console.error(`RPC error (${method}): No response received`);
-    } else {
-      console.error(`RPC error (${method}):`, error.message);
-    }
-    throw error;
-  }
+  });
 }
 
 // Get account info
@@ -114,13 +173,27 @@ async function getSignaturesForAddress(address, limit = 10) {
   ]);
 }
 
-// Health check
+// Health check with failover status
 async function checkHealth() {
   try {
     const result = await rpcCall('getHealth');
-    return { healthy: result === 'ok', rpcUrl: RPC_URL.split('?')[0] };
+    const currentUrl = getCurrentRpcUrl();
+    return {
+      healthy: result === 'ok',
+      rpcUrl: currentUrl.split('?')[0], // Hide API key
+      currentEndpoint: currentRpcIndex + 1,
+      totalEndpoints: RPC_ENDPOINTS.length,
+      usingFallback: currentRpcIndex > 0,
+      circuitBreakerState: circuitBreakers.solanaRpc.getStatus().state
+    };
   } catch (error) {
-    return { healthy: false, error: error.message };
+    return {
+      healthy: false,
+      error: error.message,
+      currentEndpoint: currentRpcIndex + 1,
+      totalEndpoints: RPC_ENDPOINTS.length,
+      circuitBreakerState: circuitBreakers.solanaRpc.getStatus().state
+    };
   }
 }
 

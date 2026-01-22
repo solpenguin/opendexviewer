@@ -457,6 +457,82 @@ function createSubmissionSignatureMessage(submissionType, tokenMint, timestamp) 
 }
 
 /**
+ * Create signature message for data deletion (GDPR)
+ * @param {string} wallet - The wallet address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createDataDeletionSignatureMessage(wallet, timestamp) {
+  return `OpenDex Delete Data: ${wallet} at ${timestamp}`;
+}
+
+/**
+ * Middleware to validate wallet signature for data deletion (GDPR)
+ * Requires: wallet, signature, signatureTimestamp in request body
+ */
+function validateWalletSignature(req, res, next) {
+  const { wallet, signature, signatureTimestamp } = req.body;
+
+  // Check if signature fields are present
+  if (!signature || !signatureTimestamp || !wallet) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  // Validate wallet format
+  if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  // Validate signature timestamp (must be within expiry window)
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({
+      error: 'Signature expired',
+      message: 'Please sign a fresh request',
+      code: 'SIGNATURE_EXPIRED'
+    });
+  }
+
+  // Validate signature format (should be array of numbers)
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({
+      error: 'Invalid signature format',
+      code: 'INVALID_SIGNATURE_FORMAT'
+    });
+  }
+
+  // Recreate the expected message
+  const expectedMessage = createDataDeletionSignatureMessage(wallet, timestamp);
+
+  // Verify the signature
+  const isValid = verifyWalletSignature(expectedMessage, signature, wallet);
+
+  if (!isValid) {
+    return res.status(401).json({
+      error: 'Invalid signature',
+      message: 'Wallet signature verification failed',
+      code: 'INVALID_SIGNATURE'
+    });
+  }
+
+  // Signature is valid - proceed
+  next();
+}
+
+/**
  * Middleware to validate wallet signature for votes
  * Requires: signature, signatureTimestamp in request body
  */
@@ -699,8 +775,10 @@ module.exports = {
   verifyWalletSignature,
   validateVoteSignature,
   validateSubmissionSignature,
+  validateWalletSignature,
   createVoteSignatureMessage,
   createSubmissionSignatureMessage,
+  createDataDeletionSignatureMessage,
   SIGNATURE_EXPIRY_MS,
   // Admin functions
   generateAdminSessionToken,
