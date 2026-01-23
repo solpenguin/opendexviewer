@@ -501,7 +501,9 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
               symbol: externalInfo.symbol,
               decimals: externalInfo.decimals,
               logoUri: externalInfo.logoUri
-            }).catch(() => { /* Privacy: Don't log error details */ });
+            }).catch(err => {
+              console.warn('[Tokens] DB cache failed (non-critical):', err.code || 'unknown');
+            });
           }
         } catch (err) {
           // Privacy: Don't log error details
@@ -844,11 +846,16 @@ router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => 
   const { type, status = 'all' } = req.query;
 
   try {
-    const options = {};
-    if (type) options.type = type;
-    if (status !== 'all') options.status = status;
+    // Cache key includes type and status filters
+    const cacheKey = `${keys.submissions(mint)}:${type || 'all'}:${status}`;
 
-    const submissions = await db.getSubmissionsByToken(mint, options);
+    const submissions = await cache.getOrSet(cacheKey, async () => {
+      const options = {};
+      if (type) options.type = type;
+      if (status !== 'all') options.status = status;
+      return db.getSubmissionsByToken(mint, options);
+    }, TTL.SHORT); // Cache for 1 minute
+
     res.json(submissions);
   } catch (error) {
     // Privacy: Don't log error details

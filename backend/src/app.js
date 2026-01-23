@@ -46,8 +46,11 @@ async function initializeJobQueue() {
 
 // Fallback cleanup for when Redis/worker is not available
 let cleanupIntervalId = null;
+let cleanupFailureCount = 0;
+const MAX_CLEANUP_FAILURES = 10;
+
 function startFallbackCleanup() {
-  const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes (reduced from 1 hour for better storage hygiene)
+  const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
   // Clean up expired sessions immediately on startup
   if (db.isReady()) {
@@ -60,16 +63,31 @@ function startFallbackCleanup() {
       .catch(err => console.error('[Cleanup] Failed to clean up sessions:', err.message));
   }
 
-  // Schedule periodic cleanup
+  // Schedule periodic cleanup with failure limit
   cleanupIntervalId = setInterval(async () => {
-    if (db.isReady()) {
-      try {
-        const count = await db.cleanupExpiredAdminSessions();
-        if (count > 0) {
-          console.log(`[Cleanup] Removed ${count} expired admin sessions`);
-        }
-      } catch (err) {
-        console.error('[Cleanup] Failed to clean up sessions:', err.message);
+    if (!db.isReady()) {
+      cleanupFailureCount++;
+      if (cleanupFailureCount >= MAX_CLEANUP_FAILURES) {
+        console.error('[Cleanup] Max failures reached, stopping fallback cleanup');
+        clearInterval(cleanupIntervalId);
+        cleanupIntervalId = null;
+      }
+      return;
+    }
+
+    try {
+      const count = await db.cleanupExpiredAdminSessions();
+      cleanupFailureCount = 0; // Reset on success
+      if (count > 0) {
+        console.log(`[Cleanup] Removed ${count} expired admin sessions`);
+      }
+    } catch (err) {
+      cleanupFailureCount++;
+      console.error(`[Cleanup] Failed (${cleanupFailureCount}/${MAX_CLEANUP_FAILURES}):`, err.message);
+      if (cleanupFailureCount >= MAX_CLEANUP_FAILURES) {
+        console.error('[Cleanup] Max failures reached, stopping fallback cleanup');
+        clearInterval(cleanupIntervalId);
+        cleanupIntervalId = null;
       }
     }
   }, CLEANUP_INTERVAL_MS);

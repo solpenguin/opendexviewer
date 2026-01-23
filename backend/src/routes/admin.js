@@ -185,8 +185,8 @@ router.get('/submissions',
 
     const result = await db.getAllSubmissions({
       status,
-      limit: Math.min(parseInt(limit) || 50, 100),
-      offset: parseInt(offset) || 0,
+      limit: Math.min(Math.max(1, parseInt(limit) || 50), 100),
+      offset: Math.max(0, parseInt(offset) || 0),
       sortBy,
       sortOrder
     });

@@ -896,9 +896,9 @@ const tokenList = {
     // Determine if there are more pages
     this.hasMorePages = this.tokens.length === this.pageSize;
 
-    // Update total pages estimate based on response
+    // Update total pages estimate based on response (cap to prevent unbounded growth)
     if (this.hasMorePages && this.currentPage >= this.totalPages) {
-      this.totalPages = this.currentPage + 1;
+      this.totalPages = Math.min(this.currentPage + 1, 100); // Cap at 100 pages
     }
 
     if (prevBtn) {

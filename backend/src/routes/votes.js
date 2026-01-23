@@ -321,10 +321,14 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 
-  // Validate all IDs are valid integers
-  const parsedIds = submissionIds.map(id => parseInt(id)).filter(id => !isNaN(id) && id > 0);
-  if (parsedIds.length === 0) {
-    return res.status(400).json({ error: 'No valid submission IDs provided' });
+  // Validate all IDs are valid integers - reject if any are invalid
+  const parsedIds = [];
+  for (const id of submissionIds) {
+    const parsed = parseInt(id);
+    if (isNaN(parsed) || parsed <= 0) {
+      return res.status(400).json({ error: `Invalid submission ID: ${id}` });
+    }
+    parsedIds.push(parsed);
   }
 
   // Use batch query for efficiency

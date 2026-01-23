@@ -1460,9 +1460,9 @@
   .modal-content {
     margin: 0.5rem;
     padding: 1rem;
-    max-height: 90vh;
-    max-height: 90dvh;
+    max-height: 85dvh;
     overflow-y: auto;
+    padding-bottom: 2rem; /* Space for mobile keyboard */
   }
 
   .modal-content h3 {
@@ -1472,11 +1472,23 @@
   .modal-actions {
     flex-direction: column;
     gap: 0.5rem;
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-secondary);
+    padding: 1rem 0;
+    margin: 0 -1rem -1rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 
   .modal-actions .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  /* When form input is focused, shrink modal to avoid keyboard */
+  .modal-content:focus-within {
+    max-height: 55dvh;
   }
 }
 

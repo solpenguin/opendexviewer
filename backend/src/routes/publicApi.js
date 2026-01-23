@@ -312,15 +312,14 @@ router.get('/keys/status/:wallet',
       });
     }
 
+    // SECURITY: Never expose full API key - only show prefix for identification
     res.json({
       success: true,
       data: {
         hasKey: true,
-        apiKey: keyInfo.full_key,
         keyPrefix: keyInfo.key_prefix,
         createdAt: keyInfo.created_at,
         lastUsedAt: keyInfo.last_used_at,
-        requestCount: keyInfo.request_count,
         isActive: keyInfo.is_active
       }
     });

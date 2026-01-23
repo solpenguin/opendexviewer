@@ -1234,6 +1234,12 @@ const tokenDetail = {
 
     // Remove all event listeners
     this.unbindEvents();
+
+    // Remove visibility handler (not tracked in boundHandlers)
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
   }
 };
 

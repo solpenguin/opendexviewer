@@ -6793,3 +6793,311 @@ body.landscape .hero h1 {
   font-size: 1.5rem;
   margin-bottom: 0.5rem;
 }
+
+/* ============================================
+   MOBILE ENHANCEMENTS
+   Comprehensive mobile-first fixes
+   ============================================ */
+
+/* Fix search input font-size to prevent iOS zoom */
+.search-input {
+  font-size: 16px !important; /* Prevent iOS auto-zoom on focus */
+}
+
+/* Enhanced mobile breakpoint (768px) */
+@media (max-width: 768px) {
+  /* Search clear button - increase touch target */
+  .search-clear {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    right: 0.5rem;
+  }
+
+  /* Search input - optimize padding for mobile */
+  .search-input {
+    padding: 0.875rem 3.5rem 0.875rem 2.75rem;
+  }
+
+  .search-icon {
+    left: 0.875rem;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Small mobile devices (480px and below) */
+@media (max-width: 480px) {
+  /* Header height reduction */
+  .header-content {
+    height: auto;
+    padding: 0.75rem 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .logo-text {
+    font-size: 1rem;
+  }
+
+  .logo-img {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Navigation stacking */
+  .nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 0.25rem;
+    padding: 0.25rem 0;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    min-height: 44px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Search optimizations */
+  .search-wrapper {
+    padding: 0 0.5rem;
+  }
+
+  .search-input {
+    padding: 0.75rem 3rem 0.75rem 2.5rem;
+    font-size: 16px !important;
+  }
+
+  .search-clear {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    right: 0.375rem;
+  }
+
+  /* Filter tabs touch targets */
+  .filter-tab {
+    min-height: 44px;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Token name truncation - more readable */
+  .token-name {
+    max-width: 120px;
+  }
+
+  /* Type selector grid - 2 columns */
+  .type-selector {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  /* Form inputs */
+  .form-group input[type="text"],
+  .form-group input[type="url"],
+  .form-group input[type="email"],
+  .form-group input[type="search"],
+  .form-group textarea,
+  .form-group select {
+    font-size: 16px !important;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+  }
+
+  /* Buttons full-width */
+  .btn-large {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Chart stats overflow prevention */
+  .chart-stat {
+    min-width: auto;
+    flex: 1 1 auto;
+  }
+
+  .chart-stat .label {
+    font-size: 0.6875rem;
+  }
+
+  .chart-stat .value {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Very small devices (360px and below) */
+@media (max-width: 360px) {
+  /* Even more compact header */
+  .header-content {
+    padding: 0.5rem 0.375rem;
+  }
+
+  .logo-text {
+    font-size: 0.9375rem;
+  }
+
+  .logo-img {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Nav links even smaller */
+  .nav-link {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* Token name - minimum readable */
+  .token-name {
+    max-width: 90px;
+    font-size: 0.75rem;
+  }
+
+  /* Type selector - single column */
+  .type-selector {
+    grid-template-columns: 1fr;
+  }
+
+  /* Filter tabs - horizontal scroll */
+  .filter-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 0.25rem;
+  }
+
+  .filter-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-tab {
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+/* Horizontal scroll indicator for tables */
+@media (max-width: 600px) {
+  .token-table-wrapper {
+    position: relative;
+  }
+
+  .token-table-wrapper::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 30px;
+    background: linear-gradient(to right, transparent, var(--bg-primary));
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0.7;
+  }
+
+  /* Hide gradient when at scroll end */
+  .token-table-wrapper.scroll-end::before {
+    opacity: 0;
+  }
+
+  /* Icon-only buttons - hide text labels */
+  .btn-icon .btn-text,
+  .watchlist-btn span:not(.btn-icon),
+  .action-buttons .btn span:not(:has(svg)) {
+    display: none;
+  }
+
+  /* Ensure icons remain visible */
+  .btn-icon svg,
+  .watchlist-btn svg,
+  .action-buttons .btn svg {
+    display: block !important;
+    margin: 0;
+  }
+}
+
+/* Landscape mode on small phones */
+@media (max-height: 450px) and (orientation: landscape) {
+  .header {
+    padding: 0.25rem 0.75rem;
+    min-height: 48px;
+  }
+
+  .header-content {
+    height: auto;
+    min-height: 40px;
+    gap: 0.5rem;
+  }
+
+  .nav {
+    gap: 0.25rem;
+  }
+
+  .nav-link {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    min-height: 36px;
+  }
+
+  .main {
+    padding: 0.5rem;
+  }
+
+  .hero {
+    padding: 0.5rem 0;
+    min-height: auto;
+  }
+
+  .hero h1 {
+    font-size: 1.25rem;
+  }
+
+  .hero p {
+    font-size: 0.8125rem;
+  }
+
+  /* Reduce modal padding in landscape */
+  .modal-content {
+    padding: 0.75rem;
+    max-height: 85vh;
+  }
+}
+
+/* Touch device optimizations for modal keyboard */
+@media (max-width: 768px) {
+  .modal-content {
+    max-height: 85dvh;
+    padding-bottom: 2rem; /* Space for mobile keyboard */
+  }
+
+  /* When keyboard is likely visible */
+  .modal-content:focus-within {
+    max-height: 50dvh;
+    overflow-y: auto;
+  }
+
+  /* Ensure submit buttons stay visible */
+  .modal-footer,
+  .form-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-secondary);
+    padding: 1rem 0;
+    margin-top: auto;
+  }
+}

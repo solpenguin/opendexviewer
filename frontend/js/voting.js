@@ -74,70 +74,75 @@ const voting = {
 
   // Cast a vote (now with holder verification and wallet signature)
   async vote(submissionId, voteType) {
-    // Prevent double-voting while a vote is pending
+    // Prevent double-voting - add to pending immediately to block rapid clicks
     if (this.pendingVotes.has(submissionId)) {
       return;
     }
+    this.pendingVotes.add(submissionId);
 
-    // Check wallet connection
-    if (!wallet.connected) {
-      const connected = await wallet.connect();
-      if (!connected) {
-        toast.warning('Please connect your wallet to vote');
+    try {
+      // Check wallet connection
+      if (!wallet.connected) {
+        const connected = await wallet.connect();
+        if (!connected) {
+          toast.warning('Please connect your wallet to vote');
+          this.pendingVotes.delete(submissionId);
+          return;
+        }
+      }
+
+      // Get token mint for this submission
+      const tokenMint = this.getTokenMintForSubmission(submissionId);
+      if (!tokenMint) {
+        toast.error('Unable to verify token - please refresh the page');
+        this.pendingVotes.delete(submissionId);
         return;
       }
-    }
 
-    // Get token mint for this submission
-    const tokenMint = this.getTokenMintForSubmission(submissionId);
-    if (!tokenMint) {
-      toast.error('Unable to verify token - please refresh the page');
-      return;
-    }
+      // Check holder status BEFORE voting - force refresh to get current balance
+      const holderData = await this.checkHolderStatus(tokenMint, true);
 
-    // Check holder status BEFORE voting - force refresh to get current balance
-    const holderData = await this.checkHolderStatus(tokenMint, true);
-
-    if (!holderData || !holderData.holdsToken) {
-      toast.error('You must hold this token to vote');
-      this.showHolderRequiredModal(tokenMint);
-      return;
-    }
-
-    // Check minimum balance requirement (with proper null/NaN handling)
-    const percentageHeld = parseFloat(holderData.percentageHeld);
-    if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
-      toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
-      this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
-      return;
-    }
-
-    // Sign the vote with wallet
-    const timestamp = Date.now();
-    const message = this.createVoteSignatureMessage(voteType, submissionId, timestamp);
-
-    let signatureData;
-    try {
-      signatureData = await wallet.signMessage(message);
-    } catch (error) {
-      console.error('Failed to sign vote:', error);
-      if (error.message?.includes('User rejected')) {
-        toast.warning('Vote cancelled - signature required');
-      } else {
-        toast.error('Failed to sign vote. Please try again.');
+      if (!holderData || !holderData.holdsToken) {
+        toast.error('You must hold this token to vote');
+        this.showHolderRequiredModal(tokenMint);
+        this.pendingVotes.delete(submissionId);
+        return;
       }
-      return;
-    }
 
-    // Get current vote state
-    const currentVote = this.voteStates.get(submissionId);
-    const isSameVote = currentVote === voteType;
+      // Check minimum balance requirement (with proper null/NaN handling)
+      const percentageHeld = parseFloat(holderData.percentageHeld);
+      if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
+        toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
+        this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
+        this.pendingVotes.delete(submissionId);
+        return;
+      }
 
-    // Optimistic update
-    this.pendingVotes.add(submissionId);
-    this.updateVoteUI(submissionId, isSameVote ? null : voteType, true);
+      // Sign the vote with wallet
+      const timestamp = Date.now();
+      const message = this.createVoteSignatureMessage(voteType, submissionId, timestamp);
 
-    try {
+      let signatureData;
+      try {
+        signatureData = await wallet.signMessage(message);
+      } catch (error) {
+        console.error('Failed to sign vote:', error);
+        if (error.message?.includes('User rejected')) {
+          toast.warning('Vote cancelled - signature required');
+        } else {
+          toast.error('Failed to sign vote. Please try again.');
+        }
+        this.pendingVotes.delete(submissionId);
+        return;
+      }
+
+      // Get current vote state
+      const currentVote = this.voteStates.get(submissionId);
+      const isSameVote = currentVote === voteType;
+
+      // Optimistic UI update
+      this.updateVoteUI(submissionId, isSameVote ? null : voteType, true);
+
       const result = await api.votes.cast({
         submissionId,
         voterWallet: wallet.address,
@@ -164,6 +169,7 @@ const voting = {
       console.error('Vote failed:', error);
 
       // Revert optimistic update
+      const currentVote = this.voteStates.get(submissionId);
       this.updateVoteUI(submissionId, currentVote, false);
 
       // Handle specific error codes

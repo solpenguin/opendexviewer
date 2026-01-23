@@ -872,6 +872,42 @@ const utils = {
     };
     setVh();
     window.addEventListener('resize', this.debounce(setVh, 100));
+
+    // Initialize table scroll indicators
+    this.initTableScrollIndicators();
+  },
+
+  // Handle horizontal scroll indicators for tables
+  initTableScrollIndicators() {
+    const setupScrollIndicator = (wrapper) => {
+      const checkScroll = () => {
+        const isAtEnd = wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 5;
+        wrapper.classList.toggle('scroll-end', isAtEnd);
+      };
+
+      wrapper.addEventListener('scroll', this.debounce(checkScroll, 50), { passive: true });
+      // Check initial state
+      checkScroll();
+    };
+
+    // Setup for existing table wrappers
+    document.querySelectorAll('.token-table-wrapper').forEach(setupScrollIndicator);
+
+    // Observe for dynamically added table wrappers
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            if (node.classList?.contains('token-table-wrapper')) {
+              setupScrollIndicator(node);
+            }
+            node.querySelectorAll?.('.token-table-wrapper').forEach(setupScrollIndicator);
+          }
+        });
+      });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 };
 

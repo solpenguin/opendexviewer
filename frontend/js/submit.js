@@ -561,6 +561,9 @@ const submitPage = {
     if (holderSection) holderSection.style.display = 'none';
   },
 
+  // Track current lookup to prevent race conditions
+  currentLookupId: 0,
+
   // Lookup token by mint address
   async lookupToken(mint) {
     const preview = document.getElementById('token-preview');
@@ -575,6 +578,9 @@ const submitPage = {
       return;
     }
 
+    // Track this lookup to prevent race conditions with rapid typing
+    const lookupId = ++this.currentLookupId;
+
     // Show loading state
     status.innerHTML = '<div class="loading-spinner small"></div>';
     status.className = 'input-status loading';
@@ -582,6 +588,11 @@ const submitPage = {
 
     try {
       const token = await api.tokens.get(mint);
+
+      // If a newer lookup started, discard this result
+      if (lookupId !== this.currentLookupId) {
+        return;
+      }
 
       if (!token) {
         throw new Error('Token not found');

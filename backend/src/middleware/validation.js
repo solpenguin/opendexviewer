@@ -704,13 +704,16 @@ function verifyAdminPassword(password) {
   const passwordBuffer = Buffer.from(password || '');
   const adminBuffer = Buffer.from(adminPassword);
 
-  // If lengths differ, compare with itself to maintain constant time
-  if (passwordBuffer.length !== adminBuffer.length) {
-    crypto.timingSafeEqual(adminBuffer, adminBuffer);
-    return false;
-  }
+  // Pad shorter buffer to match length for constant-time comparison
+  const maxLength = Math.max(passwordBuffer.length, adminBuffer.length);
+  const paddedPassword = Buffer.alloc(maxLength);
+  const paddedAdmin = Buffer.alloc(maxLength);
+  passwordBuffer.copy(paddedPassword);
+  adminBuffer.copy(paddedAdmin);
 
-  return crypto.timingSafeEqual(passwordBuffer, adminBuffer);
+  // Always compare same-length buffers, then check if original lengths matched
+  const match = crypto.timingSafeEqual(paddedPassword, paddedAdmin);
+  return match && passwordBuffer.length === adminBuffer.length;
 }
 
 // Middleware to validate admin session
