@@ -1138,19 +1138,28 @@ async function getTokenViews(tokenMint) {
 }
 
 // Get view counts for multiple tokens (batch)
+// Non-critical query - fails gracefully to avoid blocking token list responses
 async function getTokenViewsBatch(tokenMints) {
   if (!pool || !tokenMints || tokenMints.length === 0) return {};
 
-  const result = await pool.query(
-    `SELECT token_mint, view_count FROM token_views WHERE token_mint = ANY($1)`,
-    [tokenMints]
-  );
+  try {
+    // Use a shorter timeout for this non-critical query to avoid blocking
+    const result = await pool.query({
+      text: `SELECT token_mint, view_count FROM token_views WHERE token_mint = ANY($1)`,
+      values: [tokenMints],
+      statement_timeout: 5000 // 5 second timeout for view counts
+    });
 
-  const viewsMap = {};
-  result.rows.forEach(row => {
-    viewsMap[row.token_mint] = row.view_count;
-  });
-  return viewsMap;
+    const viewsMap = {};
+    result.rows.forEach(row => {
+      viewsMap[row.token_mint] = row.view_count;
+    });
+    return viewsMap;
+  } catch (error) {
+    // Log but don't crash - view counts are not critical
+    console.warn('getTokenViewsBatch failed (non-critical):', error.message);
+    return {};
+  }
 }
 
 // Get most viewed tokens

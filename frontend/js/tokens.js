@@ -475,12 +475,6 @@ const tokenList = {
     utils.setUrlParam('filter', null);
 
     try {
-      // Check if it's a valid Solana address - go directly to token page
-      if (utils.isValidSolanaAddress(trimmed)) {
-        window.location.href = `token.html?mint=${trimmed}`;
-        return;
-      }
-
       this.tokens = await api.tokens.search(trimmed);
       this.render();
     } catch (error) {
