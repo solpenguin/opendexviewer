@@ -306,28 +306,7 @@ async function gracefulShutdown(signal) {
     cleanupIntervalId = null;
   }
 
-  // Flush any buffered view counts to database directly
-  // (Can't use job queue since we're shutting down)
-  try {
-    const viewBuffer = jobQueue.getViewCountBuffer();
-    if (viewBuffer.size > 0) {
-      console.log(`[Shutdown] Flushing ${viewBuffer.size} buffered view counts...`);
-      for (const [tokenMint, count] of viewBuffer) {
-        await db.pool.query(`
-          INSERT INTO token_views (token_mint, view_count, last_viewed_at)
-          VALUES ($1, $2, NOW())
-          ON CONFLICT (token_mint) DO UPDATE SET
-            view_count = token_views.view_count + $2,
-            last_viewed_at = NOW()
-        `, [tokenMint, count]);
-      }
-      console.log('[Shutdown] View counts flushed');
-    }
-  } catch (err) {
-    console.error('[Shutdown] Failed to flush view counts:', err.message);
-  }
-
-  // Shutdown job queue connections
+  // Shutdown job queue (handles view count flushing internally)
   try {
     await jobQueue.shutdown();
   } catch (err) {

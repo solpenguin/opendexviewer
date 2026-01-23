@@ -496,11 +496,17 @@ const tokenDetail = {
 
     // If no data, show placeholder
     if (!data || !data.data || data.data.length === 0) {
-      this.renderEmptyChart();
+      this.renderEmptyChart('No chart data available');
       return;
     }
 
     const chartData = data.data;
+
+    // If insufficient data points (less than 3), show new token placeholder
+    if (chartData.length < 3) {
+      this.renderEmptyChart('New Token! Waiting for chart data...', true);
+      return;
+    }
 
     if (this.chartType === 'candle' && chartData[0].open !== undefined) {
       this.renderCandlestickChart(ctx, chartData);
@@ -779,7 +785,8 @@ const tokenDetail = {
   },
 
   // Render empty chart placeholder
-  renderEmptyChart() {
+  // isNewToken: shows a more friendly message with accent color
+  renderEmptyChart(message = 'No chart data available', isNewToken = false) {
     const ctx = document.getElementById('price-chart');
     if (!ctx) return;
 
@@ -787,27 +794,50 @@ const tokenDetail = {
       this.chart.destroy();
     }
 
+    // For new tokens, show a subtle animated pulse line
+    const lineColor = isNewToken ? '#3b82f6' : '#2a2a30';
+    const textColor = isNewToken ? '#60a5fa' : '#6b6b73';
+
     this.chart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: ['', '', '', '', ''],
+        labels: ['', '', '', '', '', '', ''],
         datasets: [{
-          data: [0, 0, 0, 0, 0],
-          borderColor: '#2a2a30',
-          fill: false
+          data: isNewToken ? [1, 1.2, 0.9, 1.1, 1, 1.15, 1.05] : [0, 0, 0, 0, 0, 0, 0],
+          borderColor: lineColor,
+          borderWidth: isNewToken ? 2 : 1,
+          borderDash: isNewToken ? [5, 5] : [],
+          fill: false,
+          tension: 0.4,
+          pointRadius: 0
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: isNewToken ? {
+          duration: 2000,
+          easing: 'easeInOutQuart'
+        } : { duration: 0 },
         plugins: {
           legend: { display: false },
           title: {
             display: true,
-            text: 'No chart data available',
+            text: message,
+            color: textColor,
+            font: {
+              size: isNewToken ? 16 : 14,
+              weight: isNewToken ? '500' : 'normal'
+            },
+            padding: { top: 10, bottom: 20 }
+          },
+          subtitle: isNewToken ? {
+            display: true,
+            text: 'Check back soon for price history',
             color: '#6b6b73',
-            font: { size: 14 }
-          }
+            font: { size: 12 },
+            padding: { bottom: 10 }
+          } : { display: false }
         },
         scales: {
           x: { display: false },

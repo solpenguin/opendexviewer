@@ -170,12 +170,22 @@ async function scheduleSessionCleanup() {
  */
 const viewCountBuffer = new Map(); // tokenMint -> count
 const VIEW_BUFFER_MAX_SIZE = parseInt(process.env.VIEW_BUFFER_MAX_SIZE) || 50000;
+const VIEW_FLUSH_INTERVAL_MS = parseInt(process.env.VIEW_FLUSH_INTERVAL_MS) || 5000;
 let viewFlushScheduled = false;
+let viewFlushTimer = null;
+
+// Import db lazily to avoid circular dependency
+let db = null;
+function getDb() {
+  if (!db) {
+    db = require('./database');
+  }
+  return db;
+}
 
 async function incrementViewCount(tokenMint) {
   // Check if buffer is at capacity - force immediate flush if so
   if (viewCountBuffer.size >= VIEW_BUFFER_MAX_SIZE && !viewCountBuffer.has(tokenMint)) {
-    // Buffer full with new token - trigger immediate flush
     console.warn(`[JobQueue] View buffer at capacity (${VIEW_BUFFER_MAX_SIZE}), forcing flush`);
     await flushViewCounts();
   }
@@ -185,14 +195,15 @@ async function incrementViewCount(tokenMint) {
   viewCountBuffer.set(tokenMint, current + 1);
 
   // Schedule a flush if not already scheduled
-  if (!viewFlushScheduled && isInitialized) {
+  if (!viewFlushScheduled) {
     viewFlushScheduled = true;
 
-    // Flush after 5 seconds of batching
-    setTimeout(async () => {
+    // Flush after interval
+    viewFlushTimer = setTimeout(async () => {
       await flushViewCounts();
       viewFlushScheduled = false;
-    }, 5000);
+      viewFlushTimer = null;
+    }, VIEW_FLUSH_INTERVAL_MS);
   }
 
   return current + 1;
@@ -201,18 +212,77 @@ async function incrementViewCount(tokenMint) {
 async function flushViewCounts() {
   if (viewCountBuffer.size === 0) return;
 
-  // Copy and clear buffer
+  // Copy buffer (don't clear yet - only clear after successful write)
   const updates = new Map(viewCountBuffer);
-  viewCountBuffer.clear();
 
-  // Convert to array for job data
+  // Convert to array for processing
   const viewUpdates = [];
   for (const [tokenMint, count] of updates) {
     viewUpdates.push({ tokenMint, count });
   }
 
-  // Add job to process batch
-  await addAnalyticsJob('batch-view-counts', { updates: viewUpdates });
+  // Try job queue first if available
+  if (isInitialized) {
+    try {
+      const job = await addAnalyticsJob('batch-view-counts', { updates: viewUpdates });
+      if (job) {
+        // Job added successfully - clear buffer
+        viewCountBuffer.clear();
+        console.log(`[JobQueue] Queued ${viewUpdates.length} view count updates`);
+        return;
+      }
+    } catch (err) {
+      console.warn('[JobQueue] Failed to queue view counts, falling back to direct DB:', err.message);
+    }
+  }
+
+  // Fallback: Write directly to database
+  await flushViewCountsDirect(viewUpdates);
+  viewCountBuffer.clear();
+}
+
+/**
+ * Direct database write fallback for view counts
+ * Used when Redis/job queue is unavailable
+ */
+async function flushViewCountsDirect(viewUpdates) {
+  const database = getDb();
+  if (!database.isReady()) {
+    console.warn('[JobQueue] Database not ready, view counts will be lost');
+    return;
+  }
+
+  console.log(`[JobQueue] Writing ${viewUpdates.length} view counts directly to DB...`);
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  // Process in smaller batches to avoid overwhelming DB
+  const BATCH_SIZE = 25;
+  for (let i = 0; i < viewUpdates.length; i += BATCH_SIZE) {
+    const batch = viewUpdates.slice(i, i + BATCH_SIZE);
+
+    try {
+      // Use a single query with unnest for efficiency
+      const mints = batch.map(u => u.tokenMint);
+      const counts = batch.map(u => u.count);
+
+      await database.pool.query(`
+        INSERT INTO token_views (token_mint, view_count, last_viewed_at)
+        SELECT unnest($1::text[]), unnest($2::int[]), NOW()
+        ON CONFLICT (token_mint) DO UPDATE SET
+          view_count = token_views.view_count + EXCLUDED.view_count,
+          last_viewed_at = NOW()
+      `, [mints, counts]);
+
+      successCount += batch.length;
+    } catch (err) {
+      console.error('[JobQueue] Direct view count batch failed:', err.message);
+      errorCount += batch.length;
+    }
+  }
+
+  console.log(`[JobQueue] Direct DB write complete: ${successCount} success, ${errorCount} errors`);
 }
 
 /**
@@ -282,11 +352,22 @@ async function isWorkerActive() {
 async function shutdown() {
   console.log('[JobQueue] Shutting down...');
 
-  // Flush any pending view counts synchronously to database
+  // Cancel pending flush timer
+  if (viewFlushTimer) {
+    clearTimeout(viewFlushTimer);
+    viewFlushTimer = null;
+  }
+
+  // Flush any pending view counts directly to database
   // (Don't use job queue since we're shutting down)
   if (viewCountBuffer.size > 0) {
-    console.log(`[JobQueue] Flushing ${viewCountBuffer.size} buffered view counts...`);
-    // This will be handled by direct DB call in shutdown handler
+    console.log(`[JobQueue] Flushing ${viewCountBuffer.size} buffered view counts on shutdown...`);
+    const viewUpdates = [];
+    for (const [tokenMint, count] of viewCountBuffer) {
+      viewUpdates.push({ tokenMint, count });
+    }
+    await flushViewCountsDirect(viewUpdates);
+    viewCountBuffer.clear();
   }
 
   // Close queue events
@@ -313,7 +394,5 @@ module.exports = {
   getQueueStats,
   isWorkerActive,
   shutdown,
-  QUEUE_NAMES,
-  // Export buffer for shutdown handler
-  getViewCountBuffer: () => viewCountBuffer
+  QUEUE_NAMES
 };
