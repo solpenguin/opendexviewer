@@ -5,6 +5,7 @@ const voting = {
   voteStates: new Map(),
   holderCache: new Map(), // Cache holder status per token
   holderCacheMaxSize: 100, // Maximum cache entries to prevent memory leak
+  developmentMode: false, // When true, bypasses holder verification
 
   // Voting requirements (loaded from server)
   requirements: {
@@ -13,6 +14,20 @@ const voting = {
     rejectThreshold: -10,
     minReviewMinutes: 5,
     voteWeightTiers: []
+  },
+
+  // Check if development mode is enabled
+  async checkDevelopmentMode() {
+    try {
+      const result = await api.admin.getDevelopmentMode();
+      this.developmentMode = result.developmentMode === true;
+      if (this.developmentMode) {
+        console.log('[Voting] Development mode enabled - holder verification bypassed');
+      }
+    } catch (error) {
+      // Development mode check failed, default to disabled
+      this.developmentMode = false;
+    }
   },
 
   // Get the token mint for a submission
@@ -99,23 +114,26 @@ const voting = {
         return;
       }
 
-      // Check holder status BEFORE voting - force refresh to get current balance
-      const holderData = await this.checkHolderStatus(tokenMint, true);
+      // DEVELOPMENT MODE: Skip holder verification when enabled
+      if (!this.developmentMode) {
+        // Check holder status BEFORE voting - force refresh to get current balance
+        const holderData = await this.checkHolderStatus(tokenMint, true);
 
-      if (!holderData || !holderData.holdsToken) {
-        toast.error('You must hold this token to vote');
-        this.showHolderRequiredModal(tokenMint);
-        this.pendingVotes.delete(submissionId);
-        return;
-      }
+        if (!holderData || !holderData.holdsToken) {
+          toast.error('You must hold this token to vote');
+          this.showHolderRequiredModal(tokenMint);
+          this.pendingVotes.delete(submissionId);
+          return;
+        }
 
-      // Check minimum balance requirement (with proper null/NaN handling)
-      const percentageHeld = parseFloat(holderData.percentageHeld);
-      if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
-        toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
-        this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
-        this.pendingVotes.delete(submissionId);
-        return;
+        // Check minimum balance requirement (with proper null/NaN handling)
+        const percentageHeld = parseFloat(holderData.percentageHeld);
+        if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
+          toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
+          this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
+          this.pendingVotes.delete(submissionId);
+          return;
+        }
       }
 
       // Sign the vote with wallet
@@ -467,6 +485,9 @@ const voting = {
   async initForPage() {
     // Load voting requirements from server
     await this.loadRequirements();
+
+    // Check development mode
+    await this.checkDevelopmentMode();
 
     if (!wallet.connected) return;
 

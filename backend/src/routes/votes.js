@@ -6,6 +6,7 @@ const geckoTerminal = require('../services/geckoTerminal');
 const { cache, keys, TTL } = require('../services/cache');
 const { validateVote, validateVoteSignature, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
+const { adminSettings } = require('./admin');
 
 // All routes in this file require database access
 router.use(requireDatabase);
@@ -99,32 +100,57 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
     return res.status(404).json({ error: 'Submission not found' });
   }
 
-  // SERVER-SIDE HOLDER VERIFICATION: Do NOT trust frontend holderData
-  // Always verify directly from Solana RPC
-  const holderData = await verifyHolderStatus(voterWallet, submission.token_mint);
+  // DEVELOPMENT MODE: Bypass holder verification for testing
+  const isDevelopmentMode = adminSettings?.developmentMode === true;
 
-  // HOLDER VERIFICATION: Voter must hold the token
-  if (!holderData || !holderData.holdsToken) {
-    return res.status(403).json({
-      error: 'You must hold this token to vote',
-      code: 'NOT_HOLDER'
-    });
+  let holderData;
+  let voterPercentage = 0;
+  let voteWeight = 1;
+  let voterBalance = 0;
+
+  if (isDevelopmentMode) {
+    // In development mode, simulate holder data
+    holderData = {
+      wallet: voterWallet,
+      mint: submission.token_mint,
+      balance: 1000000,
+      holdsToken: true,
+      percentageHeld: 1.0,
+      verifiedAt: Date.now(),
+      developmentMode: true
+    };
+    voterPercentage = 1.0;
+    voteWeight = 1;
+    voterBalance = 1000000;
+    console.log('[Votes] Development mode - holder verification bypassed');
+  } else {
+    // SERVER-SIDE HOLDER VERIFICATION: Do NOT trust frontend holderData
+    // Always verify directly from Solana RPC
+    holderData = await verifyHolderStatus(voterWallet, submission.token_mint);
+
+    // HOLDER VERIFICATION: Voter must hold the token
+    if (!holderData || !holderData.holdsToken) {
+      return res.status(403).json({
+        error: 'You must hold this token to vote',
+        code: 'NOT_HOLDER'
+      });
+    }
+
+    // MINIMUM BALANCE CHECK: Voter must hold minimum percentage
+    voterPercentage = holderData.percentageHeld || 0;
+    if (voterPercentage < db.MIN_VOTE_BALANCE_PERCENT) {
+      return res.status(403).json({
+        error: `Minimum ${db.MIN_VOTE_BALANCE_PERCENT}% of supply required to vote`,
+        code: 'INSUFFICIENT_BALANCE',
+        required: db.MIN_VOTE_BALANCE_PERCENT,
+        held: voterPercentage
+      });
+    }
+
+    // Calculate vote weight based on holder percentage
+    voteWeight = db.calculateVoteWeight(voterPercentage);
+    voterBalance = holderData.balance || 0;
   }
-
-  // MINIMUM BALANCE CHECK: Voter must hold minimum percentage
-  const voterPercentage = holderData.percentageHeld || 0;
-  if (voterPercentage < db.MIN_VOTE_BALANCE_PERCENT) {
-    return res.status(403).json({
-      error: `Minimum ${db.MIN_VOTE_BALANCE_PERCENT}% of supply required to vote`,
-      code: 'INSUFFICIENT_BALANCE',
-      required: db.MIN_VOTE_BALANCE_PERCENT,
-      held: voterPercentage
-    });
-  }
-
-  // Calculate vote weight based on holder percentage
-  const voteWeight = db.calculateVoteWeight(voterPercentage);
-  const voterBalance = holderData.balance || 0;
 
   // Fetch market cap for tiered approval thresholds
   // Try cache first, then fetch from GeckoTerminal

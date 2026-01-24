@@ -174,16 +174,107 @@
         <p>Follow @TheSolPenguin for the latest news and announcements</p>
       </div>
 
-      <div class="twitter-embed-container">
-        <a class="twitter-timeline"
-           data-theme="dark"
-           data-chrome="noheader nofooter noborders transparent"
-           data-height="500"
-           href="https://twitter.com/TheSolPenguin">
-          Loading tweets from @TheSolPenguin...
-        </a>
-        <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+      <div class="twitter-embed-container" id="twitter-container">
+        <!-- Loading state -->
+        <div class="twitter-loading" id="twitter-loading">
+          <div class="loading-spinner"></div>
+          <p>Loading tweets...</p>
+        </div>
+
+        <!-- Twitter embed (hidden until loaded) -->
+        <div id="twitter-embed" style="display: none;">
+          <a class="twitter-timeline"
+             data-theme="dark"
+             data-chrome="noheader nofooter noborders transparent"
+             data-height="500"
+             href="https://twitter.com/TheSolPenguin">
+            Tweets by @TheSolPenguin
+          </a>
+        </div>
+
+        <!-- Fallback (shown if widget fails) -->
+        <div class="twitter-fallback" id="twitter-fallback" style="display: none;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color: #1da1f2; margin-bottom: 1rem;">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+          <p style="margin-bottom: 1rem; color: var(--text-secondary);">Twitter feed could not be loaded.</p>
+          <a href="https://twitter.com/TheSolPenguin" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 0.5rem;">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+            </svg>
+            Follow @TheSolPenguin on X
+          </a>
+        </div>
       </div>
+
+      <script>
+        // Twitter widget loader with fallback
+        (function() {
+          const loadingEl = document.getElementById('twitter-loading');
+          const embedEl = document.getElementById('twitter-embed');
+          const fallbackEl = document.getElementById('twitter-fallback');
+          const container = document.getElementById('twitter-container');
+
+          let widgetLoaded = false;
+
+          // Timeout: show fallback after 8 seconds if widget hasn't loaded
+          const timeout = setTimeout(function() {
+            if (!widgetLoaded) {
+              showFallback();
+            }
+          }, 8000);
+
+          function showFallback() {
+            loadingEl.style.display = 'none';
+            embedEl.style.display = 'none';
+            fallbackEl.style.display = 'flex';
+          }
+
+          function showEmbed() {
+            widgetLoaded = true;
+            clearTimeout(timeout);
+            loadingEl.style.display = 'none';
+            embedEl.style.display = 'block';
+            fallbackEl.style.display = 'none';
+          }
+
+          // Load Twitter widget script
+          const script = document.createElement('script');
+          script.src = 'https://platform.twitter.com/widgets.js';
+          script.async = true;
+          script.charset = 'utf-8';
+
+          script.onload = function() {
+            // Wait for Twitter to render the widget
+            if (window.twttr && window.twttr.widgets) {
+              window.twttr.widgets.load(embedEl);
+
+              // Twitter fires 'rendered' event when widget is ready
+              window.twttr.events.bind('rendered', function(event) {
+                showEmbed();
+              });
+
+              // Also check after a short delay in case event doesn't fire
+              setTimeout(function() {
+                const iframe = embedEl.querySelector('iframe');
+                if (iframe) {
+                  showEmbed();
+                } else if (!widgetLoaded) {
+                  showFallback();
+                }
+              }, 3000);
+            } else {
+              showFallback();
+            }
+          };
+
+          script.onerror = function() {
+            showFallback();
+          };
+
+          document.head.appendChild(script);
+        })();
+      </script>
     </section>
 
   </main>

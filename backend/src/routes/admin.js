@@ -474,11 +474,11 @@ router.patch('/settings',
 
 /**
  * GET /admin/settings/development-mode
- * Check if development mode is enabled (requires admin auth for security)
- * Privacy: This endpoint requires authentication to prevent information disclosure
+ * Check if development mode is enabled
+ * This is a PUBLIC endpoint so the frontend can check dev mode status
+ * No sensitive data is exposed - just a boolean flag
  */
 router.get('/settings/development-mode',
-  validateAdminSession,
   asyncHandler(async (req, res) => {
     res.json({
       developmentMode: adminSettings.developmentMode
@@ -509,4 +509,6 @@ router.post('/cleanup',
   })
 );
 
+// Export both the router and adminSettings for use by other routes
 module.exports = router;
+module.exports.adminSettings = adminSettings;

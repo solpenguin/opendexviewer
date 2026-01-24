@@ -47,7 +47,8 @@ const tokenDetail = {
       await Promise.all([
         this.loadChart(this.currentInterval),
         this.loadPools(),
-        this.loadSubmissions()
+        this.loadSubmissions(),
+        voting.initForPage() // Initialize voting (loads requirements & checks dev mode)
       ]);
 
       // Start price refresh and freshness timer
@@ -961,11 +962,35 @@ const tokenDetail = {
         countEl.textContent = `${this.submissions.length} submission${this.submissions.length !== 1 ? 's' : ''}`;
       }
 
+      // Show development mode indicator if active
+      this.showDevModeIndicator();
+
       // Update the combined community section
       this.updateCommunitySection();
       this.renderSubmissions('banner');
     } catch (error) {
       console.error('Failed to load submissions:', error);
+    }
+  },
+
+  // Show development mode indicator
+  showDevModeIndicator() {
+    // Only show if development mode is active and indicator doesn't already exist
+    if (!voting.developmentMode || document.querySelector('.dev-mode-indicator')) return;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'dev-mode-indicator';
+    indicator.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+      </svg>
+      <span>Development Mode - Holder verification bypassed for voting</span>
+    `;
+
+    // Insert at the top of the content area
+    const content = document.getElementById('token-content');
+    if (content) {
+      content.insertBefore(indicator, content.firstChild);
     }
   },
 
