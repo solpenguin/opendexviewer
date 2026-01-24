@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_tokens_symbol_trgm ON tokens USING gin(symbol gin
 CREATE TABLE IF NOT EXISTS submissions (
     id SERIAL PRIMARY KEY,
     token_mint VARCHAR(44) NOT NULL,
-    submission_type VARCHAR(20) NOT NULL CHECK (submission_type IN ('banner', 'twitter', 'telegram', 'discord', 'website', 'other')),
+    submission_type VARCHAR(20) NOT NULL CHECK (submission_type IN ('banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other')),
     content_url TEXT NOT NULL,
     submitter_wallet VARCHAR(44),
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),

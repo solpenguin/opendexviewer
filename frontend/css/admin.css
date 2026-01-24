@@ -1614,3 +1614,151 @@
     overflow-y: auto;
   }
 }
+
+/* =============================================
+   Database Management Section
+   ============================================= */
+
+.database-status {
+  margin: 1rem 0;
+}
+
+.database-status-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.database-status-card.healthy {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+
+.database-status-card.unhealthy {
+  border-color: var(--yellow);
+  background: var(--yellow-light);
+}
+
+.database-status-card.error {
+  border-color: var(--red);
+  background: var(--red-light);
+}
+
+.database-status-card .status-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.database-status-card.healthy .status-header {
+  color: var(--green);
+}
+
+.database-status-card.unhealthy .status-header {
+  color: var(--yellow);
+}
+
+.database-status-card.error .status-header {
+  color: var(--red);
+}
+
+.database-status-card .status-message {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.status-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.75rem;
+  background: var(--bg-tertiary);
+}
+
+.check-item.passed {
+  color: var(--green);
+}
+
+.check-item.failed {
+  color: var(--red);
+}
+
+.status-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.issue-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  font-size: 0.875rem;
+}
+
+.issue-item .issue-type {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.issue-item .issue-detail {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.issue-item .issue-severity {
+  margin-left: auto;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.issue-item.critical .issue-severity {
+  background: var(--red-light);
+  color: var(--red);
+}
+
+.issue-item.high .issue-severity {
+  background: var(--yellow-light);
+  color: var(--yellow);
+}
+
+.issue-item.medium .issue-severity {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-primary);
+}
+
+.issue-item.low .issue-severity {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.setting-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.setting-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}

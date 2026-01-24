@@ -120,6 +120,17 @@ const adminApi = {
       method: 'PATCH',
       body: JSON.stringify(settings)
     });
+  },
+
+  // Database management
+  async getDatabaseStatus() {
+    return this.request('/admin/database/status');
+  },
+
+  async repairDatabase() {
+    return this.request('/admin/database/repair', {
+      method: 'POST'
+    });
   }
 };
 
@@ -203,6 +214,10 @@ const adminPanel = {
 
     // Development mode toggle
     document.getElementById('dev-mode-toggle')?.addEventListener('change', (e) => this.toggleDevMode(e.target.checked));
+
+    // Database management buttons
+    document.getElementById('check-database-btn')?.addEventListener('click', () => this.checkDatabaseStatus());
+    document.getElementById('repair-database-btn')?.addEventListener('click', () => this.repairDatabase());
   },
 
   bindPagination(type) {
@@ -692,6 +707,9 @@ const adminPanel = {
 
       // Update warning visibility
       this.updateDevModeWarning(developmentMode);
+
+      // Also load database status when settings tab is opened
+      this.checkDatabaseStatus();
     } catch (error) {
       console.error('Failed to load settings:', error);
       toast.error('Failed to load settings');
@@ -725,6 +743,125 @@ const adminPanel = {
     const warning = document.getElementById('dev-mode-warning');
     if (warning) {
       warning.style.display = enabled ? 'flex' : 'none';
+    }
+  },
+
+  // Check database schema status
+  async checkDatabaseStatus() {
+    const statusEl = document.getElementById('database-status');
+    if (!statusEl) return;
+
+    statusEl.innerHTML = `
+      <div class="loading-state">
+        <div class="loading-spinner small"></div>
+        <span>Checking database status...</span>
+      </div>
+    `;
+
+    try {
+      const result = await adminApi.getDatabaseStatus();
+      const status = result.data;
+
+      if (status.healthy) {
+        statusEl.innerHTML = `
+          <div class="database-status-card healthy">
+            <div class="status-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <span>Database Healthy</span>
+            </div>
+            <p class="status-message">All schema checks passed. No repairs needed.</p>
+            <div class="status-checks">
+              ${status.checks.map(check => `
+                <div class="check-item ${check.passed ? 'passed' : 'failed'}">
+                  <span>${check.passed ? '✓' : '✗'}</span>
+                  <span>${this.escapeHtml(check.name.replace(/_/g, ' '))}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        statusEl.innerHTML = `
+          <div class="database-status-card unhealthy">
+            <div class="status-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span>Issues Found (${status.issues.length})</span>
+            </div>
+            <p class="status-message">Click "Repair Database" to fix the following issues:</p>
+            <div class="status-issues">
+              ${status.issues.map(issue => `
+                <div class="issue-item ${issue.severity}">
+                  <span class="issue-type">${this.escapeHtml(issue.type.replace(/_/g, ' '))}</span>
+                  ${issue.constraint ? `<span class="issue-detail">Constraint: ${this.escapeHtml(issue.constraint)}</span>` : ''}
+                  ${issue.missingTypes ? `<span class="issue-detail">Missing types: ${issue.missingTypes.join(', ')}</span>` : ''}
+                  ${issue.table ? `<span class="issue-detail">Table: ${this.escapeHtml(issue.table)}</span>` : ''}
+                  ${issue.column ? `<span class="issue-detail">Column: ${this.escapeHtml(issue.column)}</span>` : ''}
+                  ${issue.columns ? `<span class="issue-detail">Columns: ${issue.columns.join(', ')}</span>` : ''}
+                  <span class="issue-severity">${issue.severity}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Failed to check database status:', error);
+      statusEl.innerHTML = `
+        <div class="database-status-card error">
+          <div class="status-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span>Error</span>
+          </div>
+          <p class="status-message">${this.escapeHtml(error.message)}</p>
+        </div>
+      `;
+    }
+  },
+
+  // Repair database schema
+  async repairDatabase() {
+    const btn = document.getElementById('repair-database-btn');
+    if (!btn) return;
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `
+      <div class="loading-spinner small"></div>
+      <span>Repairing...</span>
+    `;
+
+    try {
+      const result = await adminApi.repairDatabase();
+      const data = result.data;
+
+      if (data.success) {
+        toast.success(`Database repaired! ${data.repairs.length} fixes applied.`);
+      } else if (data.repairs.length > 0) {
+        toast.warning(`Partial repair: ${data.repairs.length} fixes applied, ${data.errors.length} errors.`);
+      } else {
+        toast.error('Repair failed. Check console for details.');
+        console.error('Database repair errors:', data.errors);
+      }
+
+      // Refresh status
+      this.checkDatabaseStatus();
+    } catch (error) {
+      console.error('Failed to repair database:', error);
+      toast.error(`Repair failed: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
     }
   }
 };

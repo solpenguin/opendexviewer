@@ -720,12 +720,19 @@ const submitPage = {
     }
   },
 
-  // Create signature message for submission (must match backend)
+  // Create signature message for single submission (must match backend)
   createSubmissionSignatureMessage(submissionType, tokenMint, timestamp) {
     return `OpenDex Submit: ${submissionType} for ${tokenMint} at ${timestamp}`;
   },
 
-  // Submit form - handles multiple submissions
+  // Create signature message for batch submission (must match backend)
+  // Types are sorted alphabetically for consistent signature verification
+  createBatchSubmissionSignatureMessage(submissionTypes, tokenMint, timestamp) {
+    const sortedTypes = [...submissionTypes].sort().join(',');
+    return `OpenDex Submit Batch: ${sortedTypes} for ${tokenMint} at ${timestamp}`;
+  },
+
+  // Submit form - handles multiple submissions with a SINGLE signature
   async submitForm() {
     if (!this.walletConnected) {
       toast.error('Please connect your wallet first');
@@ -754,10 +761,8 @@ const submitPage = {
     Object.entries(this.fieldValidation).forEach(([type, data]) => {
       if (data.valid && data.url) {
         submissions.push({
-          tokenMint,
           submissionType: type,
-          contentUrl: data.url,
-          submitterWallet: wallet.address
+          contentUrl: data.url
         });
       }
     });
@@ -768,55 +773,55 @@ const submitPage = {
     }
 
     const submitBtn = document.getElementById('submit-btn');
-    const submitBtnText = document.getElementById('submit-btn-text');
 
-    // Sign each submission with wallet
-    // We need to sign each submission type separately
+    // Create a SINGLE signature for all submissions
     toast.info('Please sign the submission with your wallet...');
 
-    const signedSubmissions = [];
-    for (const submission of submissions) {
-      const timestamp = Date.now();
-      const message = this.createSubmissionSignatureMessage(submission.submissionType, tokenMint, timestamp);
+    const timestamp = Date.now();
+    const submissionTypes = submissions.map(s => s.submissionType);
+    const message = this.createBatchSubmissionSignatureMessage(submissionTypes, tokenMint, timestamp);
 
-      try {
-        const signatureData = await wallet.signMessage(message);
-        signedSubmissions.push({
-          ...submission,
-          signature: signatureData.signature,
-          signatureTimestamp: timestamp
-        });
-      } catch (error) {
-        console.error('Failed to sign submission:', error);
-        if (error.message?.includes('User rejected')) {
-          toast.warning('Submission cancelled - signature required');
-        } else {
-          toast.error(`Failed to sign ${submission.submissionType} submission`);
-        }
-        return;
+    let signatureData;
+    try {
+      signatureData = await wallet.signMessage(message);
+    } catch (error) {
+      console.error('Failed to sign submission:', error);
+      if (error.message?.includes('User rejected')) {
+        toast.warning('Submission cancelled - signature required');
+      } else {
+        toast.error('Failed to sign submission');
       }
+      return;
     }
 
     // Disable button during submission
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
       <div class="loading-spinner small"></div>
-      <span>Submitting ${signedSubmissions.length} item${signedSubmissions.length > 1 ? 's' : ''}...</span>
+      <span>Submitting ${submissions.length} item${submissions.length > 1 ? 's' : ''}...</span>
     `;
 
     try {
-      // Submit all items
-      const results = [];
-      const errors = [];
+      // Submit all items in a single batch request
+      const batchData = {
+        tokenMint,
+        submissions,
+        submitterWallet: wallet.address,
+        signature: signatureData.signature,
+        signatureTimestamp: timestamp
+      };
 
-      for (const submission of signedSubmissions) {
-        try {
-          const result = await api.submissions.create(submission);
-          results.push({ type: submission.submissionType, result });
-        } catch (error) {
-          errors.push({ type: submission.submissionType, error: error.message });
-        }
-      }
+      const response = await api.submissions.createBatch(batchData);
+
+      // Parse results and errors from batch response
+      const results = (response.results || []).map(r => ({
+        type: r.type,
+        result: r.submission
+      }));
+      const errors = (response.errors || []).map(e => ({
+        type: e.type,
+        error: e.error
+      }));
 
       // Show results with detailed feedback
       if (results.length > 0 && errors.length === 0) {

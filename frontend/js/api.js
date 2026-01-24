@@ -426,6 +426,14 @@ const api = {
       });
     },
 
+    // Create multiple submissions with a single signature
+    async createBatch(data) {
+      return api.request('/api/submissions/batch', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+    },
+
     async get(id) {
       return api.request(`/api/submissions/${id}`);
     },

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validateSubmission, validateSubmissionSignature, validateWallet, asyncHandler, requireDatabase, sanitizeString } = require('../middleware/validation');
+const { validateMint, validateSubmission, validateSubmissionSignature, validateBatchSubmissions, validateBatchSubmissionSignature, validateWallet, asyncHandler, requireDatabase, sanitizeString } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
@@ -93,6 +93,77 @@ router.post('/', strictLimiter, validateSubmission, validateSubmissionSignature,
     }
     throw error; // Re-throw other errors to be handled by asyncHandler
   }
+}));
+
+// POST /api/submissions/batch - Create multiple submissions with a single signature
+// This reduces the number of wallet signature requests from N to 1
+router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubmissionSignature, asyncHandler(async (req, res) => {
+  const { tokenMint, submissions, submitterWallet } = req.body;
+
+  const results = [];
+  const errors = [];
+
+  // Process each submission
+  for (const sub of submissions) {
+    try {
+      const submission = await db.createSubmission({
+        tokenMint,
+        submissionType: sub.submissionType,
+        contentUrl: sub.contentUrl,
+        submitterWallet: submitterWallet || null
+      });
+
+      results.push({
+        type: sub.submissionType,
+        success: true,
+        submission: sanitizeSubmissionOutput(submission)
+      });
+    } catch (error) {
+      if (error.code === 'DUPLICATE_SUBMISSION') {
+        errors.push({
+          type: sub.submissionType,
+          success: false,
+          error: 'This content has already been submitted for this token'
+        });
+      } else {
+        errors.push({
+          type: sub.submissionType,
+          success: false,
+          error: error.message || 'Failed to create submission'
+        });
+      }
+    }
+  }
+
+  // Clear cache for this token's submissions
+  await cache.clearPattern(keys.submissions(tokenMint));
+
+  // Determine response status
+  const successCount = results.length;
+  const errorCount = errors.length;
+
+  if (successCount === 0 && errorCount > 0) {
+    // All failed
+    return res.status(400).json({
+      message: 'All submissions failed',
+      results: [],
+      errors,
+      successCount: 0,
+      errorCount
+    });
+  }
+
+  // At least some succeeded
+  res.status(201).json({
+    message: successCount === submissions.length
+      ? 'All submissions created successfully'
+      : `${successCount} of ${submissions.length} submissions created`,
+    results,
+    errors,
+    successCount,
+    errorCount,
+    approvalThreshold: db.AUTO_APPROVE_THRESHOLD
+  });
 }));
 
 // GET /api/submissions/token/:mint - Get submissions for a token

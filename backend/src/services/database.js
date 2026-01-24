@@ -1282,6 +1282,288 @@ async function deleteUserData(walletAddress) {
   }
 }
 
+// ==========================================
+// Database Schema Management & Repair
+// ==========================================
+
+// Expected submission types (keep in sync with validation.js and init.sql)
+const EXPECTED_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other'];
+
+/**
+ * Get current database schema status
+ * Checks for missing columns, outdated constraints, etc.
+ */
+async function getDatabaseSchemaStatus() {
+  if (!pool) {
+    return { error: 'Database not connected', issues: [], healthy: false };
+  }
+
+  const issues = [];
+  const checks = [];
+
+  try {
+    // Check 1: Verify submissions table exists
+    const tablesResult = await pool.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name IN ('submissions', 'votes', 'tokens', 'vote_tallies')
+    `);
+    const existingTables = tablesResult.rows.map(r => r.table_name);
+    const requiredTables = ['submissions', 'votes', 'tokens', 'vote_tallies'];
+    for (const table of requiredTables) {
+      if (!existingTables.includes(table)) {
+        issues.push({ type: 'missing_table', table, severity: 'critical' });
+      }
+    }
+    checks.push({ name: 'required_tables', passed: issues.length === 0 });
+
+    // Check 2: Verify submission_type constraint includes all expected types
+    const constraintResult = await pool.query(`
+      SELECT pg_get_constraintdef(oid) as constraint_def
+      FROM pg_constraint
+      WHERE conrelid = 'submissions'::regclass
+      AND conname = 'submissions_submission_type_check'
+    `);
+
+    if (constraintResult.rows.length > 0) {
+      const constraintDef = constraintResult.rows[0].constraint_def;
+      const missingTypes = [];
+      for (const type of EXPECTED_SUBMISSION_TYPES) {
+        if (!constraintDef.includes(`'${type}'`)) {
+          missingTypes.push(type);
+        }
+      }
+      if (missingTypes.length > 0) {
+        issues.push({
+          type: 'outdated_constraint',
+          constraint: 'submissions_submission_type_check',
+          missingTypes,
+          severity: 'high',
+          currentDef: constraintDef
+        });
+      }
+      checks.push({ name: 'submission_type_constraint', passed: missingTypes.length === 0, missingTypes });
+    } else {
+      issues.push({
+        type: 'missing_constraint',
+        constraint: 'submissions_submission_type_check',
+        severity: 'high'
+      });
+      checks.push({ name: 'submission_type_constraint', passed: false });
+    }
+
+    // Check 3: Verify vote_tallies has weighted_score column
+    const weightedScoreResult = await pool.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'vote_tallies' AND column_name = 'weighted_score'
+    `);
+    const hasWeightedScore = weightedScoreResult.rows.length > 0;
+    if (!hasWeightedScore) {
+      issues.push({
+        type: 'missing_column',
+        table: 'vote_tallies',
+        column: 'weighted_score',
+        severity: 'medium'
+      });
+    }
+    checks.push({ name: 'weighted_score_column', passed: hasWeightedScore });
+
+    // Check 4: Verify votes has voter_balance and voter_percentage columns
+    const votesColumnsResult = await pool.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'votes' AND column_name IN ('voter_balance', 'voter_percentage', 'updated_at')
+    `);
+    const votesColumns = votesColumnsResult.rows.map(r => r.column_name);
+    const missingVotesColumns = ['voter_balance', 'voter_percentage', 'updated_at'].filter(c => !votesColumns.includes(c));
+    if (missingVotesColumns.length > 0) {
+      issues.push({
+        type: 'missing_columns',
+        table: 'votes',
+        columns: missingVotesColumns,
+        severity: 'medium'
+      });
+    }
+    checks.push({ name: 'votes_extra_columns', passed: missingVotesColumns.length === 0, missingColumns: missingVotesColumns });
+
+    // Check 5: Verify submissions has unique constraint on token_mint + submission_type + content_url
+    const uniqueConstraintResult = await pool.query(`
+      SELECT indexname FROM pg_indexes
+      WHERE tablename = 'submissions'
+      AND indexdef LIKE '%token_mint%'
+      AND indexdef LIKE '%submission_type%'
+      AND indexdef LIKE '%content_url%'
+      AND indexdef LIKE '%UNIQUE%'
+    `);
+    const hasUniqueConstraint = uniqueConstraintResult.rows.length > 0;
+    checks.push({ name: 'submissions_unique_constraint', passed: hasUniqueConstraint });
+    if (!hasUniqueConstraint) {
+      issues.push({
+        type: 'missing_index',
+        table: 'submissions',
+        index: 'unique on (token_mint, submission_type, content_url)',
+        severity: 'low'
+      });
+    }
+
+    return {
+      healthy: issues.filter(i => i.severity === 'critical' || i.severity === 'high').length === 0,
+      issues,
+      checks,
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    return {
+      healthy: false,
+      error: error.message,
+      issues,
+      checks: [],
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * Repair database schema - apply all pending migrations
+ * Returns a report of what was fixed
+ */
+async function repairDatabaseSchema() {
+  if (!pool) {
+    return { success: false, error: 'Database not connected', repairs: [] };
+  }
+
+  const repairs = [];
+  const errors = [];
+
+  try {
+    // Get current status to see what needs fixing
+    const status = await getDatabaseSchemaStatus();
+
+    for (const issue of status.issues) {
+      try {
+        switch (issue.type) {
+          case 'outdated_constraint':
+            if (issue.constraint === 'submissions_submission_type_check') {
+              // Drop and recreate the constraint with all types
+              await pool.query(`
+                ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_submission_type_check
+              `);
+              await pool.query(`
+                ALTER TABLE submissions ADD CONSTRAINT submissions_submission_type_check
+                CHECK (submission_type IN ('banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other'))
+              `);
+              repairs.push({
+                type: 'constraint_updated',
+                constraint: 'submissions_submission_type_check',
+                addedTypes: issue.missingTypes
+              });
+            }
+            break;
+
+          case 'missing_constraint':
+            if (issue.constraint === 'submissions_submission_type_check') {
+              await pool.query(`
+                ALTER TABLE submissions ADD CONSTRAINT submissions_submission_type_check
+                CHECK (submission_type IN ('banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other'))
+              `);
+              repairs.push({
+                type: 'constraint_added',
+                constraint: 'submissions_submission_type_check'
+              });
+            }
+            break;
+
+          case 'missing_column':
+            if (issue.table === 'vote_tallies' && issue.column === 'weighted_score') {
+              await pool.query(`
+                ALTER TABLE vote_tallies ADD COLUMN IF NOT EXISTS weighted_score DECIMAL(10,2) DEFAULT 0
+              `);
+              repairs.push({
+                type: 'column_added',
+                table: 'vote_tallies',
+                column: 'weighted_score'
+              });
+            }
+            break;
+
+          case 'missing_columns':
+            if (issue.table === 'votes') {
+              for (const col of issue.columns) {
+                if (col === 'voter_balance') {
+                  await pool.query(`
+                    ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_balance DECIMAL(30,0) DEFAULT 0
+                  `);
+                  repairs.push({ type: 'column_added', table: 'votes', column: 'voter_balance' });
+                }
+                if (col === 'voter_percentage') {
+                  await pool.query(`
+                    ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_percentage DECIMAL(10,6) DEFAULT 0
+                  `);
+                  repairs.push({ type: 'column_added', table: 'votes', column: 'voter_percentage' });
+                }
+                if (col === 'updated_at') {
+                  await pool.query(`
+                    ALTER TABLE votes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                  `);
+                  repairs.push({ type: 'column_added', table: 'votes', column: 'updated_at' });
+                }
+              }
+            }
+            break;
+
+          case 'missing_index':
+            if (issue.table === 'submissions') {
+              // Create unique index for duplicate prevention
+              await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_submissions_unique_content
+                ON submissions(token_mint, submission_type, content_url)
+              `);
+              repairs.push({
+                type: 'index_added',
+                table: 'submissions',
+                index: 'idx_submissions_unique_content'
+              });
+            }
+            break;
+
+          case 'missing_table':
+            // Don't auto-create tables - too risky, require manual init
+            errors.push({
+              issue,
+              error: 'Missing tables must be created manually using init.sql'
+            });
+            break;
+        }
+      } catch (repairError) {
+        errors.push({
+          issue,
+          error: repairError.message
+        });
+      }
+    }
+
+    // Get updated status after repairs
+    const newStatus = await getDatabaseSchemaStatus();
+
+    return {
+      success: errors.length === 0,
+      repairs,
+      errors,
+      previousIssues: status.issues.length,
+      remainingIssues: newStatus.issues.length,
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      repairs,
+      errors,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
 // Check if database is ready for queries
 function isReady() {
   return pool !== null && isConnected;
@@ -1401,6 +1683,9 @@ module.exports = {
   getApprovalThreshold,
   // GDPR data deletion
   deleteUserData,
+  // Database schema management
+  getDatabaseSchemaStatus,
+  repairDatabaseSchema,
   // Constants
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,

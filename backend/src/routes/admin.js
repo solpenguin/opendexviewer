@@ -509,6 +509,40 @@ router.post('/cleanup',
   })
 );
 
+/**
+ * GET /admin/database/status
+ * Check database schema status and show what migrations are needed
+ */
+router.get('/database/status',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const status = await db.getDatabaseSchemaStatus();
+
+    res.json({
+      success: true,
+      data: status
+    });
+  })
+);
+
+/**
+ * POST /admin/database/repair
+ * Apply all pending database migrations/repairs
+ */
+router.post('/database/repair',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const result = await db.repairDatabaseSchema();
+
+    res.json({
+      success: true,
+      data: result
+    });
+  })
+);
+
 // Export both the router and adminSettings for use by other routes
 module.exports = router;
 module.exports.adminSettings = adminSettings;

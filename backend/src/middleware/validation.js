@@ -458,6 +458,22 @@ function createSubmissionSignatureMessage(submissionType, tokenMint, timestamp) 
 }
 
 /**
+ * Create the message to be signed for a batch submission
+ * Format: "OpenDex Submit Batch: [types-comma-separated] for [tokenMint] at [timestamp]"
+ * Types are sorted alphabetically for consistent signature verification
+ *
+ * @param {string[]} submissionTypes - Array of submission types
+ * @param {string} tokenMint - The token mint address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createBatchSubmissionSignatureMessage(submissionTypes, tokenMint, timestamp) {
+  // Sort types alphabetically for consistent verification
+  const sortedTypes = [...submissionTypes].sort().join(',');
+  return `OpenDex Submit Batch: ${sortedTypes} for ${tokenMint} at ${timestamp}`;
+}
+
+/**
  * Create signature message for data deletion (GDPR)
  * @param {string} wallet - The wallet address
  * @param {number} timestamp - Unix timestamp in milliseconds
@@ -678,6 +694,198 @@ function validateSubmissionSignature(req, res, next) {
   next();
 }
 
+/**
+ * Validate batch submissions array format
+ * Used before signature verification
+ */
+function validateBatchSubmissions(req, res, next) {
+  const { tokenMint, submissions, submitterWallet } = req.body;
+  const validTypes = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
+
+  // Validate required fields
+  if (!tokenMint || !submissions || !submitterWallet) {
+    return res.status(400).json({
+      error: 'Missing required fields',
+      required: ['tokenMint', 'submissions', 'submitterWallet']
+    });
+  }
+
+  // Validate submissions is an array
+  if (!Array.isArray(submissions) || submissions.length === 0) {
+    return res.status(400).json({
+      error: 'Submissions must be a non-empty array'
+    });
+  }
+
+  // Limit batch size
+  if (submissions.length > 6) {
+    return res.status(400).json({
+      error: 'Maximum 6 submissions per batch'
+    });
+  }
+
+  // Validate token mint
+  if (!SOLANA_ADDRESS_REGEX.test(tokenMint)) {
+    return res.status(400).json({ error: 'Invalid token mint address' });
+  }
+
+  // Validate submitter wallet
+  if (!SOLANA_ADDRESS_REGEX.test(submitterWallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  // Validate each submission
+  const seenTypes = new Set();
+  for (const sub of submissions) {
+    if (!sub.submissionType || !sub.contentUrl) {
+      return res.status(400).json({
+        error: 'Each submission must have submissionType and contentUrl'
+      });
+    }
+
+    if (!validTypes.includes(sub.submissionType)) {
+      return res.status(400).json({
+        error: `Invalid submission type: ${sub.submissionType}`,
+        validTypes
+      });
+    }
+
+    // Check for duplicate types in batch
+    if (seenTypes.has(sub.submissionType)) {
+      return res.status(400).json({
+        error: `Duplicate submission type in batch: ${sub.submissionType}`
+      });
+    }
+    seenTypes.add(sub.submissionType);
+
+    // Validate URL length
+    if (sub.contentUrl.length > MAX_URL_LENGTH) {
+      return res.status(400).json({
+        error: `URL too long for ${sub.submissionType} (max ${MAX_URL_LENGTH} characters)`
+      });
+    }
+
+    // Validate basic URL format
+    if (!isValidUrl(sub.contentUrl)) {
+      return res.status(400).json({
+        error: `Invalid URL format for ${sub.submissionType}`
+      });
+    }
+
+    // Validate URL domain
+    const domainValidation = validateUrlDomain(sub.contentUrl, sub.submissionType);
+    if (!domainValidation.valid) {
+      return res.status(400).json({
+        error: `${sub.submissionType}: ${domainValidation.message}`
+      });
+    }
+
+    // Type-specific validation for banners
+    if (sub.submissionType === 'banner') {
+      const urlLower = sub.contentUrl.toLowerCase();
+      const isImageUrl = /\.(jpg|jpeg|png|gif|webp|svg)(\?.*)?$/i.test(sub.contentUrl) ||
+        urlLower.includes('imgur.com') ||
+        urlLower.includes('i.imgur.com') ||
+        urlLower.includes('cloudinary.com') ||
+        urlLower.includes('imagekit.io') ||
+        urlLower.includes('ipfs.io') ||
+        urlLower.includes('arweave.net') ||
+        urlLower.includes('nftstorage.link');
+
+      if (!isImageUrl) {
+        return res.status(400).json({
+          error: 'Banner URL must be a direct image link (PNG, JPG, GIF, WebP, SVG) or from a known image host'
+        });
+      }
+    }
+
+    // Normalize URL
+    try {
+      const normalized = new URL(sub.contentUrl);
+      sub.contentUrl = normalized.href;
+    } catch {
+      return res.status(400).json({
+        error: `Invalid URL format for ${sub.submissionType}`
+      });
+    }
+  }
+
+  next();
+}
+
+/**
+ * Middleware to validate wallet signature for batch submissions
+ * Requires: signature, signatureTimestamp, submitterWallet, tokenMint, submissions in request body
+ */
+function validateBatchSubmissionSignature(req, res, next) {
+  const { tokenMint, submissions, submitterWallet, signature, signatureTimestamp } = req.body;
+
+  // Check if signature fields are present
+  if (!signature || !signatureTimestamp || !submitterWallet) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the submission with your wallet',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  // Validate signature timestamp (must be within expiry window)
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({
+      error: 'Signature expired',
+      message: 'Please sign again - signatures expire after 2 minutes',
+      code: 'SIGNATURE_EXPIRED'
+    });
+  }
+
+  // Prevent future timestamps (with 10 second tolerance for clock skew)
+  if (timestamp > now + 10000) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      message: 'Signature timestamp is in the future',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  // Validate signature format (should be array of numbers)
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({
+      error: 'Invalid signature format',
+      code: 'INVALID_SIGNATURE_FORMAT'
+    });
+  }
+
+  // Extract submission types for signature verification
+  const submissionTypes = submissions.map(s => s.submissionType);
+
+  // Recreate the expected message (types are sorted in the function)
+  const expectedMessage = createBatchSubmissionSignatureMessage(submissionTypes, tokenMint, timestamp);
+
+  // Verify the signature
+  const isValid = verifyWalletSignature(expectedMessage, signature, submitterWallet);
+
+  if (!isValid) {
+    return res.status(401).json({
+      error: 'Invalid signature',
+      message: 'Wallet signature verification failed',
+      code: 'INVALID_SIGNATURE'
+    });
+  }
+
+  // Signature is valid - proceed
+  next();
+}
+
 // ==========================================
 // Admin Authentication
 // ==========================================
@@ -780,8 +988,11 @@ module.exports = {
   validateVoteSignature,
   validateSubmissionSignature,
   validateWalletSignature,
+  validateBatchSubmissions,
+  validateBatchSubmissionSignature,
   createVoteSignatureMessage,
   createSubmissionSignatureMessage,
+  createBatchSubmissionSignatureMessage,
   createDataDeletionSignatureMessage,
   SIGNATURE_EXPIRY_MS,
   // Admin functions
