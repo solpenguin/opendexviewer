@@ -44,6 +44,7 @@ router.get('/community/:mint',
         twitter: null,
         telegram: null,
         discord: null,
+        tiktok: null,
         website: null
       },
       submissionCount: submissions.length
@@ -164,6 +165,7 @@ router.get('/community/batch',
           twitter: null,
           telegram: null,
           discord: null,
+          tiktok: null,
           website: null
         }
       };

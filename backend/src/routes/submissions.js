@@ -9,7 +9,7 @@ const { strictLimiter } = require('../middleware/rateLimit');
 router.use(requireDatabase);
 
 // Valid submission types (for query param validation)
-const VALID_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'website'];
+const VALID_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
 const VALID_STATUSES = ['pending', 'approved', 'rejected', 'all'];
 
 /**

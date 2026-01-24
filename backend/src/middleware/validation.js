@@ -21,6 +21,7 @@ const URL_ALLOWLISTS = {
   twitter: ['twitter.com', 'x.com', 'mobile.twitter.com'],
   telegram: ['t.me', 'telegram.me', 'telegram.org'],
   discord: ['discord.gg', 'discord.com', 'discordapp.com'],
+  tiktok: ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com'],
   banner: null, // Any image host allowed
   website: null // Any website allowed
 };
@@ -133,7 +134,7 @@ const MAX_URL_LENGTH = 2000;
 // Validate submission input
 function validateSubmission(req, res, next) {
   const { tokenMint, submissionType, contentUrl } = req.body;
-  const validTypes = ['banner', 'twitter', 'telegram', 'discord', 'website'];
+  const validTypes = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
 
   // Required fields
   if (!tokenMint || !submissionType || !contentUrl) {

@@ -6,7 +6,8 @@
       "Bash(npm install:*)",
       "Bash(timeout 15 node:*)",
       "Bash(curl:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

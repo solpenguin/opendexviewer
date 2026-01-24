@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jupiterService = require('../services/jupiter');
 const geckoService = require('../services/geckoTerminal');
+const birdeyeService = require('../services/birdeye');
 const solanaService = require('../services/solana');
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
@@ -622,7 +623,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       const results = await Promise.all(fetchPromises);
       const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
-      // Process holder count - try fallback if Jupiter didn't return a valid count
+      // Process holder count - try fallbacks if Jupiter didn't return a valid count
+      // Priority: Jupiter > Helius > Birdeye
       let finalHolders = fetchedHolders;
 
       // If Jupiter didn't return a valid holder count (or returned a suspicious value), try Helius
@@ -632,6 +634,19 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         // Use Helius count if it's better than Jupiter's
         if (heliusHolders !== null && heliusHolders > (finalHolders || 0)) {
           finalHolders = heliusHolders;
+        }
+      }
+
+      // If still no valid holder count, try Birdeye as final fallback
+      if (finalHolders === null || finalHolders === undefined || finalHolders <= 1) {
+        try {
+          const birdeyeOverview = await birdeyeService.getTokenOverview(mint);
+          if (birdeyeOverview && birdeyeOverview.holder && birdeyeOverview.holder > (finalHolders || 0)) {
+            finalHolders = birdeyeOverview.holder;
+            console.log(`[Tokens] Birdeye holder count for ${mint}: ${finalHolders}`);
+          }
+        } catch (err) {
+          // Birdeye fallback failed, continue with existing value
         }
       }
 

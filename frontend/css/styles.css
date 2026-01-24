@@ -1567,6 +1567,12 @@ a:hover {
   color: #7289DA;
 }
 
+.community-link-chip.tiktok:hover {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: #000000;
+  color: #000000;
+}
+
 .community-link-chip.website:hover {
   background: var(--accent-muted);
   border-color: var(--accent-primary);
@@ -3284,6 +3290,12 @@ a:hover {
   border-color: #5865f2;
   background: rgba(88, 101, 242, 0.1);
   color: #5865f2;
+}
+
+.preview-link-chip.tiktok {
+  border-color: #000000;
+  background: rgba(0, 0, 0, 0.1);
+  color: #000000;
 }
 
 .preview-link-chip.website {
