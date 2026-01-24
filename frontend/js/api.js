@@ -461,6 +461,14 @@ const api = {
       });
     },
 
+    // Cast multiple votes with a single signature
+    async castBatch(data) {
+      return api.request('/api/votes/batch', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+    },
+
     async getForSubmission(submissionId) {
       return api.request(`/api/votes/submission/${submissionId}`);
     },

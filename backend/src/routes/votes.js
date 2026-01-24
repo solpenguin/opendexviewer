@@ -4,7 +4,7 @@ const db = require('../services/database');
 const solanaService = require('../services/solana');
 const geckoTerminal = require('../services/geckoTerminal');
 const { cache, keys, TTL } = require('../services/cache');
-const { validateVote, validateVoteSignature, asyncHandler, requireDatabase } = require('../middleware/validation');
+const { validateVote, validateVoteSignature, validateBatchVotes, validateBatchVoteSignature, asyncHandler, requireDatabase } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
 const { adminSettings } = require('./admin');
 
@@ -235,6 +235,154 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
     },
     submissionStatus: updatedSubmission?.status || 'unknown'
     // Privacy: Don't expose voterInfo (balance, percentage, weight) in response
+  });
+}));
+
+// POST /api/votes/batch - Cast multiple votes with a single signature
+router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignature, asyncHandler(async (req, res) => {
+  const { votes, voterWallet } = req.body;
+
+  const results = [];
+  const errors = [];
+  const tokensToInvalidate = new Set();
+
+  // DEVELOPMENT MODE: Bypass holder verification for testing
+  const isDevelopmentMode = adminSettings?.developmentMode === true;
+
+  for (const vote of votes) {
+    const { submissionId, voteType } = vote;
+
+    try {
+      // Check if submission exists
+      const submission = await db.getSubmission(submissionId);
+      if (!submission) {
+        errors.push({
+          submissionId,
+          success: false,
+          error: 'Submission not found'
+        });
+        continue;
+      }
+
+      let voterPercentage = 0;
+      let voteWeight = 1;
+      let voterBalance = 0;
+
+      if (isDevelopmentMode) {
+        // In development mode, simulate holder data
+        voterPercentage = 1.0;
+        voteWeight = 1;
+        voterBalance = 1000000;
+      } else {
+        // SERVER-SIDE HOLDER VERIFICATION
+        const holderData = await verifyHolderStatus(voterWallet, submission.token_mint);
+
+        if (!holderData || !holderData.holdsToken) {
+          errors.push({
+            submissionId,
+            success: false,
+            error: 'You must hold this token to vote',
+            code: 'NOT_HOLDER'
+          });
+          continue;
+        }
+
+        voterPercentage = holderData.percentageHeld || 0;
+        if (voterPercentage < db.MIN_VOTE_BALANCE_PERCENT) {
+          errors.push({
+            submissionId,
+            success: false,
+            error: `Minimum ${db.MIN_VOTE_BALANCE_PERCENT}% of supply required to vote`,
+            code: 'INSUFFICIENT_BALANCE'
+          });
+          continue;
+        }
+
+        voteWeight = db.calculateVoteWeight(voterPercentage);
+        voterBalance = holderData.balance || 0;
+      }
+
+      // Check for existing vote
+      const existingVote = await db.getVote(submissionId, voterWallet);
+
+      let result;
+      if (existingVote) {
+        if (existingVote.vote_type === voteType) {
+          // Same vote - remove it (toggle off)
+          await db.deleteVote(submissionId, voterWallet);
+          result = { action: 'removed', voteWeight: 0 };
+        } else {
+          // Different vote - update it
+          await db.updateVote(submissionId, voterWallet, voteType);
+          result = { action: 'updated', voteType, voteWeight };
+        }
+      } else {
+        // Create new vote
+        await db.createVote({
+          submissionId,
+          voterWallet,
+          voteType,
+          voterBalance,
+          voterPercentage
+        });
+        result = { action: 'created', voteType, voteWeight };
+      }
+
+      // Track tokens to invalidate cache
+      tokensToInvalidate.add(submission.token_mint);
+
+      // Get updated tally
+      const tally = await db.getVoteTally(submissionId);
+      const updatedSubmission = await db.getSubmission(submissionId);
+
+      results.push({
+        submissionId,
+        success: true,
+        ...result,
+        tally: {
+          upvotes: tally?.upvotes || 0,
+          downvotes: tally?.downvotes || 0,
+          score: tally?.score || 0,
+          weightedScore: parseFloat(tally?.weighted_score) || 0
+        },
+        submissionStatus: updatedSubmission?.status || 'unknown'
+      });
+    } catch (error) {
+      errors.push({
+        submissionId,
+        success: false,
+        error: error.message || 'Failed to process vote'
+      });
+    }
+  }
+
+  // Clear cache for all affected tokens
+  for (const tokenMint of tokensToInvalidate) {
+    await cache.clearPattern(keys.submissions(tokenMint));
+  }
+
+  // Return results
+  const successCount = results.length;
+  const errorCount = errors.length;
+
+  if (successCount === 0 && errorCount > 0) {
+    return res.status(400).json({
+      message: 'All votes failed',
+      results: [],
+      errors,
+      successCount: 0,
+      errorCount
+    });
+  }
+
+  res.json({
+    message: successCount === votes.length
+      ? 'All votes processed successfully'
+      : `${successCount} of ${votes.length} votes processed`,
+    results,
+    errors,
+    successCount,
+    errorCount
   });
 }));
 

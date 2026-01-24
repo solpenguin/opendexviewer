@@ -445,6 +445,28 @@ function createVoteSignatureMessage(voteType, submissionId, timestamp) {
 }
 
 /**
+ * Create the message to be signed for a batch of votes
+ * Format: "OpenDex Vote Batch: up:[ids];down:[ids] for wallet at [timestamp]"
+ * Submission IDs are sorted numerically for consistent signature verification
+ *
+ * @param {Array<{submissionId: number, voteType: string}>} votes - Array of vote objects
+ * @param {string} wallet - The voter wallet address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createBatchVoteSignatureMessage(votes, wallet, timestamp) {
+  // Group votes by type and sort IDs
+  const upVotes = votes.filter(v => v.voteType === 'up').map(v => v.submissionId).sort((a, b) => a - b);
+  const downVotes = votes.filter(v => v.voteType === 'down').map(v => v.submissionId).sort((a, b) => a - b);
+
+  const parts = [];
+  if (upVotes.length > 0) parts.push(`up:${upVotes.join(',')}`);
+  if (downVotes.length > 0) parts.push(`down:${downVotes.join(',')}`);
+
+  return `OpenDex Vote Batch: ${parts.join(';')} for ${wallet} at ${timestamp}`;
+}
+
+/**
  * Create the message to be signed for a submission
  * Format: "OpenDex Submit: [type] for [tokenMint] at [timestamp]"
  *
@@ -603,6 +625,148 @@ function validateVoteSignature(req, res, next) {
 
   // Recreate the expected message
   const expectedMessage = createVoteSignatureMessage(voteType, parseInt(submissionId), timestamp);
+
+  // Verify the signature
+  const isValid = verifyWalletSignature(expectedMessage, signature, voterWallet);
+
+  if (!isValid) {
+    return res.status(401).json({
+      error: 'Invalid signature',
+      message: 'Wallet signature verification failed',
+      code: 'INVALID_SIGNATURE'
+    });
+  }
+
+  // Signature is valid - proceed
+  next();
+}
+
+/**
+ * Validate batch votes array format
+ * Used before signature verification
+ */
+function validateBatchVotes(req, res, next) {
+  const { votes, voterWallet } = req.body;
+
+  // Validate required fields
+  if (!votes || !voterWallet) {
+    return res.status(400).json({
+      error: 'Missing required fields',
+      required: ['votes', 'voterWallet']
+    });
+  }
+
+  // Validate votes is an array
+  if (!Array.isArray(votes) || votes.length === 0) {
+    return res.status(400).json({
+      error: 'Votes must be a non-empty array'
+    });
+  }
+
+  // Limit batch size
+  if (votes.length > 20) {
+    return res.status(400).json({
+      error: 'Maximum 20 votes per batch'
+    });
+  }
+
+  // Validate voter wallet
+  if (!SOLANA_ADDRESS_REGEX.test(voterWallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  // Validate each vote
+  const seenIds = new Set();
+  for (const vote of votes) {
+    if (!vote.submissionId || !vote.voteType) {
+      return res.status(400).json({
+        error: 'Each vote must have submissionId and voteType'
+      });
+    }
+
+    const submissionId = parseInt(vote.submissionId);
+    if (isNaN(submissionId) || submissionId < 1) {
+      return res.status(400).json({
+        error: `Invalid submission ID: ${vote.submissionId}`
+      });
+    }
+
+    if (!['up', 'down'].includes(vote.voteType)) {
+      return res.status(400).json({
+        error: `Invalid vote type: ${vote.voteType}`,
+        validTypes: ['up', 'down']
+      });
+    }
+
+    // Check for duplicate submission IDs in batch
+    if (seenIds.has(submissionId)) {
+      return res.status(400).json({
+        error: `Duplicate submission ID in batch: ${submissionId}`
+      });
+    }
+    seenIds.add(submissionId);
+
+    // Normalize submissionId to integer
+    vote.submissionId = submissionId;
+  }
+
+  next();
+}
+
+/**
+ * Middleware to validate wallet signature for batch votes
+ * Requires: signature, signatureTimestamp, voterWallet, votes in request body
+ */
+function validateBatchVoteSignature(req, res, next) {
+  const { votes, voterWallet, signature, signatureTimestamp } = req.body;
+
+  // Check if signature fields are present
+  if (!signature || !signatureTimestamp || !voterWallet) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the votes with your wallet',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  // Validate signature timestamp (must be within expiry window)
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({
+      error: 'Signature expired',
+      message: 'Please sign again - signatures expire after 2 minutes',
+      code: 'SIGNATURE_EXPIRED'
+    });
+  }
+
+  // Prevent future timestamps (with 10 second tolerance for clock skew)
+  if (timestamp > now + 10000) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      message: 'Signature timestamp is in the future',
+      code: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  // Validate signature format (should be array of numbers)
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({
+      error: 'Invalid signature format',
+      code: 'INVALID_SIGNATURE_FORMAT'
+    });
+  }
+
+  // Recreate the expected message
+  const expectedMessage = createBatchVoteSignatureMessage(votes, voterWallet, timestamp);
 
   // Verify the signature
   const isValid = verifyWalletSignature(expectedMessage, signature, voterWallet);
@@ -990,7 +1154,10 @@ module.exports = {
   validateWalletSignature,
   validateBatchSubmissions,
   validateBatchSubmissionSignature,
+  validateBatchVotes,
+  validateBatchVoteSignature,
   createVoteSignatureMessage,
+  createBatchVoteSignatureMessage,
   createSubmissionSignatureMessage,
   createBatchSubmissionSignatureMessage,
   createDataDeletionSignatureMessage,

@@ -7,6 +7,11 @@ const voting = {
   holderCacheMaxSize: 100, // Maximum cache entries to prevent memory leak
   developmentMode: false, // When true, bypasses holder verification
 
+  // Vote queue for batch submission
+  voteQueue: new Map(), // Map of submissionId -> voteType
+  voteQueueTimeout: null, // Timeout for debounced batch submission
+  voteQueueDelay: 500, // ms to wait before submitting batch (allows collecting multiple votes)
+
   // Voting requirements (loaded from server)
   requirements: {
     minVoteBalancePercent: 0.001,
@@ -87,13 +92,126 @@ const voting = {
     return `OpenDex Vote: ${voteType} on submission #${submissionId} at ${timestamp}`;
   },
 
-  // Cast a vote (now with holder verification and wallet signature)
+  // Create signature message for batch votes (must match backend)
+  // Format: "OpenDex Vote Batch: up:[ids];down:[ids] for wallet at [timestamp]"
+  createBatchVoteSignatureMessage(votes, wallet, timestamp) {
+    // Group votes by type and sort IDs
+    const upVotes = votes.filter(v => v.voteType === 'up').map(v => v.submissionId).sort((a, b) => a - b);
+    const downVotes = votes.filter(v => v.voteType === 'down').map(v => v.submissionId).sort((a, b) => a - b);
+
+    const parts = [];
+    if (upVotes.length > 0) parts.push(`up:${upVotes.join(',')}`);
+    if (downVotes.length > 0) parts.push(`down:${downVotes.join(',')}`);
+
+    return `OpenDex Vote Batch: ${parts.join(';')} for ${wallet} at ${timestamp}`;
+  },
+
+  // Cast a vote - queues votes and submits them in batches with a single signature
+  // This allows users to click multiple vote buttons quickly without multiple signature requests
   async vote(submissionId, voteType) {
-    // Prevent double-voting - add to pending immediately to block rapid clicks
+    // Prevent double-voting - check if already in queue or pending
     if (this.pendingVotes.has(submissionId)) {
       return;
     }
-    this.pendingVotes.add(submissionId);
+
+    // Check wallet connection first
+    if (!wallet.connected) {
+      const connected = await wallet.connect();
+      if (!connected) {
+        toast.warning('Please connect your wallet to vote');
+        return;
+      }
+    }
+
+    // Get token mint for this submission
+    const tokenMint = this.getTokenMintForSubmission(submissionId);
+    if (!tokenMint) {
+      toast.error('Unable to verify token - please refresh the page');
+      return;
+    }
+
+    // DEVELOPMENT MODE: Skip holder verification when enabled
+    if (!this.developmentMode) {
+      // Check holder status BEFORE voting - use cached value for quick validation
+      const holderData = await this.checkHolderStatus(tokenMint, false);
+
+      if (!holderData || !holderData.holdsToken) {
+        toast.error('You must hold this token to vote');
+        this.showHolderRequiredModal(tokenMint);
+        return;
+      }
+
+      const percentageHeld = parseFloat(holderData.percentageHeld);
+      if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
+        toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
+        this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
+        return;
+      }
+    }
+
+    // Get current vote state to determine action
+    const currentVote = this.voteStates.get(submissionId);
+    const isSameVote = currentVote === voteType;
+
+    // Update UI immediately (optimistic update)
+    this.updateVoteUI(submissionId, isSameVote ? null : voteType, true);
+
+    // Add to queue (or update existing entry)
+    this.voteQueue.set(submissionId, voteType);
+
+    // Clear existing timeout
+    if (this.voteQueueTimeout) {
+      clearTimeout(this.voteQueueTimeout);
+    }
+
+    // Set timeout to submit batch after delay (allows collecting multiple votes)
+    this.voteQueueTimeout = setTimeout(() => {
+      this.submitQueuedVotes();
+    }, this.voteQueueDelay);
+  },
+
+  // Submit all queued votes as a batch
+  async submitQueuedVotes() {
+    if (this.voteQueue.size === 0) {
+      return;
+    }
+
+    // Copy queue and clear it
+    const votes = Array.from(this.voteQueue.entries()).map(([submissionId, voteType]) => ({
+      submissionId,
+      voteType
+    }));
+    this.voteQueue.clear();
+    this.voteQueueTimeout = null;
+
+    // Mark all as pending
+    votes.forEach(v => this.pendingVotes.add(v.submissionId));
+
+    try {
+      // Use batch voting for all queued votes
+      await this.voteBatch(votes);
+    } finally {
+      // Note: pendingVotes are cleared in voteBatch
+    }
+  },
+
+  // Cast multiple votes with a single signature (batch voting)
+  // votes: Array of {submissionId, voteType}
+  async voteBatch(votes) {
+    if (!votes || votes.length === 0) {
+      toast.warning('No votes to submit');
+      return;
+    }
+
+    // Check if any votes are already pending
+    const pendingIds = votes.filter(v => this.pendingVotes.has(v.submissionId));
+    if (pendingIds.length > 0) {
+      toast.warning('Some votes are already being processed');
+      return;
+    }
+
+    // Mark all as pending
+    votes.forEach(v => this.pendingVotes.add(v.submissionId));
 
     try {
       // Check wallet connection
@@ -101,114 +219,122 @@ const voting = {
         const connected = await wallet.connect();
         if (!connected) {
           toast.warning('Please connect your wallet to vote');
-          this.pendingVotes.delete(submissionId);
+          votes.forEach(v => this.pendingVotes.delete(v.submissionId));
           return;
         }
       }
 
-      // Get token mint for this submission
-      const tokenMint = this.getTokenMintForSubmission(submissionId);
+      // Get token mint (all submissions should be for the same token on a token page)
+      const tokenMint = this.getTokenMintForSubmission(votes[0].submissionId);
       if (!tokenMint) {
         toast.error('Unable to verify token - please refresh the page');
-        this.pendingVotes.delete(submissionId);
+        votes.forEach(v => this.pendingVotes.delete(v.submissionId));
         return;
       }
 
       // DEVELOPMENT MODE: Skip holder verification when enabled
       if (!this.developmentMode) {
-        // Check holder status BEFORE voting - force refresh to get current balance
         const holderData = await this.checkHolderStatus(tokenMint, true);
 
         if (!holderData || !holderData.holdsToken) {
           toast.error('You must hold this token to vote');
           this.showHolderRequiredModal(tokenMint);
-          this.pendingVotes.delete(submissionId);
+          votes.forEach(v => this.pendingVotes.delete(v.submissionId));
           return;
         }
 
-        // Check minimum balance requirement (with proper null/NaN handling)
         const percentageHeld = parseFloat(holderData.percentageHeld);
         if (isNaN(percentageHeld) || percentageHeld < this.requirements.minVoteBalancePercent) {
           toast.error(`Minimum ${this.requirements.minVoteBalancePercent}% of supply required to vote`);
           this.showInsufficientBalanceModal(holderData, this.requirements.minVoteBalancePercent);
-          this.pendingVotes.delete(submissionId);
+          votes.forEach(v => this.pendingVotes.delete(v.submissionId));
           return;
         }
       }
 
-      // Sign the vote with wallet
+      // Sign all votes with a single wallet signature
+      toast.info('Please sign your votes with your wallet...');
       const timestamp = Date.now();
-      const message = this.createVoteSignatureMessage(voteType, submissionId, timestamp);
+      const message = this.createBatchVoteSignatureMessage(votes, wallet.address, timestamp);
 
       let signatureData;
       try {
         signatureData = await wallet.signMessage(message);
       } catch (error) {
-        console.error('Failed to sign vote:', error);
+        console.error('Failed to sign votes:', error);
         if (error.message?.includes('User rejected')) {
-          toast.warning('Vote cancelled - signature required');
+          toast.warning('Votes cancelled - signature required');
         } else {
-          toast.error('Failed to sign vote. Please try again.');
+          toast.error('Failed to sign votes. Please try again.');
         }
-        this.pendingVotes.delete(submissionId);
+        votes.forEach(v => this.pendingVotes.delete(v.submissionId));
         return;
       }
 
-      // Get current vote state
-      const currentVote = this.voteStates.get(submissionId);
-      const isSameVote = currentVote === voteType;
-
       // Optimistic UI update
-      this.updateVoteUI(submissionId, isSameVote ? null : voteType, true);
+      votes.forEach(v => {
+        const currentVote = this.voteStates.get(v.submissionId);
+        const isSameVote = currentVote === v.voteType;
+        this.updateVoteUI(v.submissionId, isSameVote ? null : v.voteType, true);
+      });
 
-      const result = await api.votes.cast({
-        submissionId,
+      // Submit batch votes
+      const result = await api.votes.castBatch({
+        votes: votes.map(v => ({
+          submissionId: v.submissionId,
+          voteType: v.voteType
+        })),
         voterWallet: wallet.address,
-        voteType,
         signature: signatureData.signature,
         signatureTimestamp: timestamp
       });
 
-      // Update the vote state
-      if (result.action === 'removed') {
-        this.voteStates.delete(submissionId);
+      // Process results
+      const successResults = result.results || [];
+      const errorResults = result.errors || [];
+
+      // Update vote states for successful votes
+      successResults.forEach(r => {
+        if (r.action === 'removed') {
+          this.voteStates.delete(r.submissionId);
+        } else {
+          this.voteStates.set(r.submissionId, r.voteType);
+        }
+
+        // Update vote counts in UI
+        if (r.tally) {
+          this.updateVoteCounts(r.submissionId, r.tally.upvotes, r.tally.downvotes, r.tally.score, r.tally.weightedScore);
+        }
+      });
+
+      // Revert UI for failed votes
+      errorResults.forEach(e => {
+        const currentVote = this.voteStates.get(e.submissionId);
+        this.updateVoteUI(e.submissionId, currentVote, false);
+      });
+
+      // Show feedback
+      if (successResults.length > 0 && errorResults.length === 0) {
+        toast.success(`${successResults.length} vote${successResults.length > 1 ? 's' : ''} submitted!`);
+      } else if (successResults.length > 0 && errorResults.length > 0) {
+        toast.warning(`${successResults.length} succeeded, ${errorResults.length} failed`);
       } else {
-        this.voteStates.set(submissionId, voteType);
+        toast.error('All votes failed');
       }
 
-      // Show success feedback with vote weight
-      this.showVoteFeedback(result);
-
-      // Update the vote counts from the response
-      const tally = result.tally || {};
-      this.updateVoteCounts(submissionId, tally.upvotes, tally.downvotes, tally.score, tally.weightedScore);
-
+      return { results: successResults, errors: errorResults };
     } catch (error) {
-      console.error('Vote failed:', error);
+      console.error('Batch vote failed:', error);
 
-      // Revert optimistic update
-      const currentVote = this.voteStates.get(submissionId);
-      this.updateVoteUI(submissionId, currentVote, false);
+      // Revert all optimistic updates
+      votes.forEach(v => {
+        const currentVote = this.voteStates.get(v.submissionId);
+        this.updateVoteUI(v.submissionId, currentVote, false);
+      });
 
-      // Handle specific error codes
-      if (error.message && error.message.includes('NOT_HOLDER')) {
-        toast.error('You must hold this token to vote');
-      } else if (error.message && error.message.includes('INSUFFICIENT_BALANCE')) {
-        toast.error('Insufficient token balance to vote');
-      } else if (error.message && error.message.includes('SIGNATURE_EXPIRED')) {
-        toast.error('Signature expired - please try again');
-      } else if (error.message && error.message.includes('INVALID_SIGNATURE')) {
-        toast.error('Invalid signature - please reconnect your wallet');
-      } else if (error.message && error.message.includes('VOTE_COOLDOWN')) {
-        // Extract seconds from error message if available
-        const match = error.message.match(/wait (\d+) seconds/);
-        const seconds = match ? match[1] : '10';
-        toast.warning(`Please wait ${seconds}s before changing your vote`);
-      } else {
-        toast.error('Failed to cast vote. Please try again.');
-      }
+      toast.error('Failed to submit votes. Please try again.');
     } finally {
-      this.pendingVotes.delete(submissionId);
+      votes.forEach(v => this.pendingVotes.delete(v.submissionId));
     }
   },
 
@@ -574,6 +700,13 @@ const voting = {
     this.voteStates.clear();
     this.pendingVotes.clear();
     this.holderCache.clear();
+    this.voteQueue.clear();
+
+    // Clear any pending vote timeout
+    if (this.voteQueueTimeout) {
+      clearTimeout(this.voteQueueTimeout);
+      this.voteQueueTimeout = null;
+    }
 
     // Remove all voted classes
     document.querySelectorAll('.vote-btn.voted').forEach(btn => {

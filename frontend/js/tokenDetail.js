@@ -953,21 +953,30 @@ const tokenDetail = {
     // Now handled by updateCommunitySection
   },
 
-  // Load submissions
+  // Load submissions (both approved and pending)
   async loadSubmissions() {
     try {
-      this.submissions = await api.submissions.getByToken(this.mint, { status: 'approved' });
+      // Load ALL submissions (approved + pending) so users can vote on pending ones
+      this.submissions = await api.submissions.getByToken(this.mint, { status: 'all' });
 
-      // Update submission count
+      // Count approved and pending separately
+      const approvedCount = this.submissions.filter(s => s.status === 'approved').length;
+      const pendingCount = this.submissions.filter(s => s.status === 'pending').length;
+
+      // Update submission count with pending indicator
       const countEl = document.getElementById('submissions-count');
       if (countEl) {
-        countEl.textContent = `${this.submissions.length} submission${this.submissions.length !== 1 ? 's' : ''}`;
+        if (pendingCount > 0) {
+          countEl.textContent = `${approvedCount} approved, ${pendingCount} pending`;
+        } else {
+          countEl.textContent = `${this.submissions.length} submission${this.submissions.length !== 1 ? 's' : ''}`;
+        }
       }
 
       // Show development mode indicator if active
       this.showDevModeIndicator();
 
-      // Update the combined community section
+      // Update the combined community section (uses only approved for display)
       this.updateCommunitySection();
       this.renderSubmissions('banner');
     } catch (error) {
@@ -1009,8 +1018,14 @@ const tokenDetail = {
       filtered = this.submissions.filter(s => s.submission_type !== 'banner');
     }
 
-    // Sort by score (descending) for consistent ordering
-    filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
+    // Sort: pending first (so users can vote), then by score (descending)
+    filtered.sort((a, b) => {
+      // Pending submissions come first
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      // Then sort by score descending
+      return (b.score || 0) - (a.score || 0);
+    });
 
     // Clear container
     container.innerHTML = '';
@@ -1042,7 +1057,21 @@ const tokenDetail = {
       }
 
       const card = document.createElement('div');
-      card.className = 'submission-card';
+      card.className = `submission-card ${s.status === 'pending' ? 'pending' : ''}`;
+
+      // Add pending badge for pending submissions
+      if (s.status === 'pending') {
+        const pendingBadge = document.createElement('div');
+        pendingBadge.className = 'submission-pending-badge';
+        pendingBadge.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Pending - Vote to approve!</span>
+        `;
+        card.appendChild(pendingBadge);
+      }
 
       // Content section
       const content = document.createElement('div');
