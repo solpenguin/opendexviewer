@@ -184,15 +184,8 @@ const voting = {
     this.voteQueue.clear();
     this.voteQueueTimeout = null;
 
-    // Mark all as pending
-    votes.forEach(v => this.pendingVotes.add(v.submissionId));
-
-    try {
-      // Use batch voting for all queued votes
-      await this.voteBatch(votes);
-    } finally {
-      // Note: pendingVotes are cleared in voteBatch
-    }
+    // Submit batch (voteBatch handles pendingVotes marking and cleanup)
+    await this.voteBatch(votes);
   },
 
   // Cast multiple votes with a single signature (batch voting)
@@ -252,41 +245,20 @@ const voting = {
         }
       }
 
-      // Sign all votes with a single wallet signature
-      toast.info('Please sign your votes with your wallet...');
-      const timestamp = Date.now();
-      const message = this.createBatchVoteSignatureMessage(votes, wallet.address, timestamp);
-
-      let signatureData;
-      try {
-        signatureData = await wallet.signMessage(message);
-      } catch (error) {
-        console.error('Failed to sign votes:', error);
-        if (error.message?.includes('User rejected')) {
-          toast.warning('Votes cancelled - signature required');
-        } else {
-          toast.error('Failed to sign votes. Please try again.');
-        }
-        votes.forEach(v => this.pendingVotes.delete(v.submissionId));
-        return;
-      }
-
-      // Optimistic UI update
+      // Optimistic UI update (already connected wallet proves ownership)
       votes.forEach(v => {
         const currentVote = this.voteStates.get(v.submissionId);
         const isSameVote = currentVote === v.voteType;
         this.updateVoteUI(v.submissionId, isSameVote ? null : v.voteType, true);
       });
 
-      // Submit batch votes
+      // Submit batch votes (no signature required when wallet is connected)
       const result = await api.votes.castBatch({
         votes: votes.map(v => ({
           submissionId: v.submissionId,
           voteType: v.voteType
         })),
-        voterWallet: wallet.address,
-        signature: signatureData.signature,
-        signatureTimestamp: timestamp
+        voterWallet: wallet.address
       });
 
       // Process results

@@ -774,26 +774,6 @@ const submitPage = {
 
     const submitBtn = document.getElementById('submit-btn');
 
-    // Create a SINGLE signature for all submissions
-    toast.info('Please sign the submission with your wallet...');
-
-    const timestamp = Date.now();
-    const submissionTypes = submissions.map(s => s.submissionType);
-    const message = this.createBatchSubmissionSignatureMessage(submissionTypes, tokenMint, timestamp);
-
-    let signatureData;
-    try {
-      signatureData = await wallet.signMessage(message);
-    } catch (error) {
-      console.error('Failed to sign submission:', error);
-      if (error.message?.includes('User rejected')) {
-        toast.warning('Submission cancelled - signature required');
-      } else {
-        toast.error('Failed to sign submission');
-      }
-      return;
-    }
-
     // Disable button during submission
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
@@ -802,13 +782,11 @@ const submitPage = {
     `;
 
     try {
-      // Submit all items in a single batch request
+      // Submit all items in a single batch request (no signature needed - wallet already connected)
       const batchData = {
         tokenMint,
         submissions,
-        submitterWallet: wallet.address,
-        signature: signatureData.signature,
-        signatureTimestamp: timestamp
+        submitterWallet: wallet.address
       };
 
       const response = await api.submissions.createBatch(batchData);

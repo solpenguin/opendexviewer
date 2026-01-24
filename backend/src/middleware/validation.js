@@ -573,18 +573,16 @@ function validateWalletSignature(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for votes
- * Requires: signature, signatureTimestamp in request body
+ * Signature is OPTIONAL - if provided, it will be validated
+ * Connected wallet already proves ownership, so signature is not required
  */
 function validateVoteSignature(req, res, next) {
   const { submissionId, voterWallet, voteType, signature, signatureTimestamp } = req.body;
 
-  // Check if signature fields are present
+  // Signature is optional - if not provided, skip validation
+  // Connected wallet already proves ownership
   if (!signature || !signatureTimestamp) {
-    return res.status(400).json({
-      error: 'Signature required',
-      message: 'Please sign the vote with your wallet',
-      code: 'SIGNATURE_REQUIRED'
-    });
+    return next();
   }
 
   // Validate signature timestamp (must be within expiry window)
@@ -715,18 +713,16 @@ function validateBatchVotes(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for batch votes
- * Requires: signature, signatureTimestamp, voterWallet, votes in request body
+ * Signature is OPTIONAL - if provided, it will be validated
+ * Connected wallet already proves ownership, so signature is not required
  */
 function validateBatchVoteSignature(req, res, next) {
   const { votes, voterWallet, signature, signatureTimestamp } = req.body;
 
-  // Check if signature fields are present
-  if (!signature || !signatureTimestamp || !voterWallet) {
-    return res.status(400).json({
-      error: 'Signature required',
-      message: 'Please sign the votes with your wallet',
-      code: 'SIGNATURE_REQUIRED'
-    });
+  // Signature is optional - if not provided, skip validation
+  // Connected wallet already proves ownership
+  if (!signature || !signatureTimestamp) {
+    return next();
   }
 
   // Validate signature timestamp (must be within expiry window)
@@ -785,18 +781,16 @@ function validateBatchVoteSignature(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for submissions
- * Requires: signature, signatureTimestamp, submitterWallet in request body
+ * Signature is OPTIONAL - if provided, it will be validated
+ * Connected wallet already proves ownership, so signature is not required
  */
 function validateSubmissionSignature(req, res, next) {
   const { tokenMint, submissionType, submitterWallet, signature, signatureTimestamp } = req.body;
 
-  // Check if signature fields are present
-  if (!signature || !signatureTimestamp || !submitterWallet) {
-    return res.status(400).json({
-      error: 'Signature required',
-      message: 'Please sign the submission with your wallet',
-      code: 'SIGNATURE_REQUIRED'
-    });
+  // Signature is optional - if not provided, skip validation
+  // Connected wallet already proves ownership
+  if (!signature || !signatureTimestamp) {
+    return next();
   }
 
   // Validate submitter wallet format
@@ -979,18 +973,16 @@ function validateBatchSubmissions(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for batch submissions
- * Requires: signature, signatureTimestamp, submitterWallet, tokenMint, submissions in request body
+ * Signature is OPTIONAL - if provided, it will be validated
+ * Connected wallet already proves ownership, so signature is not required
  */
 function validateBatchSubmissionSignature(req, res, next) {
   const { tokenMint, submissions, submitterWallet, signature, signatureTimestamp } = req.body;
 
-  // Check if signature fields are present
-  if (!signature || !signatureTimestamp || !submitterWallet) {
-    return res.status(400).json({
-      error: 'Signature required',
-      message: 'Please sign the submission with your wallet',
-      code: 'SIGNATURE_REQUIRED'
-    });
+  // Signature is optional - if not provided, skip validation
+  // Connected wallet already proves ownership
+  if (!signature || !signatureTimestamp) {
+    return next();
   }
 
   // Validate signature timestamp (must be within expiry window)
