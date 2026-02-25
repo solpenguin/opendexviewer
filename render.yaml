@@ -13,7 +13,7 @@ services:
     name: opendex-api
     runtime: node
     region: oregon
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: npm install
     startCommand: npm start
@@ -29,6 +29,14 @@ services:
       - key: HELIUS_API_KEY
         sync: false
       - key: BIRDEYE_API_KEY
+        sync: false
+
+      # Redis connection (required for background jobs - BullMQ)
+      - key: REDIS_URL
+        sync: false
+
+      # Admin panel password (required for /admin)
+      - key: ADMIN_PASSWORD
         sync: false
 
       # Application settings
@@ -53,9 +61,9 @@ services:
 
       # Auto-moderation thresholds
       - key: AUTO_APPROVE_THRESHOLD
-        value: "5"
+        value: "10"
       - key: AUTO_REJECT_THRESHOLD
-        value: "-5"
+        value: "-10"
 
 # =====================================================
 # PostgreSQL Database
