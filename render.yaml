@@ -106,6 +106,7 @@ services:
     region: oregon
     plan: free
     maxmemoryPolicy: noeviction
+    ipAllowList: []
 
 # =====================================================
 # PostgreSQL Database
