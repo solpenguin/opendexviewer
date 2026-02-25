@@ -25,14 +25,17 @@ services:
           name: opendex-db
           property: connectionString
 
+      # Redis connection (auto-populated from Render Redis)
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: opendex-redis
+          property: connectionString
+
       # API Keys (set these manually in Render dashboard)
       - key: HELIUS_API_KEY
         sync: false
       - key: BIRDEYE_API_KEY
-        sync: false
-
-      # Redis connection (required for background jobs - BullMQ)
-      - key: REDIS_URL
         sync: false
 
       # Admin panel password (required for /admin)
@@ -64,6 +67,45 @@ services:
         value: "10"
       - key: AUTO_REJECT_THRESHOLD
         value: "-10"
+
+  # =====================================================
+  # Background Worker (BullMQ job processor)
+  # Handles: view count batching, session cleanup, stats
+  # =====================================================
+  - type: worker
+    name: opendex-worker
+    runtime: node
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run worker
+    envVars:
+      # Database connection (auto-populated from Render PostgreSQL)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: opendex-db
+          property: connectionString
+
+      # Redis connection (auto-populated from Render Redis)
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: opendex-redis
+          property: connectionString
+
+      # Application settings
+      - key: NODE_ENV
+        value: production
+
+  # =====================================================
+  # Redis (BullMQ job queue)
+  # =====================================================
+  - type: redis
+    name: opendex-redis
+    region: oregon
+    plan: free
+    maxmemoryPolicy: noeviction
 
 # =====================================================
 # PostgreSQL Database
