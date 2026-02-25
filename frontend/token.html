@@ -201,6 +201,11 @@
             <div id="chart-loading" class="chart-loading">
               <div class="loading-spinner"></div>
             </div>
+            <div id="chart-error" class="chart-error" style="display:none">
+              <span class="chart-error-message">Chart data unavailable</span>
+              <span class="chart-error-hint">GeckoTerminal could not be reached</span>
+              <button id="chart-retry-btn" class="chart-retry-btn">&#8635; Retry</button>
+            </div>
             <canvas id="price-chart"></canvas>
           </div>
           <div class="chart-stats">

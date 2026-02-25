@@ -35,12 +35,11 @@ const tokenDetail = {
 
     // Pre-fetch the default chart interval immediately — only the mint is needed,
     // so this runs in parallel with loadToken() and eliminates one sequential API round-trip.
-    // Try direct GeckoTerminal first (uses the user's own rate-limit budget);
-    // fall back to the backend endpoint on any failure.
-    this._chartPreload = (typeof directGecko !== 'undefined' && directGecko._available)
+    // Chart data is fetched directly from GeckoTerminal (no backend fallback) so the
+    // backend's shared rate-limit budget is reserved for other endpoints.
+    this._chartPreload = (typeof directGecko !== 'undefined')
       ? directGecko.getOHLCV(this.mint, '1h')
-          .catch(() => api.tokens.getChart(this.mint, { interval: '1H', limit: 168 }))
-      : api.tokens.getChart(this.mint, { interval: '1H', limit: 168 });
+      : Promise.reject(new Error('GeckoTerminal client not available'));
 
     this.bindEvents();
 
@@ -440,47 +439,56 @@ const tokenDetail = {
   // Load chart data
   async loadChart(interval = '1h') {
     const chartLoading = document.getElementById('chart-loading');
+    const chartError   = document.getElementById('chart-error');
     if (chartLoading) chartLoading.style.display = 'flex';
+    if (chartError)   chartError.style.display   = 'none';  // hide any previous error
 
     try {
-      // Map intervals to API parameters
-      const intervalMap = {
-        '15m': { interval: '15m', limit: 96 },    // 24 hours
-        '1h': { interval: '1H', limit: 168 },     // 7 days
-        '4h': { interval: '4H', limit: 180 },     // 30 days
-        '1d': { interval: '1D', limit: 90 },      // 90 days
-        '1w': { interval: '1W', limit: 52 }       // 1 year
-      };
-
-      const params = intervalMap[interval] || intervalMap['1h'];
-
       // Reuse the in-flight preload promise when loading the default 1h interval,
       // avoiding a duplicate request if loadToken() hasn't finished yet.
       const preload = (interval === '1h') ? this._chartPreload : null;
       this._chartPreload = null;
 
-      if (preload) {
-        this.chartData = await preload;
-      } else {
-        // Try direct GeckoTerminal (user's own rate-limit budget); fall back to backend.
-        try {
-          if (typeof directGecko !== 'undefined' && directGecko._available) {
-            this.chartData = await directGecko.getOHLCV(this.mint, interval);
-          } else {
-            this.chartData = await api.tokens.getChart(this.mint, params);
-          }
-        } catch (_) {
-          this.chartData = await api.tokens.getChart(this.mint, params);
-        }
-      }
+      // Direct GeckoTerminal only — no backend fallback so the shared backend
+      // rate-limit budget (30 req/min) is reserved for token list and price endpoints.
+      this.chartData = preload
+        ? await preload
+        : await directGecko.getOHLCV(this.mint, interval);
 
       this.renderChart(this.chartData);
       this.updateChartStats(this.chartData);
     } catch (error) {
-      console.error('Failed to load chart:', error);
-      this.renderEmptyChart();
+      this.renderChartError(error);
     } finally {
       if (chartLoading) chartLoading.style.display = 'none';
+    }
+  },
+
+  // Show chart error overlay with a retry button.
+  // Does NOT fall back to the backend — callers must click Retry.
+  renderChartError(error) {
+    console.error('[Chart] GeckoTerminal fetch failed:', error?.message || error);
+
+    // Destroy any stale chart to free memory and clear the canvas
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
+
+    const errorEl = document.getElementById('chart-error');
+    if (!errorEl) return;
+    errorEl.style.display = 'flex';
+
+    // Wire up the retry button (clone to remove any stacked listeners from previous errors)
+    const retryBtn = document.getElementById('chart-retry-btn');
+    if (retryBtn) {
+      const fresh = retryBtn.cloneNode(true);
+      retryBtn.replaceWith(fresh);
+      fresh.addEventListener('click', () => {
+        // Reset the availability flag so transient failures can be retried
+        if (typeof directGecko !== 'undefined') directGecko._available = true;
+        this.loadChart(this.currentInterval);
+      });
     }
   },
 

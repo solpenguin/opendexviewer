@@ -1788,6 +1788,46 @@ a:hover {
   z-index: 10;
 }
 
+.chart-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(18, 20, 26, 0.9);
+  z-index: 10;
+}
+
+.chart-error-message {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.chart-error-hint {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.chart-retry-btn {
+  margin-top: 0.5rem;
+  padding: 0.4375rem 1.125rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.chart-retry-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+}
+
 .chart-stats {
   display: flex;
   gap: 2rem;
