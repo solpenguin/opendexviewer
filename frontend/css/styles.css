@@ -2153,6 +2153,58 @@ a:hover {
   border-style: solid;
 }
 
+/* Approved submission card styling */
+.submission-card.approved {
+  border-color: var(--green);
+  background: linear-gradient(135deg, var(--bg-tertiary), rgba(34, 197, 94, 0.04));
+}
+
+.submission-approved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.submission-replace-link {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.submission-replace-link:hover {
+  color: var(--text-secondary);
+}
+
+/* "Propose replacement" link overlaid on the approved banner */
+.banner-replace-link {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  text-decoration: none;
+  backdrop-filter: blur(8px);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.banner-replace-link:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
 .submission-pending-badge {
   display: flex;
   align-items: center;

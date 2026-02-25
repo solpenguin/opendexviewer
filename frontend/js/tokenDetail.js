@@ -959,14 +959,19 @@ const tokenDetail = {
         bannerDownvotesEl.dataset.submissionId = topBanner.id;
       }
 
-      // Tag the banner voting container so updateVoteUI can find and update buttons
+      // Banner is approved — hide voting controls
       const bannerVotingEl = bannerWrapper.querySelector('.banner-voting');
-      if (bannerVotingEl) bannerVotingEl.dataset.submissionId = topBanner.id;
+      if (bannerVotingEl) bannerVotingEl.style.display = 'none';
 
-      // Set up voting buttons
-      bannerWrapper.querySelectorAll('.vote-btn').forEach(btn => {
-        btn.onclick = () => voting.vote(topBanner.id, btn.dataset.vote);
-      });
+      // Add/update a "Propose replacement" link
+      let replaceBannerLink = bannerWrapper.querySelector('.banner-replace-link');
+      if (!replaceBannerLink) {
+        replaceBannerLink = document.createElement('a');
+        replaceBannerLink.className = 'banner-replace-link';
+        bannerWrapper.appendChild(replaceBannerLink);
+      }
+      replaceBannerLink.href = `submit.html?mint=${encodeURIComponent(this.mint)}&type=banner`;
+      replaceBannerLink.textContent = 'Propose replacement';
     } else {
       bannerWrapper.style.display = 'none';
     }
@@ -1122,7 +1127,7 @@ const tokenDetail = {
       }
 
       const card = document.createElement('div');
-      card.className = `submission-card ${s.status === 'pending' ? 'pending' : ''}`;
+      card.className = `submission-card ${s.status === 'pending' ? 'pending' : s.status === 'approved' ? 'approved' : ''}`;
 
       // Add pending badge for pending submissions
       if (s.status === 'pending') {
@@ -1178,64 +1183,80 @@ const tokenDetail = {
       const votes = document.createElement('div');
       votes.className = 'submission-votes';
 
-      // Upvote button
-      const upBtn = document.createElement('button');
-      upBtn.className = `vote-btn vote-up ${s.userVote === 'up' ? 'voted' : ''}`;
       const submissionId = parseInt(s.id);
-      upBtn.addEventListener('click', () => voting.vote(submissionId, 'up'));
-      upBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="18 15 12 9 6 15"></polyline>
-        </svg>
-        <span>${parseInt(s.upvotes) || 0}</span>
-      `;
 
-      // Score display with weighted score
-      const scoreContainer = document.createElement('div');
-      scoreContainer.className = 'submission-score-container';
+      if (s.status === 'approved') {
+        // Approved: voting is closed; only replacement submissions are allowed
+        const approvedBadge = document.createElement('span');
+        approvedBadge.className = 'submission-approved-badge';
+        approvedBadge.textContent = '✓ Approved';
 
-      const score = document.createElement('span');
-      const scoreValue = parseInt(s.score) || 0;
-      score.className = `submission-score ${scoreValue >= 0 ? 'positive' : 'negative'}`;
-      score.textContent = String(scoreValue);
-      score.setAttribute('data-score', s.id);
+        const replaceLink = document.createElement('a');
+        replaceLink.href = `submit.html?mint=${encodeURIComponent(this.mint)}&type=${encodeURIComponent(s.submission_type)}`;
+        replaceLink.className = 'submission-replace-link';
+        replaceLink.textContent = 'Propose replacement';
 
-      // Add weighted score if available
-      const weightedScoreValue = parseFloat(s.weighted_score) || scoreValue;
-      if (weightedScoreValue !== scoreValue) {
-        const weightedScore = document.createElement('span');
-        weightedScore.className = `weighted-score ${weightedScoreValue >= 0 ? 'positive' : 'negative'}`;
-        weightedScore.textContent = `(${weightedScoreValue.toFixed(1)}w)`;
-        weightedScore.setAttribute('data-weighted-score', s.id);
-        // Detailed tooltip explaining vote weight system
-        weightedScore.title = `Weighted Score: ${weightedScoreValue.toFixed(1)}\n` +
-          'Vote weight by holder percentage:\n' +
-          '• ≥3% holdings = 3x weight (max)\n' +
-          '• ≥1.5% holdings = 2.5x weight\n' +
-          '• ≥0.75% holdings = 2x weight\n' +
-          '• ≥0.3% holdings = 1.5x weight\n' +
-          '• ≥0.1% holdings = 1x weight (min to vote)';
-        weightedScore.style.cursor = 'help';
-        scoreContainer.appendChild(score);
-        scoreContainer.appendChild(weightedScore);
+        votes.appendChild(approvedBadge);
+        votes.appendChild(replaceLink);
       } else {
-        scoreContainer.appendChild(score);
+        // Pending: show vote buttons
+        const upBtn = document.createElement('button');
+        upBtn.className = `vote-btn vote-up ${s.userVote === 'up' ? 'voted' : ''}`;
+        upBtn.addEventListener('click', () => voting.vote(submissionId, 'up'));
+        upBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="18 15 12 9 6 15"></polyline>
+          </svg>
+          <span>${parseInt(s.upvotes) || 0}</span>
+        `;
+
+        // Score display with weighted score
+        const scoreContainer = document.createElement('div');
+        scoreContainer.className = 'submission-score-container';
+
+        const score = document.createElement('span');
+        const scoreValue = parseInt(s.score) || 0;
+        score.className = `submission-score ${scoreValue >= 0 ? 'positive' : 'negative'}`;
+        score.textContent = String(scoreValue);
+        score.setAttribute('data-score', s.id);
+
+        // Add weighted score if available
+        const weightedScoreValue = parseFloat(s.weighted_score) || scoreValue;
+        if (weightedScoreValue !== scoreValue) {
+          const weightedScore = document.createElement('span');
+          weightedScore.className = `weighted-score ${weightedScoreValue >= 0 ? 'positive' : 'negative'}`;
+          weightedScore.textContent = `(${weightedScoreValue.toFixed(1)}w)`;
+          weightedScore.setAttribute('data-weighted-score', s.id);
+          // Detailed tooltip explaining vote weight system
+          weightedScore.title = `Weighted Score: ${weightedScoreValue.toFixed(1)}\n` +
+            'Vote weight by holder percentage:\n' +
+            '• ≥3% holdings = 3x weight (max)\n' +
+            '• ≥1.5% holdings = 2.5x weight\n' +
+            '• ≥0.75% holdings = 2x weight\n' +
+            '• ≥0.3% holdings = 1.5x weight\n' +
+            '• ≥0.1% holdings = 1x weight (min to vote)';
+          weightedScore.style.cursor = 'help';
+          scoreContainer.appendChild(score);
+          scoreContainer.appendChild(weightedScore);
+        } else {
+          scoreContainer.appendChild(score);
+        }
+
+        // Downvote button
+        const downBtn = document.createElement('button');
+        downBtn.className = `vote-btn vote-down ${s.userVote === 'down' ? 'voted' : ''}`;
+        downBtn.addEventListener('click', () => voting.vote(submissionId, 'down'));
+        downBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+          <span>${parseInt(s.downvotes) || 0}</span>
+        `;
+
+        votes.appendChild(upBtn);
+        votes.appendChild(scoreContainer);
+        votes.appendChild(downBtn);
       }
-
-      // Downvote button
-      const downBtn = document.createElement('button');
-      downBtn.className = `vote-btn vote-down ${s.userVote === 'down' ? 'voted' : ''}`;
-      downBtn.addEventListener('click', () => voting.vote(submissionId, 'down'));
-      downBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-        <span>${parseInt(s.downvotes) || 0}</span>
-      `;
-
-      votes.appendChild(upBtn);
-      votes.appendChild(scoreContainer);
-      votes.appendChild(downBtn);
 
       // Date
       const date = document.createElement('span');
