@@ -70,9 +70,10 @@ async function verifyHolderStatus(wallet, tokenMint) {
       verifiedAt: Date.now()
     };
 
-    // Cache for 30 seconds - short TTL to prevent abuse via token transfers after voting
-    // Balance can change quickly in DeFi, so we need relatively fresh verification
-    await cache.set(cacheKey, result, TTL.SHORT);
+    // Cache for 2 minutes - balances don't change frequently enough to warrant 30s TTL.
+    // A user selling tokens between votes within the same 2-minute window is an acceptable
+    // edge case; the benefit is ~75% fewer Solana RPC calls under concurrent voting load.
+    await cache.set(cacheKey, result, TTL.OHLCV);
 
     return result;
   } catch (error) {

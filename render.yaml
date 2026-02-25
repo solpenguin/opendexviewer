@@ -68,6 +68,14 @@ services:
       - key: AUTO_REJECT_THRESHOLD
         value: "-10"
 
+      # Performance tuning
+      # View count buffer: flush every 2s instead of 5s (reduces memory spikes under load)
+      - key: VIEW_FLUSH_INTERVAL_MS
+        value: "2000"
+      # View buffer cap: 10k instead of 50k (prevents unbounded memory growth)
+      - key: VIEW_BUFFER_MAX_SIZE
+        value: "10000"
+
   # =====================================================
   # Background Worker (BullMQ job processor)
   # Handles: view count batching, session cleanup, stats
@@ -97,6 +105,12 @@ services:
       # Application settings
       - key: NODE_ENV
         value: production
+
+      # Worker performance tuning
+      - key: WORKER_CONCURRENCY
+        value: "20"
+      - key: WORKER_LIMITER_MAX
+        value: "20"
 
   # =====================================================
   # Redis (BullMQ job queue)

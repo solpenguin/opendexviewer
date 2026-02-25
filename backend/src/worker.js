@@ -183,9 +183,9 @@ function createWorker(queueName, redisConfig) {
     },
     {
       connection: redisConfig,
-      concurrency: 5, // Process up to 5 jobs concurrently
+      concurrency: parseInt(process.env.WORKER_CONCURRENCY) || 20, // Increased from 5 — view count queue must drain faster than it fills
       limiter: {
-        max: 10,      // Max 10 jobs
+        max: parseInt(process.env.WORKER_LIMITER_MAX) || 20, // Max jobs
         duration: 1000 // Per second
       }
     }
