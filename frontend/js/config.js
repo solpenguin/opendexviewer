@@ -15,7 +15,7 @@ const config = {
 
       // Production API URL (Render deployment)
       // Used for all non-local environments (GitHub Pages, custom domains, etc.)
-      return 'https://opendex-api.onrender.com';
+      return 'https://opendex-api-dy30.onrender.com';
     })(),
 
     // Request timeout in milliseconds
