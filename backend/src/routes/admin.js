@@ -459,8 +459,14 @@ router.patch('/settings',
     const { developmentMode } = req.body;
 
     if (typeof developmentMode === 'boolean') {
+      // SECURITY: Block enabling dev mode in production — it bypasses holder verification
+      if (developmentMode === true && process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          success: false,
+          error: 'Development mode cannot be enabled in a production environment'
+        });
+      }
       adminSettings.developmentMode = developmentMode;
-      // Privacy: Don't log admin settings changes
     }
 
     res.json({
