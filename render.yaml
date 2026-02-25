@@ -48,7 +48,7 @@ services:
 
       # CORS - Update this to your actual frontend URL
       - key: CORS_ORIGIN
-        value: https://opendex-frontend.onrender.com
+        value: https://opendex-frontend.onrender.com,https://opendex.online
 
       # Rate limiting configuration
       - key: RATE_LIMIT_WINDOW_MS
