@@ -1078,6 +1078,40 @@ a:hover {
   border-width: 4px;
 }
 
+/* Tiny inline spinner for table cells with pending GeckoTerminal data */
+.mini-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+/* Price refreshing state on token detail page */
+.price-refreshing #token-price,
+.price-refreshing #price-change {
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+/* Tiny inline spinner shown next to freshness indicator during price refresh */
+.price-refresh-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -5439,6 +5473,11 @@ select {
   .loading-spinner {
     animation: none;
     border-top-color: var(--accent-primary);
+  }
+
+  .mini-spinner,
+  .price-refresh-spinner {
+    animation: none;
   }
 
   .skeleton {

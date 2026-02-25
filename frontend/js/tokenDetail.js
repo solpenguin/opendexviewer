@@ -241,6 +241,19 @@ const tokenDetail = {
 
   // Refresh just the price - uses lightweight price endpoint instead of full token data
   async refreshPrice() {
+    // Show loading state while fetching
+    const priceContainer = document.querySelector('.token-price-container');
+    if (priceContainer) priceContainer.classList.add('price-refreshing');
+
+    const freshnessEl = document.getElementById('price-freshness');
+    let spinner = null;
+    if (freshnessEl) {
+      spinner = document.createElement('span');
+      spinner.className = 'price-refresh-spinner';
+      spinner.title = 'Refreshing price…';
+      freshnessEl.appendChild(spinner);
+    }
+
     try {
       const data = await api.tokens.getPrice(this.mint);
       if (data && data.price) {
@@ -254,6 +267,9 @@ const tokenDetail = {
       }
     } catch (error) {
       console.error('Price refresh failed:', error);
+    } finally {
+      if (priceContainer) priceContainer.classList.remove('price-refreshing');
+      if (spinner) spinner.remove();
     }
   },
 
