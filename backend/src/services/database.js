@@ -1015,6 +1015,78 @@ function invalidateAdminStatsCache() {
   adminStatsCache = { data: null, cachedAt: 0 };
 }
 
+// ============================================================
+// Announcement operations
+// ============================================================
+
+async function getActiveAnnouncements() {
+  if (!pool) return [];
+  const result = await pool.query(
+    `SELECT id, title, message, type, created_at, expires_at
+     FROM announcements
+     WHERE is_active = TRUE
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at DESC`
+  );
+  return result.rows;
+}
+
+async function getAllAnnouncements() {
+  if (!pool) return [];
+  const result = await pool.query(
+    `SELECT id, title, message, type, is_active, created_at, expires_at
+     FROM announcements
+     ORDER BY created_at DESC
+     LIMIT 100`
+  );
+  return result.rows;
+}
+
+async function createAnnouncement({ title, message, type = 'info', expiresAt = null }) {
+  if (!pool) throw new Error('Database not available');
+  const result = await pool.query(
+    `INSERT INTO announcements (title, message, type, expires_at)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, title, message, type, is_active, created_at, expires_at`,
+    [title, message, type, expiresAt]
+  );
+  return result.rows[0];
+}
+
+async function updateAnnouncement(id, { isActive, title, message, type, expiresAt }) {
+  if (!pool) throw new Error('Database not available');
+  // Build dynamic SET clause from provided fields only
+  const updates = [];
+  const params = [];
+  let idx = 1;
+
+  if (isActive !== undefined)  { updates.push(`is_active = $${idx++}`);  params.push(isActive); }
+  if (title !== undefined)     { updates.push(`title = $${idx++}`);      params.push(title); }
+  if (message !== undefined)   { updates.push(`message = $${idx++}`);    params.push(message); }
+  if (type !== undefined)      { updates.push(`type = $${idx++}`);       params.push(type); }
+  if (expiresAt !== undefined) { updates.push(`expires_at = $${idx++}`); params.push(expiresAt); }
+
+  if (updates.length === 0) throw new Error('No fields to update');
+
+  params.push(id);
+  const result = await pool.query(
+    `UPDATE announcements SET ${updates.join(', ')}
+     WHERE id = $${idx}
+     RETURNING id, title, message, type, is_active, created_at, expires_at`,
+    params
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteAnnouncement(id) {
+  if (!pool) throw new Error('Database not available');
+  const result = await pool.query(
+    `DELETE FROM announcements WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  return result.rowCount > 0;
+}
+
 // Get all submissions with pagination for admin
 async function getAllSubmissions({ status, limit = 50, offset = 0, sortBy = 'created_at', sortOrder = 'DESC' } = {}) {
   if (!pool) return { submissions: [], total: 0 };
@@ -1683,6 +1755,12 @@ module.exports = {
   getApprovalThreshold,
   // GDPR data deletion
   deleteUserData,
+  // Announcement operations
+  getActiveAnnouncements,
+  getAllAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
   // Database schema management
   getDatabaseSchemaStatus,
   repairDatabaseSchema,

@@ -15,6 +15,7 @@ const watchlistRoutes = require('./routes/watchlist');
 const healthRoutes = require('./routes/health');
 const publicApiRoutes = require('./routes/publicApi');
 const adminRoutes = require('./routes/admin');
+const announcementRoutes = require('./routes/announcements');
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -258,6 +259,7 @@ app.use('/api/tokens', tokenRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/votes', voteRoutes);
 app.use('/api/watchlist', watchlistRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);

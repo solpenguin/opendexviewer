@@ -140,6 +140,31 @@ const adminApi = {
     return this.request('/admin/database/repair', {
       method: 'POST'
     });
+  },
+
+  // Announcements
+  async getAnnouncements() {
+    return this.request('/admin/announcements');
+  },
+
+  async createAnnouncement(data) {
+    return this.request('/admin/announcements', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateAnnouncement(id, data) {
+    return this.request(`/admin/announcements/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async deleteAnnouncement(id) {
+    return this.request(`/admin/announcements/${id}`, {
+      method: 'DELETE'
+    });
   }
 };
 
@@ -331,6 +356,9 @@ const adminPanel = {
         break;
       case 'settings':
         this.loadSettings();
+        break;
+      case 'announcements':
+        this.loadAnnouncements();
         break;
     }
   },
@@ -924,10 +952,134 @@ const adminPanel = {
       btn.disabled = false;
       btn.innerHTML = originalHtml;
     }
+  },
+
+  // ── Announcements ──────────────────────────────────────────────────────────
+
+  async loadAnnouncements() {
+    const tbody = document.getElementById('announcements-table');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7">Loading…</td></tr>';
+
+    try {
+      const result = await adminApi.getAnnouncements();
+      const list = result.data.announcements;
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No announcements yet. Create one above.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(ann => `
+        <tr>
+          <td>${ann.id}</td>
+          <td class="ann-title-cell" title="${this.escapeHtml(ann.title)}">${this.escapeHtml(ann.title)}</td>
+          <td><span class="type-badge ann-type-${this.escapeHtml(ann.type)}">${this.escapeHtml(ann.type)}</span></td>
+          <td>
+            <span class="status-badge ${ann.is_active ? 'approved' : 'rejected'}">
+              ${ann.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </td>
+          <td>${this.formatDate(ann.created_at)}</td>
+          <td>${ann.expires_at ? this.formatDate(ann.expires_at) : '—'}</td>
+          <td class="action-buttons">
+            <button class="btn btn-secondary btn-sm ann-toggle-btn"
+              data-id="${ann.id}" data-active="${ann.is_active}">
+              ${ann.is_active ? 'Deactivate' : 'Activate'}
+            </button>
+            <button class="btn btn-danger btn-sm ann-delete-btn" data-id="${ann.id}">
+              Delete
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      // Wire toggle buttons
+      tbody.querySelectorAll('.ann-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = parseInt(btn.dataset.id);
+          const currentlyActive = btn.dataset.active === 'true';
+          try {
+            await adminApi.updateAnnouncement(id, { isActive: !currentlyActive });
+            toast.success(`Announcement ${currentlyActive ? 'deactivated' : 'activated'}`);
+            this.loadAnnouncements();
+          } catch (err) {
+            toast.error(`Failed: ${err.message}`);
+          }
+        });
+      });
+
+      // Wire delete buttons
+      tbody.querySelectorAll('.ann-delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.id);
+          this.showConfirmModal(
+            'Delete Announcement',
+            'This will permanently remove the announcement. Users will no longer see it.',
+            async () => {
+              try {
+                await adminApi.deleteAnnouncement(id);
+                toast.success('Announcement deleted');
+                this.loadAnnouncements();
+              } catch (err) {
+                toast.error(`Failed: ${err.message}`);
+              }
+            }
+          );
+        });
+      });
+
+    } catch (error) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Failed to load: ${this.escapeHtml(error.message)}</td></tr>`;
+    }
+  },
+
+  async createAnnouncementFromForm() {
+    const title   = document.getElementById('ann-title')?.value.trim();
+    const message = document.getElementById('ann-message')?.value.trim();
+    const type    = document.getElementById('ann-type')?.value || 'info';
+    const expires = document.getElementById('ann-expires')?.value;
+
+    if (!title) { toast.error('Title is required'); return; }
+    if (!message) { toast.error('Message is required'); return; }
+
+    const btn = document.getElementById('ann-create-btn');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loading-spinner small"></div> Broadcasting…';
+
+    try {
+      await adminApi.createAnnouncement({
+        title,
+        message,
+        type,
+        expiresAt: expires || null
+      });
+
+      // Clear form
+      document.getElementById('ann-title').value = '';
+      document.getElementById('ann-message').value = '';
+      document.getElementById('ann-type').value = 'info';
+      document.getElementById('ann-expires').value = '';
+
+      toast.success('Announcement broadcast successfully');
+      this.loadAnnouncements();
+    } catch (error) {
+      toast.error(`Failed to broadcast: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
   }
 };
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
   adminPanel.init();
+
+  // Broadcast button
+  document.getElementById('ann-create-btn')?.addEventListener('click', () => {
+    adminPanel.createAnnouncementFromForm();
+  });
 });

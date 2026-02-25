@@ -28,7 +28,13 @@
       "WebFetch(domain:api.geckoterminal.com)",
       "Bash(git add frontend/js/geckoTerminal.js frontend/js/tokenDetail.js frontend/token.html)",
       "Bash(git add frontend/css/styles.css frontend/js/tokenDetail.js frontend/token.html)",
-      "Bash(git add backend/src/services/jupiter.js backend/src/routes/tokens.js)"
+      "Bash(git add backend/src/services/jupiter.js backend/src/routes/tokens.js)",
+      "Bash(for f in index token submit about api development)",
+      "Bash(do)",
+      "Bash(echo \"=== $f.html ===\")",
+      "Bash(__NEW_LINE_a3b0168d317209e9__ grep -n \"</header>\\\\|</body>\\\\|announcement\\\\|announcements\" \"c:/VS/OPENDEX/opendexviewer/frontend/$f.html\")",
+      "Bash(__NEW_LINE_8e705657680404cb__ done)",
+      "Bash(grep -v \"^ \\\\+//\")"
     ]
   }
 }

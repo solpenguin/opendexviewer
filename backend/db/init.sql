@@ -180,6 +180,25 @@ CREATE INDEX IF NOT EXISTS idx_token_views_mint ON token_views(token_mint);
 CREATE INDEX IF NOT EXISTS idx_token_views_count ON token_views(view_count DESC);
 
 -- =====================================================
+-- ANNOUNCEMENTS TABLE
+-- Admin-broadcast site-wide messages shown as a banner
+-- =====================================================
+CREATE TABLE IF NOT EXISTS announcements (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(20) DEFAULT 'info' CHECK (type IN ('info', 'warning', 'success', 'error')),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Partial index: only index rows that could appear in the active feed
+CREATE INDEX IF NOT EXISTS idx_announcements_active
+    ON announcements (created_at DESC)
+    WHERE is_active = TRUE;
+
+-- =====================================================
 -- VIEWS (SQL Views, not page views)
 -- =====================================================
 

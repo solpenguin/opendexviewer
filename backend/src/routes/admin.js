@@ -13,7 +13,8 @@ const {
   verifyAdminPassword,
   generateAdminSessionToken,
   ADMIN_SESSION_DURATION_MS,
-  SOLANA_ADDRESS_REGEX
+  SOLANA_ADDRESS_REGEX,
+  sanitizeString
 } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
 
@@ -544,6 +545,144 @@ router.post('/database/repair',
       success: true,
       data: result
     });
+  })
+);
+
+// ==========================================
+// Announcements
+// ==========================================
+
+const VALID_ANNOUNCEMENT_TYPES = ['info', 'warning', 'success', 'error'];
+
+/**
+ * GET /admin/announcements
+ * List all announcements (active and inactive)
+ */
+router.get('/announcements',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const announcements = await db.getAllAnnouncements();
+    res.json({ success: true, data: { announcements } });
+  })
+);
+
+/**
+ * POST /admin/announcements
+ * Create and immediately broadcast a new announcement
+ */
+router.post('/announcements',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const { title, message, type = 'info', expiresAt } = req.body;
+
+    if (!title || !message) {
+      return res.status(400).json({ success: false, error: 'title and message are required' });
+    }
+
+    const cleanTitle = sanitizeString(title, 200);
+    const cleanMessage = sanitizeString(message, 2000);
+
+    if (!cleanTitle) {
+      return res.status(400).json({ success: false, error: 'title cannot be empty' });
+    }
+    if (!VALID_ANNOUNCEMENT_TYPES.includes(type)) {
+      return res.status(400).json({ success: false, error: `type must be one of: ${VALID_ANNOUNCEMENT_TYPES.join(', ')}` });
+    }
+
+    let parsedExpiry = null;
+    if (expiresAt) {
+      parsedExpiry = new Date(expiresAt);
+      if (isNaN(parsedExpiry.getTime())) {
+        return res.status(400).json({ success: false, error: 'expiresAt is not a valid date' });
+      }
+      if (parsedExpiry <= new Date()) {
+        return res.status(400).json({ success: false, error: 'expiresAt must be in the future' });
+      }
+    }
+
+    const announcement = await db.createAnnouncement({
+      title: cleanTitle,
+      message: cleanMessage,
+      type,
+      expiresAt: parsedExpiry
+    });
+
+    res.status(201).json({ success: true, data: { announcement } });
+  })
+);
+
+/**
+ * PATCH /admin/announcements/:id
+ * Update an announcement (toggle active, edit fields)
+ */
+router.patch('/announcements/:id',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (!id || id < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid announcement id' });
+    }
+
+    const { isActive, title, message, type, expiresAt } = req.body;
+    const updates = {};
+
+    if (isActive !== undefined) {
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'isActive must be a boolean' });
+      }
+      updates.isActive = isActive;
+    }
+    if (title !== undefined)   updates.title   = sanitizeString(title, 200);
+    if (message !== undefined) updates.message = sanitizeString(message, 2000);
+    if (type !== undefined) {
+      if (!VALID_ANNOUNCEMENT_TYPES.includes(type)) {
+        return res.status(400).json({ success: false, error: `type must be one of: ${VALID_ANNOUNCEMENT_TYPES.join(', ')}` });
+      }
+      updates.type = type;
+    }
+    if (expiresAt !== undefined) {
+      if (expiresAt === null) {
+        updates.expiresAt = null;
+      } else {
+        const parsed = new Date(expiresAt);
+        if (isNaN(parsed.getTime())) {
+          return res.status(400).json({ success: false, error: 'expiresAt is not a valid date' });
+        }
+        updates.expiresAt = parsed;
+      }
+    }
+
+    const announcement = await db.updateAnnouncement(id, updates);
+    if (!announcement) {
+      return res.status(404).json({ success: false, error: 'Announcement not found' });
+    }
+
+    res.json({ success: true, data: { announcement } });
+  })
+);
+
+/**
+ * DELETE /admin/announcements/:id
+ * Permanently remove an announcement
+ */
+router.delete('/announcements/:id',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (!id || id < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid announcement id' });
+    }
+
+    const deleted = await db.deleteAnnouncement(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Announcement not found' });
+    }
+
+    res.json({ success: true });
   })
 );
 

@@ -131,6 +131,13 @@
           </svg>
           Settings
         </button>
+        <button class="admin-nav-item" data-tab="announcements">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13"/>
+            <path d="M22 2L15 22 11 13 2 9l20-7z"/>
+          </svg>
+          Announcements
+        </button>
       </nav>
 
       <main class="admin-main">
@@ -484,6 +491,71 @@
                 Repair Database
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- Announcements Tab -->
+        <div id="tab-announcements" class="admin-tab">
+          <div class="tab-header">
+            <h2>Announcements</h2>
+            <p class="tab-description">Broadcast a message as a sticky banner on every page of the site.</p>
+          </div>
+
+          <!-- Create form -->
+          <div class="settings-section">
+            <h3 class="settings-section-title">New Announcement</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="ann-title">Title</label>
+                <input id="ann-title" type="text" maxlength="200" class="form-input" placeholder="Short headline">
+              </div>
+              <div class="form-group form-group-type">
+                <label class="form-label" for="ann-type">Type</label>
+                <select id="ann-type" class="form-select">
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="success">Success</option>
+                  <option value="error">Error / Outage</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ann-message">Message</label>
+              <textarea id="ann-message" rows="3" class="form-input" placeholder="Full announcement text shown in the banner"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ann-expires">Expires at <span class="form-hint">(optional — leave blank for no expiry)</span></label>
+              <input id="ann-expires" type="datetime-local" class="form-input">
+            </div>
+            <button id="ann-create-btn" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
+              </svg>
+              Broadcast
+            </button>
+          </div>
+
+          <!-- List -->
+          <div class="settings-section">
+            <h3 class="settings-section-title">All Announcements</h3>
+            <table class="perf-table" id="announcements-list-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Expires</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="announcements-table">
+                <tr class="loading-row">
+                  <td colspan="7">Loading announcements…</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </main>
