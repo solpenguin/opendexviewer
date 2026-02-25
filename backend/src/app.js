@@ -132,6 +132,7 @@ app.use((req, res, next) => {
 
   // Respond to preflight immediately — no further middleware runs
   if (req.method === 'OPTIONS') {
+    console.log(`[CORS] Preflight: origin="${origin}" allowed=${allowed} corsOrigins=${JSON.stringify(corsOrigins)}`);
     if (allowed && normalizedOrigin) {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Admin-Session');
@@ -224,6 +225,16 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Rate limiting for API routes
 app.use('/api/', defaultLimiter);
+
+// CORS debug endpoint - shows current CORS configuration (no auth required)
+app.get('/health/cors', (req, res) => {
+  res.json({
+    corsOrigins,
+    corsOriginEnv: process.env.CORS_ORIGIN || null,
+    nodeEnv: process.env.NODE_ENV,
+    requestOrigin: req.headers.origin || null
+  });
+});
 
 // Health check routes (no rate limiting)
 app.use('/health', healthRoutes);
