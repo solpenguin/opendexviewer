@@ -35,7 +35,12 @@ const tokenDetail = {
 
     // Pre-fetch the default chart interval immediately — only the mint is needed,
     // so this runs in parallel with loadToken() and eliminates one sequential API round-trip.
-    this._chartPreload = api.tokens.getChart(this.mint, { interval: '1H', limit: 168 });
+    // Try direct GeckoTerminal first (uses the user's own rate-limit budget);
+    // fall back to the backend endpoint on any failure.
+    this._chartPreload = (typeof directGecko !== 'undefined' && directGecko._available)
+      ? directGecko.getOHLCV(this.mint, '1h')
+          .catch(() => api.tokens.getChart(this.mint, { interval: '1H', limit: 168 }))
+      : api.tokens.getChart(this.mint, { interval: '1H', limit: 168 });
 
     this.bindEvents();
 
@@ -453,7 +458,21 @@ const tokenDetail = {
       // avoiding a duplicate request if loadToken() hasn't finished yet.
       const preload = (interval === '1h') ? this._chartPreload : null;
       this._chartPreload = null;
-      this.chartData = await (preload || api.tokens.getChart(this.mint, params));
+
+      if (preload) {
+        this.chartData = await preload;
+      } else {
+        // Try direct GeckoTerminal (user's own rate-limit budget); fall back to backend.
+        try {
+          if (typeof directGecko !== 'undefined' && directGecko._available) {
+            this.chartData = await directGecko.getOHLCV(this.mint, interval);
+          } else {
+            this.chartData = await api.tokens.getChart(this.mint, params);
+          }
+        } catch (_) {
+          this.chartData = await api.tokens.getChart(this.mint, params);
+        }
+      }
 
       this.renderChart(this.chartData);
       this.updateChartStats(this.chartData);
