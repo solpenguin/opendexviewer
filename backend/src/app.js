@@ -144,6 +144,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// Server-Timing middleware: adds 'Server-Timing: proc;dur=X' to every response.
+// Visible in browser DevTools > Network > Timing tab for latency profiling.
+// The override restores res.end before delegating so it is not called twice.
+app.use((req, res, next) => {
+  const startMs = Date.now();
+  const origEnd = res.end;
+  res.end = function (...args) {
+    res.end = origEnd; // restore before calling to avoid recursion
+    try { res.setHeader('Server-Timing', `proc;dur=${Date.now() - startMs}`); } catch (_) {}
+    return origEnd.apply(this, args);
+  };
+  next();
+});
+
 // Security headers - protects against common web vulnerabilities
 // SECURITY: Helmet sets various HTTP headers for security
 app.use(helmet({

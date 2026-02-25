@@ -20,20 +20,29 @@ const adminApi = {
 
   // Generic request wrapper
   async request(endpoint, options = {}) {
+    const _t0 = performance.now();
     const url = `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: this.getHeaders(),
-      credentials: 'include' // Include cookies
-    });
+    let _ok = false;
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: this.getHeaders(),
+        credentials: 'include' // Include cookies
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
+
+      _ok = true;
+      return data;
+    } finally {
+      if (typeof latencyTracker !== 'undefined') {
+        latencyTracker.record(endpoint, performance.now() - _t0, _ok);
+      }
     }
-
-    return data;
   },
 
   // Auth endpoints
@@ -354,6 +363,56 @@ const adminPanel = {
       console.error('Failed to load stats:', error);
       toast.error('Failed to load dashboard stats');
     }
+
+    this.renderPerfMetrics();
+  },
+
+  // Render API latency table on the dashboard
+  renderPerfMetrics() {
+    const container = document.getElementById('perf-metrics');
+    if (!container || typeof latencyTracker === 'undefined') return;
+
+    const summary = latencyTracker.getSummary();
+
+    if (summary.length === 0) {
+      container.innerHTML = '<p class="perf-empty">No requests recorded yet — interact with the app to populate data.</p>';
+      return;
+    }
+
+    // Color-code a latency value: green <200ms, amber <800ms, red ≥800ms
+    function latColor(ms) {
+      if (ms < 200) return 'var(--green, #22c55e)';
+      if (ms < 800) return '#f59e0b';
+      return 'var(--red, #ef4444)';
+    }
+
+    const rows = summary.map(s => `
+      <tr>
+        <td class="perf-endpoint">${s.endpoint}</td>
+        <td class="perf-num">${s.count}${s.errors > 0 ? `<span class="perf-err"> ${s.errors}✗</span>` : ''}</td>
+        <td class="perf-num" style="color:${latColor(s.avg)}">${s.avg}</td>
+        <td class="perf-num" style="color:${latColor(s.p95)}">${s.p95}</td>
+        <td class="perf-num">${s.min}</td>
+        <td class="perf-num">${s.max}</td>
+        <td class="perf-num" style="color:${latColor(s.last)}">${s.last}</td>
+      </tr>`).join('');
+
+    container.innerHTML = `
+      <table class="perf-table">
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th>Calls</th>
+            <th>Avg ms</th>
+            <th>P95 ms</th>
+            <th>Min ms</th>
+            <th>Max ms</th>
+            <th>Last ms</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="perf-legend">Rolling last 100 samples per endpoint &nbsp;·&nbsp; <span style="color:var(--green,#22c55e)">green</span> &lt;200ms &nbsp;·&nbsp; <span style="color:#f59e0b">amber</span> &lt;800ms &nbsp;·&nbsp; <span style="color:var(--red,#ef4444)">red</span> ≥800ms</p>`;
   },
 
   // Load submissions

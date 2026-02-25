@@ -133,6 +133,61 @@ const apiCache = {
   }
 };
 
+// Latency Tracker - records per-endpoint API call durations (rolling window)
+// Used by the admin dashboard to surface slow endpoints for debugging
+const latencyTracker = {
+  WINDOW_SIZE: 100, // Keep last 100 samples per endpoint
+
+  data: new Map(), // normalized endpoint → { samples: number[], count: number, errors: number }
+
+  // Strip query params and replace long token addresses / numeric IDs with :id
+  normalize(endpoint) {
+    let path = endpoint.split('?')[0];
+    // Replace base58 Solana addresses (32+ chars) and long hex strings with :id
+    path = path.replace(/\/[A-Za-z0-9]{32,}/g, '/:id');
+    // Replace trailing numeric IDs (e.g. /submissions/42)
+    path = path.replace(/\/\d+$/g, '/:id');
+    return path;
+  },
+
+  record(endpoint, durationMs, success = true) {
+    const key = this.normalize(endpoint);
+    if (!this.data.has(key)) {
+      this.data.set(key, { samples: [], count: 0, errors: 0 });
+    }
+    const entry = this.data.get(key);
+    entry.count++;
+    if (!success) entry.errors++;
+    entry.samples.push(Math.round(durationMs));
+    if (entry.samples.length > this.WINDOW_SIZE) {
+      entry.samples.shift();
+    }
+  },
+
+  // Return per-endpoint summary sorted by call count (descending)
+  getSummary() {
+    const results = [];
+    for (const [key, entry] of this.data) {
+      if (entry.samples.length === 0) continue;
+      const sorted = [...entry.samples].sort((a, b) => a - b);
+      const n = sorted.length;
+      const avg = Math.round(sorted.reduce((s, v) => s + v, 0) / n);
+      const p95 = sorted[Math.min(Math.floor(n * 0.95), n - 1)];
+      results.push({
+        endpoint: key,
+        count: entry.count,
+        errors: entry.errors,
+        avg,
+        p95,
+        min: sorted[0],
+        max: sorted[n - 1],
+        last: entry.samples[entry.samples.length - 1]
+      });
+    }
+    return results.sort((a, b) => b.count - a.count);
+  }
+};
+
 // Default request timeout (10 seconds) - prevents hung requests
 const DEFAULT_REQUEST_TIMEOUT = (typeof config !== 'undefined' && config.api?.timeout) || 10000;
 
@@ -143,6 +198,7 @@ const api = {
     const url = `${API_BASE_URL}${endpoint}`;
     const maxRetries = options.retries || (typeof config !== 'undefined' ? config.api?.retries : 2) || 2;
     const timeout = options.timeout || DEFAULT_REQUEST_TIMEOUT;
+    const _t0 = performance.now();
     let lastError;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -174,6 +230,7 @@ const api = {
           throw error;
         }
 
+        latencyTracker.record(endpoint, performance.now() - _t0, true);
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
@@ -211,6 +268,7 @@ const api = {
     if (typeof config !== 'undefined' && config.debug) {
       console.error(`API Error (${endpoint}):`, lastError.message);
     }
+    latencyTracker.record(endpoint, performance.now() - _t0, false);
     throw lastError;
   },
 
