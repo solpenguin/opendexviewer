@@ -1272,12 +1272,14 @@ const tokenDetail = {
     });
   },
 
-  // Escape HTML to prevent XSS
+  // Escape HTML to prevent XSS - safe in both text nodes and attribute values
   escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    return div.innerHTML
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   },
 
   // Start freshness display timer (updates every second)

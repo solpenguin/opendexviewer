@@ -1046,8 +1046,8 @@ function validateBatchSubmissionSignature(req, res, next) {
 // Admin Authentication
 // ==========================================
 
-// Session duration (24 hours)
-const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+// Session duration (8 hours — reduced from 24h to limit stolen-session exposure)
+const ADMIN_SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 // Generate admin session token
 function generateAdminSessionToken() {
@@ -1056,7 +1056,11 @@ function generateAdminSessionToken() {
 }
 
 // Verify admin password
-function verifyAdminPassword(password) {
+// Supports two formats for ADMIN_PASSWORD:
+//   scrypt:<salt_hex>:<hash_hex>  — hashed (recommended, use scripts/hash-password.js to generate)
+//   <plaintext>                   — legacy plaintext (triggers a startup warning)
+async function verifyAdminPassword(password) {
+  const crypto = require('crypto');
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminPassword) {
@@ -1064,19 +1068,36 @@ function verifyAdminPassword(password) {
     return false;
   }
 
-  // Use constant-time comparison to prevent timing attacks
-  const crypto = require('crypto');
+  // Hashed path: scrypt:<salt_hex>:<hash_hex>
+  if (adminPassword.startsWith('scrypt:')) {
+    const parts = adminPassword.split(':');
+    if (parts.length !== 3) {
+      console.error('[Security] ADMIN_PASSWORD has invalid scrypt format. Expected scrypt:<salt_hex>:<hash_hex>');
+      return false;
+    }
+    const [, saltHex, hashHex] = parts;
+    const salt = Buffer.from(saltHex, 'hex');
+    const storedHash = Buffer.from(hashHex, 'hex');
+
+    return new Promise((resolve) => {
+      crypto.scrypt(password || '', salt, 64, (err, derivedKey) => {
+        if (err) { resolve(false); return; }
+        resolve(crypto.timingSafeEqual(derivedKey, storedHash));
+      });
+    });
+  }
+
+  // Legacy plaintext path — warn loudly and use constant-time comparison
+  console.warn('[Security] ADMIN_PASSWORD is stored in plaintext. Run node scripts/hash-password.js to upgrade to a hashed format.');
   const passwordBuffer = Buffer.from(password || '');
   const adminBuffer = Buffer.from(adminPassword);
 
-  // Pad shorter buffer to match length for constant-time comparison
   const maxLength = Math.max(passwordBuffer.length, adminBuffer.length);
   const paddedPassword = Buffer.alloc(maxLength);
   const paddedAdmin = Buffer.alloc(maxLength);
   passwordBuffer.copy(paddedPassword);
   adminBuffer.copy(paddedAdmin);
 
-  // Always compare same-length buffers, then check if original lengths matched
   const match = crypto.timingSafeEqual(paddedPassword, paddedAdmin);
   return match && passwordBuffer.length === adminBuffer.length;
 }

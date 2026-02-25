@@ -684,11 +684,14 @@ const toast = {
 // Utility functions
 const utils = {
   // Escape HTML to prevent XSS attacks - USE THIS for any user-generated content
+  // Encodes <, >, &, " and ' so the result is safe in both text nodes and attribute values
   escapeHtml(text) {
     if (text === null || text === undefined) return '';
     const div = document.createElement('div');
     div.textContent = String(text);
-    return div.innerHTML;
+    return div.innerHTML
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   },
 
   // Pending data indicator (timer icon) - shown when data hasn't been fetched yet

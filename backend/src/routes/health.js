@@ -179,14 +179,11 @@ router.get('/detailed', async (req, res) => {
     };
   }
 
-  // Environment checks
+  // Environment checks — do not expose which third-party API keys are configured
   health.checks.environment = {
     node_env: process.env.NODE_ENV || 'development',
     has_database_url: !!process.env.DATABASE_URL,
-    has_redis_url: !!process.env.REDIS_URL,
-    has_helius_key: !!process.env.HELIUS_API_KEY,
-    has_birdeye_key: !!process.env.BIRDEYE_API_KEY,
-    has_jupiter_key: !!process.env.JUPITER_API_KEY
+    has_redis_url: !!process.env.REDIS_URL
   };
 
   // Set status code based on health

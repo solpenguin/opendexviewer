@@ -46,8 +46,8 @@ router.post('/login',
       });
     }
 
-    // Verify password
-    if (!verifyAdminPassword(password)) {
+    // Verify password (async - supports scrypt hash or legacy plaintext)
+    if (!await verifyAdminPassword(password)) {
       // Privacy: Don't log IP addresses
       return res.status(401).json({
         success: false,
@@ -183,12 +183,17 @@ router.get('/submissions',
       });
     }
 
+    // Validate sort parameters at the route layer (defence-in-depth; database layer also validates)
+    const VALID_SORT_COLUMNS = ['created_at', 'score', 'weighted_score', 'status'];
+    const validatedSortBy = VALID_SORT_COLUMNS.includes(sortBy) ? sortBy : 'created_at';
+    const validatedSortOrder = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
     const result = await db.getAllSubmissions({
       status,
       limit: Math.min(Math.max(1, parseInt(limit) || 50), 100),
       offset: Math.max(0, parseInt(offset) || 0),
-      sortBy,
-      sortOrder
+      sortBy: validatedSortBy,
+      sortOrder: validatedSortOrder
     });
 
     res.json({
@@ -473,11 +478,11 @@ router.patch('/settings',
 
 /**
  * GET /admin/settings/development-mode
- * Check if development mode is enabled
- * This is a PUBLIC endpoint so the frontend can check dev mode status
- * No sensitive data is exposed - just a boolean flag
+ * Check if development mode is enabled - requires admin session
+ * Non-admin callers receive 401; frontend code defaults developmentMode to false on failure
  */
 router.get('/settings/development-mode',
+  validateAdminSession,
   asyncHandler(async (req, res) => {
     res.json({
       developmentMode: adminSettings.developmentMode

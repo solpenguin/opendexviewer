@@ -4,10 +4,14 @@ const { circuitBreakers } = require('./circuitBreaker');
 // RPC endpoint configuration with failover
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 
-// Primary and fallback RPC endpoints
+// Pass the Helius key as a request header rather than a URL query parameter
+// to avoid the key appearing in HTTP access logs, CDN logs, or error traces
+const HELIUS_HEADERS = HELIUS_API_KEY ? { 'x-api-key': HELIUS_API_KEY } : {};
+
+// Primary and fallback RPC endpoints (no key in URLs)
 const RPC_ENDPOINTS = [
-  // Primary: Helius (if configured)
-  HELIUS_API_KEY && `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
+  // Primary: Helius (if configured) - key sent via header
+  HELIUS_API_KEY && 'https://mainnet.helius-rpc.com',
   // Secondary: Custom Helius RPC URL
   process.env.HELIUS_RPC_URL,
   // Tertiary: Public Solana RPC (rate limited but always available)
@@ -48,10 +52,8 @@ function failoverToNextRpc() {
 // Legacy export for backwards compatibility
 const RPC_URL = RPC_ENDPOINTS[0];
 
-// Helius DAS API endpoint (for getTokenAccounts)
-const HELIUS_DAS_URL = HELIUS_API_KEY
-  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
-  : null;
+// Helius DAS API base URL (key sent via header, not query string)
+const HELIUS_DAS_URL = HELIUS_API_KEY ? 'https://mainnet.helius-rpc.com' : null;
 
 // Make RPC call with circuit breaker, failover, and retry logic
 async function rpcCall(method, params = [], retryCount = 0) {
@@ -68,7 +70,8 @@ async function rpcCall(method, params = [], retryCount = 0) {
         method,
         params
       }, {
-        timeout: 15000 // 15 second timeout (reduced from 30s for faster failover)
+        timeout: 15000, // 15 second timeout (reduced from 30s for faster failover)
+        headers: HELIUS_HEADERS
       });
 
       // Defensive check for malformed responses
@@ -229,7 +232,8 @@ async function getTokenHolderCount(mintAddress) {
         limit: 1 // Minimize response, we only need the total count
       }
     }, {
-      timeout: 10000
+      timeout: 10000,
+      headers: HELIUS_HEADERS
     });
 
     if (response.data.error) {
@@ -313,7 +317,8 @@ async function getTokenMetadata(mintAddress) {
         }
       }
     }, {
-      timeout: 10000
+      timeout: 10000,
+      headers: HELIUS_HEADERS
     });
 
     if (response.data.error) {
@@ -409,7 +414,8 @@ async function getTokenMetadataBatch(mintAddresses) {
         }
       }
     }, {
-      timeout: 15000
+      timeout: 15000,
+      headers: HELIUS_HEADERS
     });
 
     if (response.data.error) {
