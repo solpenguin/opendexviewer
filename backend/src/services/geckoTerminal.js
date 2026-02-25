@@ -72,7 +72,9 @@ const inFlightRequests = new Map();
  * TTL: 5 minutes
  */
 const poolAddressCache = new Map();
-const POOL_CACHE_TTL = 5 * 60 * 1000;
+// Pool addresses for established tokens are stable for hours; long TTL avoids the extra
+// sequential API call before OHLCV can be fetched on every cache miss / server restart.
+const POOL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 /**
  * Local cache for error responses (prevents repeated failed API calls)

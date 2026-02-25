@@ -12,6 +12,7 @@ const tokenDetail = {
   priceRefreshInterval: null,
   freshnessInterval: null,
   lastPriceUpdate: null,
+  _chartPreload: null, // In-flight promise for the default chart interval; reused by loadChart()
 
   // Get refresh interval from config (with fallback)
   get refreshIntervalMs() {
@@ -31,6 +32,10 @@ const tokenDetail = {
       this.showError('Invalid token address provided.');
       return;
     }
+
+    // Pre-fetch the default chart interval immediately — only the mint is needed,
+    // so this runs in parallel with loadToken() and eliminates one sequential API round-trip.
+    this._chartPreload = api.tokens.getChart(this.mint, { interval: '1H', limit: 168 });
 
     this.bindEvents();
 
@@ -443,7 +448,12 @@ const tokenDetail = {
       };
 
       const params = intervalMap[interval] || intervalMap['1h'];
-      this.chartData = await api.tokens.getChart(this.mint, params);
+
+      // Reuse the in-flight preload promise when loading the default 1h interval,
+      // avoiding a duplicate request if loadToken() hasn't finished yet.
+      const preload = (interval === '1h') ? this._chartPreload : null;
+      this._chartPreload = null;
+      this.chartData = await (preload || api.tokens.getChart(this.mint, params));
 
       this.renderChart(this.chartData);
       this.updateChartStats(this.chartData);

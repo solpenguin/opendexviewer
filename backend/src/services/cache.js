@@ -11,7 +11,7 @@ const TTL = {
   VERY_SHORT: 10000,    // 10 seconds - for real-time data
   SHORT: 30000,         // 30 seconds
   MEDIUM: 60000,        // 1 minute
-  OHLCV: 120000,        // 2 minutes - for chart/OHLCV data (doesn't change rapidly)
+  OHLCV: 300000,        // 5 minutes - chart/OHLCV data; candles form over minutes/hours
   POOLS: 180000,        // 3 minutes - for pool data (rarely changes)
   PRICE_DATA: 300000,   // 5 minutes - for price/volume data (rolling cache)
   PRICE_FRESH: 60000,   // 1 minute - freshness threshold for individual token views
