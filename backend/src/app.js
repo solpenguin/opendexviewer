@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const crypto = require('crypto');
@@ -113,31 +112,36 @@ if (corsOrigins.length > 0) {
   console.warn('[SECURITY WARNING] CORS_ORIGIN not configured in production. All cross-origin requests will be blocked.');
 }
 
-const corsOptions = {
-  origin: (incomingOrigin, callback) => {
-    // Non-browser requests (curl, server-to-server) have no Origin header — allow them
-    if (!incomingOrigin) return callback(null, true);
+// Manual CORS middleware — first in chain, handles both preflight and regular requests.
+// Replaces the cors npm package to guarantee header delivery regardless of package behavior.
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const normalizedOrigin = origin ? origin.replace(/\/$/, '') : null;
 
-    // Development: allow all origins
-    if (process.env.NODE_ENV !== 'production') return callback(null, true);
+  const allowed = !normalizedOrigin                                  // non-browser / server-to-server
+    || process.env.NODE_ENV !== 'production'                         // development: allow all
+    || corsOrigins.includes(normalizedOrigin);                       // production: exact match
 
-    // Production: exact match against configured origins (trailing slashes already stripped)
-    const normalizedIncoming = incomingOrigin.replace(/\/$/, '');
-    if (corsOrigins.includes(normalizedIncoming)) {
-      return callback(null, true);
+  if (allowed && normalizedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', normalizedOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  } else if (!allowed) {
+    console.warn(`[CORS] Blocked origin: "${origin}" — not in allowed list: [${corsOrigins.join(', ')}]`);
+  }
+
+  // Respond to preflight immediately — no further middleware runs
+  if (req.method === 'OPTIONS') {
+    if (allowed && normalizedOrigin) {
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Admin-Session');
+      res.setHeader('Access-Control-Max-Age', '86400');
     }
+    return res.status(204).end();
+  }
 
-    console.warn(`[CORS] Blocked origin: "${incomingOrigin}" — not in allowed list: [${corsOrigins.join(', ')}]`);
-    return callback(null, false);
-  },
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Admin-Session'],
-  // SECURITY: credentials should only be true when origin is not '*'
-  credentials: true,
-  maxAge: 86400 // 24 hours
-};
-
-app.use(cors(corsOptions));
+  next();
+});
 
 // Security headers - protects against common web vulnerabilities
 // SECURITY: Helmet sets various HTTP headers for security
