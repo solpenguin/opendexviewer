@@ -1450,7 +1450,7 @@ a:hover {
 .community-banner {
   width: 100%;
   height: auto;
-  max-height: 220px;
+  max-height: 300px;
   object-fit: cover;
   display: block;
 }
@@ -1507,7 +1507,7 @@ a:hover {
 .community-banner-wrapper .community-banner {
   width: 100%;
   height: auto;
-  max-height: 200px;
+  max-height: 300px;
   object-fit: cover;
   display: block;
 }
@@ -2523,7 +2523,7 @@ a:hover {
 /* Banner Preview */
 .banner-preview-wrapper {
   position: relative;
-  min-height: 120px;
+  min-height: 160px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -2532,7 +2532,7 @@ a:hover {
 .banner-preview {
   width: 100%;
   height: auto;
-  max-height: 200px;
+  max-height: 300px;
   object-fit: cover;
 }
 
@@ -3234,7 +3234,7 @@ a:hover {
   background: var(--bg-tertiary);
   border: 2px dashed var(--border-color);
   border-radius: var(--radius-lg);
-  min-height: 120px;
+  min-height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3266,7 +3266,7 @@ a:hover {
 .preview-banner-img {
   width: 100%;
   height: auto;
-  max-height: 200px;
+  max-height: 300px;
   object-fit: cover;
   display: none;
 }
@@ -5126,7 +5126,7 @@ select {
 
   /* Banner section */
   .community-banner-wrapper .community-banner {
-    max-height: 150px;
+    max-height: 200px;
   }
 
   /* Footer compact */
@@ -5265,7 +5265,7 @@ select {
 
   /* Banner preview smaller */
   .banner-preview {
-    max-height: 150px;
+    max-height: 200px;
   }
 
   /* Trade buttons stack */

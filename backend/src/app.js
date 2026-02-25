@@ -103,24 +103,39 @@ app.set('trust proxy', 1);
 // CORS configuration
 // SECURITY: Properly configure CORS to prevent credential leaks
 const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
-  : null;
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim().replace(/\/$/, '')).filter(Boolean)
+  : [];
 
-const corsOptions = {
-  origin: corsOrigins && corsOrigins.length > 0
-    ? corsOrigins
-    : (process.env.NODE_ENV === 'production' ? false : '*'), // Deny in production if not configured
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], // Methods we use
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Admin-Session'],
-  // SECURITY: credentials should only be true when origin is not '*'
-  credentials: corsOrigins && corsOrigins.length > 0,
-  maxAge: 86400 // 24 hours
-};
-
-// Warn if CORS is misconfigured in production
-if (process.env.NODE_ENV === 'production' && (!corsOrigins || corsOrigins.length === 0)) {
+// Log configured origins at startup so mismatches are visible in Render logs
+if (corsOrigins.length > 0) {
+  console.log('[CORS] Allowed origins:', corsOrigins);
+} else if (process.env.NODE_ENV === 'production') {
   console.warn('[SECURITY WARNING] CORS_ORIGIN not configured in production. All cross-origin requests will be blocked.');
 }
+
+const corsOptions = {
+  origin: (incomingOrigin, callback) => {
+    // Non-browser requests (curl, server-to-server) have no Origin header — allow them
+    if (!incomingOrigin) return callback(null, true);
+
+    // Development: allow all origins
+    if (process.env.NODE_ENV !== 'production') return callback(null, true);
+
+    // Production: exact match against configured origins (trailing slashes already stripped)
+    const normalizedIncoming = incomingOrigin.replace(/\/$/, '');
+    if (corsOrigins.includes(normalizedIncoming)) {
+      return callback(null, true);
+    }
+
+    console.warn(`[CORS] Blocked origin: "${incomingOrigin}" — not in allowed list: [${corsOrigins.join(', ')}]`);
+    return callback(null, false);
+  },
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Admin-Session'],
+  // SECURITY: credentials should only be true when origin is not '*'
+  credentials: true,
+  maxAge: 86400 // 24 hours
+};
 
 app.use(cors(corsOptions));
 

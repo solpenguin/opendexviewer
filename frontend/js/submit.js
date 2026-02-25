@@ -949,7 +949,7 @@ const submitPage = {
             <span class="step-number">1</span>
             <div class="step-content">
               <h4>Create Your Banner</h4>
-              <p>Design a banner image (<strong>1200 x 300px</strong> recommended). PNG or JPG format works best.</p>
+              <p>Design a banner image (<strong>1500 x 500px</strong> recommended). PNG or JPG format works best.</p>
             </div>
           </div>
           <div class="imgur-step">
