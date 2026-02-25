@@ -7,7 +7,28 @@
       "Bash(timeout 15 node:*)",
       "Bash(curl:*)",
       "Bash(node:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(git add backend/src/app.js)",
+      "Bash(git commit -m \"CORS Debug: add preflight logging and /health/cors diagnostic endpoint\")",
+      "Bash(git push)",
+      "Bash(git add frontend/js/config.js)",
+      "Bash(git commit -m \"Fix production API URL to opendex-api-dy30.onrender.com\")",
+      "Bash(git add render.yaml)",
+      "Bash(git commit -m \"Add opendex.online to CORS_ORIGIN allowed origins\")",
+      "Bash(git add backend/src/routes/admin.js)",
+      "Bash(git commit -m \"Security: block enabling dev mode in production environment\")",
+      "Bash(git add backend/src/routes/votes.js backend/src/worker.js render.yaml)",
+      "Bash(git commit -m \"Performance: tune holder cache TTL, worker concurrency, view buffer config\")",
+      "Bash(git add frontend/css/styles.css frontend/js/tokens.js frontend/js/tokenDetail.js)",
+      "Bash(git commit -m \"UX: show rotating spinner for pending GeckoTerminal market data\")",
+      "Bash(git add frontend/js/api.js frontend/js/admin.js frontend/admin.html frontend/css/admin.css backend/src/app.js)",
+      "Bash(git commit:*)",
+      "Bash(git add backend/src/services/cache.js backend/src/services/geckoTerminal.js frontend/js/tokenDetail.js)",
+      "WebFetch(domain:www.geckoterminal.com)",
+      "WebFetch(domain:api.geckoterminal.com)",
+      "Bash(git add frontend/js/geckoTerminal.js frontend/js/tokenDetail.js frontend/token.html)",
+      "Bash(git add frontend/css/styles.css frontend/js/tokenDetail.js frontend/token.html)",
+      "Bash(git add backend/src/services/jupiter.js backend/src/routes/tokens.js)"
     ]
   }
 }
