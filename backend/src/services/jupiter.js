@@ -468,6 +468,8 @@ async function getPriceHistory(mintAddress, { interval = '1h', limit = 100 }) {
  * @returns {Promise<number|null>} - Holder count or null if unavailable
  */
 async function getTokenHolderCount(mintAddress) {
+  if (!isConfigured()) return null;
+
   const client = createClient();
 
   console.log(`[Jupiter] Getting holder count for ${mintAddress}`);

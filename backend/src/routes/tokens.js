@@ -611,31 +611,29 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         db.getApprovedSubmissions(mint).catch(() => [])
       ];
 
-      // If holder count not cached, fetch it
-      // Priority: Jupiter (more reliable holderCount field) > Helius (getTokenAccounts total)
+      // If holder count not cached, fetch Jupiter + Helius in parallel and pick the best result
+      // Priority: Jupiter (holderCount field) > Helius (getTokenAccounts total)
       if (holders === undefined) {
         fetchPromises.push(
-          // Try Jupiter first (has holderCount in search response)
-          jupiterService.getTokenHolderCount(mint).catch(() => null)
+          Promise.all([
+            jupiterService.getTokenHolderCount(mint).catch(() => null),
+            solanaService.isHeliusConfigured()
+              ? solanaService.getTokenHolderCount(mint).catch(() => null)
+              : Promise.resolve(null)
+          ]).then(([jupiterCount, heliusCount]) => {
+            if (jupiterCount != null && jupiterCount > 1) return jupiterCount;
+            if (heliusCount  != null && heliusCount  > 1) return heliusCount;
+            return jupiterCount ?? heliusCount ?? null;
+          })
         );
       }
 
       const results = await Promise.all(fetchPromises);
       const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
-      // Process holder count - try fallbacks if Jupiter didn't return a valid count
-      // Priority: Jupiter > Helius > Birdeye
+      // Process holder count - try Birdeye as final fallback if parallel fetch returned nothing
+      // Priority: Jupiter+Helius (parallel above) > Birdeye
       let finalHolders = fetchedHolders;
-
-      // If Jupiter didn't return a valid holder count (or returned a suspicious value), try Helius
-      if ((finalHolders === null || finalHolders === undefined || finalHolders <= 1) && solanaService.isHeliusConfigured()) {
-        const heliusHolders = await solanaService.getTokenHolderCount(mint).catch(() => null);
-
-        // Use Helius count if it's better than Jupiter's
-        if (heliusHolders !== null && heliusHolders > (finalHolders || 0)) {
-          finalHolders = heliusHolders;
-        }
-      }
 
       // If still no valid holder count, try Birdeye as final fallback
       if (finalHolders === null || finalHolders === undefined || finalHolders <= 1) {
