@@ -547,12 +547,14 @@ const voting = {
     if (!wallet.connected || submissionIds.length === 0) return;
 
     try {
-      const results = await api.votes.checkBulk(submissionIds, wallet.address);
+      const results = await api.votes.bulkCheck(submissionIds, wallet.address);
 
-      results.forEach(result => {
+      // Backend returns an object keyed by submission ID, not an array
+      Object.entries(results).forEach(([id, result]) => {
+        const submissionId = parseInt(id);
         if (result.hasVoted) {
-          this.voteStates.set(result.submissionId, result.voteType);
-          this.updateVoteUI(result.submissionId, result.voteType, false);
+          this.voteStates.set(submissionId, result.voteType);
+          this.updateVoteUI(submissionId, result.voteType, false);
         }
       });
     } catch (error) {

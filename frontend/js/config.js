@@ -39,7 +39,7 @@ const config = {
     enableVoting: true,
     enableSubmissions: true,
     enablePriceAlerts: false,  // Future feature
-    enableWatchlist: false      // Future feature
+    enableWatchlist: true
   },
 
   // UI Configuration

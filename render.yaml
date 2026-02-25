@@ -62,7 +62,7 @@ services:
 # =====================================================
 databases:
   - name: opendex-db
-    plan: free
+    plan: starter
     region: oregon
     databaseName: opendex
     user: opendex_user

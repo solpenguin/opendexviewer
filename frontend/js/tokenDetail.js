@@ -895,8 +895,20 @@ const tokenDetail = {
         bannerWrapper.style.display = 'none';
       };
 
-      document.getElementById('banner-upvotes').textContent = topBanner.upvotes || 0;
-      document.getElementById('banner-downvotes').textContent = topBanner.downvotes || 0;
+      const bannerUpvotesEl = document.getElementById('banner-upvotes');
+      const bannerDownvotesEl = document.getElementById('banner-downvotes');
+      if (bannerUpvotesEl) {
+        bannerUpvotesEl.textContent = topBanner.upvotes || 0;
+        bannerUpvotesEl.dataset.submissionId = topBanner.id;
+      }
+      if (bannerDownvotesEl) {
+        bannerDownvotesEl.textContent = topBanner.downvotes || 0;
+        bannerDownvotesEl.dataset.submissionId = topBanner.id;
+      }
+
+      // Tag the banner voting container so updateVoteUI can find and update buttons
+      const bannerVotingEl = bannerWrapper.querySelector('.banner-voting');
+      if (bannerVotingEl) bannerVotingEl.dataset.submissionId = topBanner.id;
 
       // Set up voting buttons
       bannerWrapper.querySelectorAll('.vote-btn').forEach(btn => {
