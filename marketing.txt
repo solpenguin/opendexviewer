@@ -1,0 +1,243 @@
+================================================================================
+  OPENDEX — PRESENTATION SCRIPT
+  Free, Open-Source Solana Token Explorer
+================================================================================
+
+
+SLIDE 1 — OPENING / HOOK
+--------------------------------------------------------------------------------
+
+"How many of you have gone to look up a Solana token and hit a paywall?
+ Or tried to update your token's listing and been told it would cost $500?
+ Or watched a token's page filled with outdated, wrong, or spam content
+ with no way to fix it?
+
+ That's the problem we set out to solve.
+
+ Introducing OpenDex — a completely free, open-source Solana token explorer
+ built for the community, by the community."
+
+
+SLIDE 2 — WHAT IS OPENDEX?
+--------------------------------------------------------------------------------
+
+"OpenDex is a Solana token scanner and explorer that gives you real-time
+market data, price charts, liquidity pool information, and community-driven
+content for every token on Solana — all at zero cost.
+
+ There are no listing fees.
+ No premium tiers.
+ No paid promotions.
+ Ever.
+
+ We pull live data from Jupiter, GeckoTerminal, and on-chain sources so
+ you always have accurate, up-to-date information."
+
+
+SLIDE 3 — CORE FEATURES
+--------------------------------------------------------------------------------
+
+"Let me walk you through what OpenDex actually does.
+
+ REAL-TIME MARKET DATA
+ The token list shows prices, 24-hour price change, market cap, trading
+ volume, and holder counts — all refreshing automatically every two minutes.
+ No stale numbers, no manual refreshes.
+
+ DETAILED TOKEN PAGES
+ Click any token and you get:
+   - Current price with a live freshness indicator
+   - 24H high and low, market cap, FDV, volume
+   - Interactive OHLC price charts with multiple timeframes
+     (5 minutes, 1 hour, 4 hours, 1 day, 1 week)
+   - All active liquidity pools with TVL, fees, and trade volume
+   - A direct 'Trade on Jupiter' button
+
+ WATCHLIST
+ Connect your wallet and pin any token to your personal watchlist for
+ quick access. Watchlisted tokens are highlighted in the main table.
+
+ COMMUNITY SENTIMENT
+ Any wallet holder can cast a Bullish or Bearish vote on any token.
+ The result is shown as a live sentiment bar on the token page and as
+ a net score column in the main token list. Click your own vote again
+ to remove it — no lock-in, no games."
+
+
+SLIDE 4 — THE COMMUNITY SUBMISSION SYSTEM
+--------------------------------------------------------------------------------
+
+"Here's where OpenDex gets interesting — and where we're genuinely different
+ from every other token explorer out there.
+
+ Token communities can submit content for their token's page:
+   - Custom banners
+   - Social media links (Twitter, Telegram, Discord, websites)
+   - Any other metadata the community wants displayed
+
+ But — and this is the key — no single person decides what goes up.
+ THE COMMUNITY DECIDES.
+
+ Here's how it works:
+
+ STEP 1 — SUBMIT
+ You must hold the token in your connected wallet to submit content for it.
+ This is verified on-chain via Solana RPC. No bots, no outsiders.
+
+ STEP 2 — COMMUNITY REVIEW
+ Submissions enter a review window. For a brand new token's very first
+ submission, the window is just 5 minutes so tokens can get going quickly.
+ For subsequent submissions — changes to existing content — the community
+ gets a full hour to evaluate and vote.
+
+ STEP 3 — WEIGHTED VOTING
+ Other holders vote up or down. Votes are weighted by holdings:
+   - 0.1% of supply = 1x weight  (minimum to participate)
+   - 0.3%+ = 1.5x weight
+   - 0.75%+ = 2x weight
+   - 1.5%+ = 2.5x weight
+   - 3%+ = 3x weight (maximum)
+
+ This gives larger stakeholders more influence, while ensuring everyone
+ with skin in the game has a voice. Whale-proof? No. Spam-proof? Yes.
+
+ STEP 4 — AUTO APPROVAL
+ When a submission reaches its approval threshold, it goes live automatically.
+ No admin needed. The thresholds scale with market cap:
+   - Under $50k market cap:  +10 weighted score
+   - $50k–$100k:             +15
+   - Over $100k:             +25
+ Submissions that reach -10 are auto-rejected to quickly clear spam.
+
+ STEP 5 — IT GOES LIVE
+ The approved banner or link appears on the token's page for every visitor.
+ The highest-voted content is displayed prominently. The community can keep
+ voting to surface better content over time."
+
+
+SLIDE 5 — OPEN SOURCE & DEVELOPER API
+--------------------------------------------------------------------------------
+
+"Everything I've shown you is open source. The full codebase is on GitHub
+ under github.com/SolPenguin/opendexviewer.
+
+ You can read the code. You can audit it. You can fork it.
+ You can file issues or contribute pull requests.
+ We believe the tools the community uses should be owned by the community.
+
+ We also offer a public Developer API so builders can pull OpenDex data
+ directly into their own projects — token metadata, community votes,
+ submission history, sentiment scores. No API key required to get started."
+
+
+SLIDE 6 — TECH STACK (for technical audiences)
+--------------------------------------------------------------------------------
+
+"Under the hood:
+
+ FRONTEND
+   - Vanilla JavaScript, HTML, CSS — no framework dependencies
+   - No build step, no bundler. Loads fast, runs anywhere.
+   - Hosted on Render as a static site
+
+ BACKEND
+   - Node.js with Express
+   - PostgreSQL database on Render
+   - RESTful API with rate limiting and input validation
+
+ DATA SOURCES
+   - Jupiter Aggregator — prices, metadata, holder counts
+   - GeckoTerminal — OHLCV charts, liquidity pool data
+   - Helius / Solana RPC — on-chain balance verification
+
+ All wallet interactions are read-only. We verify holdings but never
+ request transaction signing for votes or submissions. Your funds are safe."
+
+
+SLIDE 7 — WHO IS THIS FOR?
+--------------------------------------------------------------------------------
+
+"OpenDex is built for three audiences:
+
+ TOKEN COMMUNITIES
+ If you're building or holding a Solana project, OpenDex gives your community
+ a free place to maintain accurate, community-approved information about your
+ token without paying for a listing or begging a centralized platform to
+ update your page.
+
+ TRADERS AND RESEARCHERS
+ If you're evaluating Solana tokens, OpenDex gives you clean real-time data,
+ charts, and an honest community sentiment signal — no sponsored content,
+ no paid rankings, no fake volume manipulation.
+
+ BUILDERS AND DEVELOPERS
+ If you're building in the Solana ecosystem, the open-source codebase and
+ free Developer API give you a foundation to build on or data to integrate
+ into your own tools."
+
+
+SLIDE 8 — CURRENT STATUS & ROADMAP
+--------------------------------------------------------------------------------
+
+"OpenDex is currently in Beta. What's live today:
+
+   LIVE NOW
+   - Real-time token list with prices, market cap, volume
+   - Full token detail pages with charts and pools
+   - Community submission and weighted voting system
+   - Community sentiment (Bullish / Bearish) voting
+   - Personal watchlist
+   - Public Developer API
+   - Mobile-responsive design
+   - Open source on GitHub
+
+   COMING SOON
+   - Price alerts (notify on price thresholds)
+   - Enhanced filtering and sorting
+   - More chart indicators
+   - API authentication for higher rate limits
+
+ We're actively developing and the community is welcome to shape what
+ comes next through GitHub issues and discussions."
+
+
+SLIDE 9 — CLOSING
+--------------------------------------------------------------------------------
+
+"The Solana ecosystem moves fast. Tokens launch every day, communities form
+ overnight, and projects need a place to establish themselves without paying
+ gatekeepers or relying on centralized platforms that can delist or censor
+ them at will.
+
+ OpenDex is that place. Free. Open. Community-owned.
+
+ You can explore it right now. No signup, no wallet required to browse.
+ Just go to OpenDex, search for any Solana token, and see it for yourself.
+
+ If you hold a token and want to help your community get its page set up —
+ connect your wallet and submit. The community will handle the rest.
+
+ Thank you."
+
+
+================================================================================
+  QUICK REFERENCE — KEY FACTS FOR Q&A
+================================================================================
+
+ - Completely free: no listing fees, no premium tiers, no paid promotions
+ - Open source: github.com/SolPenguin/opendexviewer (MIT license)
+ - Data sources: Jupiter, GeckoTerminal, Solana RPC / Helius
+ - Holder verification: on-chain balance check, read-only (no signing)
+ - Minimum holding to vote/submit: 0.1% of token supply
+ - First submission review period: 5 minutes
+ - Subsequent submission review period: 1 hour
+ - Auto-approval thresholds: +10 (<$50k mcap), +15 ($50k-$100k), +25 (>$100k)
+ - Auto-rejection threshold: -10 weighted score
+ - Sentiment voting: open to any connected wallet (no holding required)
+ - Price refresh: every 5 minutes on token detail page
+ - Token list refresh: every 2 minutes
+ - Tech: Vanilla JS frontend, Node.js/Express backend, PostgreSQL
+ - Hosting: Render (frontend static site + backend web service)
+ - Current status: Beta
+
+================================================================================

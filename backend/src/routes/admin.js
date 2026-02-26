@@ -479,11 +479,12 @@ router.patch('/settings',
 
 /**
  * GET /admin/settings/development-mode
- * Check if development mode is enabled - requires admin session
- * Non-admin callers receive 401; frontend code defaults developmentMode to false on failure
+ * Public read endpoint — returns the current dev mode flag.
+ * Any visitor can read this so voting.js / submit.js can show the dev-mode
+ * banner and skip holder verification when the admin has enabled it.
+ * Only the PATCH /admin/settings endpoint (admin-only) can change the value.
  */
 router.get('/settings/development-mode',
-  validateAdminSession,
   asyncHandler(async (req, res) => {
     res.json({
       developmentMode: adminSettings.developmentMode

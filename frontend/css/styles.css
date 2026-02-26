@@ -174,10 +174,16 @@ a:hover {
 }
 
 .logo-img {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
   object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.35));
+  transition: filter var(--transition-fast);
+}
+
+.logo:hover .logo-img {
+  filter: drop-shadow(0 0 14px rgba(99, 102, 241, 0.6));
 }
 
 .nav {
@@ -360,7 +366,10 @@ a:hover {
   text-align: center;
   padding: 3.5rem 0 4.5rem;
   position: relative;
-  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08), transparent);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(99, 102, 241, 0.13), transparent),
+    radial-gradient(ellipse 40% 30% at 20% 50%, rgba(99, 102, 241, 0.05), transparent),
+    radial-gradient(ellipse 40% 30% at 80% 50%, rgba(168, 85, 247, 0.04), transparent);
 }
 
 .hero::before {
@@ -376,14 +385,15 @@ a:hover {
 }
 
 .hero h1 {
-  font-size: 3rem;
+  font-size: 4rem;
   font-weight: 800;
-  letter-spacing: -0.03em;
-  margin-bottom: 0.75rem;
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--text-secondary) 100%);
+  letter-spacing: -0.04em;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, #ffffff 0%, var(--accent-primary) 45%, #a855f7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  line-height: 1;
 }
 
 .hero p {
@@ -7606,5 +7616,69 @@ body.landscape .hero h1 {
   .hero p {
     font-size: 0.875rem;
     margin-bottom: 1.25rem;
+  }
+}
+
+/* =============================================
+   Hero Brand Identity
+   ============================================= */
+
+/* Pulsing glow animation for hero logo */
+@keyframes hero-logo-glow {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.45)) drop-shadow(0 4px 24px rgba(0, 0, 0, 0.5)); }
+  50%       { filter: drop-shadow(0 0 38px rgba(99, 102, 241, 0.75)) drop-shadow(0 4px 24px rgba(0, 0, 0, 0.5)); }
+}
+
+/* Vertical brand block centred above the h1 */
+.hero-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Large featured logo in the hero */
+.hero-logo-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 18px;
+  object-fit: contain;
+  animation: hero-logo-glow 3.5s ease-in-out infinite;
+}
+
+/* "Solana Token Explorer" accent line under the brand name */
+.hero-subtitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  opacity: 0.85;
+  margin: 0;
+  margin-bottom: 0 !important;
+}
+
+/* Paragraph that follows the brand block needs less top space */
+.hero-brand + p {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 600px) {
+  .hero-logo-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-logo-img {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+  }
+  .hero h1 {
+    font-size: 2.75rem;
   }
 }
