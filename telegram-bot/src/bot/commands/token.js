@@ -1,5 +1,6 @@
 const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
+const { sendTokenMessage } = require('../../utils/sendToken');
 const { isValidSolanaAddress } = require('../../utils/solana');
 
 module.exports = (bot) => {
@@ -14,17 +15,7 @@ module.exports = (bot) => {
     try {
       const token = await tokensApi.getToken(mint);
       const message = formatTokenMessage(token);
-
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        statusMsg.message_id,
-        message.text,
-        {
-          parse_mode: 'HTML',
-          reply_markup: message.replyMarkup,
-          link_preview_options: { is_disabled: true }
-        }
-      );
+      await sendTokenMessage(ctx, statusMsg, message);
     } catch (error) {
       const errorMsg = error.response?.status === 404
         ? 'Token not found. Please check the contract address.'

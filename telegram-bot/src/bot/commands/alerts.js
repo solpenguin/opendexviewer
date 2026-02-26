@@ -1,5 +1,5 @@
 const alertStore = require('../../alerts/store');
-const { formatPrice } = require('../../utils/format');
+const { formatNumber } = require('../../utils/format');
 
 module.exports = (bot) => {
   bot.command('alerts', async (ctx) => {
@@ -15,15 +15,15 @@ module.exports = (bot) => {
     for (const alert of alerts) {
       let conditionText;
       if (alert.condition === 'above') {
-        conditionText = `above ${formatPrice(alert.target_value)}`;
+        conditionText = `above ${formatNumber(alert.target_value)}`;
       } else if (alert.condition === 'below') {
-        conditionText = `below ${formatPrice(alert.target_value)}`;
+        conditionText = `below ${formatNumber(alert.target_value)}`;
       } else {
         conditionText = `change ${alert.target_value}%`;
       }
 
-      text += `#${alert.id} | <b>${alert.token_symbol || '???'}</b> | ${conditionText}\n`;
-      text += `  Set at: ${formatPrice(alert.price_at_creation)}\n\n`;
+      text += `#${alert.id} | <b>${alert.token_symbol || '???'}</b> | mcap ${conditionText}\n`;
+      text += `  Set at: ${formatNumber(alert.mcap_at_creation)}\n\n`;
     }
 
     text += `Use /removealert &lt;id&gt; to remove an alert.`;

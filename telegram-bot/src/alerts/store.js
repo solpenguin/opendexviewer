@@ -36,7 +36,7 @@ module.exports = {
       token_symbol: alertData.tokenSymbol,
       condition: alertData.condition,
       target_value: alertData.targetValue,
-      price_at_creation: alertData.priceAtCreation,
+      mcap_at_creation: alertData.mcapAtCreation,
       is_active: 1,
       triggered_at: null,
       created_at: new Date().toISOString()

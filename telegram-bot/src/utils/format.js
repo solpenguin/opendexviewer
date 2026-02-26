@@ -47,6 +47,15 @@ function formatTokenMessage(token) {
   const name = escapeHtml(token.name || 'Unknown');
   const symbol = escapeHtml(token.symbol || '???');
 
+  // Extract banner URL from approved banner submissions
+  let bannerUrl = null;
+  if (token.submissions?.banners?.length > 0) {
+    const approvedBanner = token.submissions.banners.find(b => b.status === 'approved');
+    if (approvedBanner) {
+      bannerUrl = approvedBanner.content_url;
+    }
+  }
+
   // Build community links from approved submissions
   let communityLinks = '';
   if (token.submissions?.socials) {
@@ -81,12 +90,12 @@ function formatTokenMessage(token) {
     communityLinks;
 
   const keyboard = new InlineKeyboard()
-    .url('View on OpenDEX', `${config.FRONTEND_URL}/token/${mint}`)
+    .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${mint}`)
     .url('Solscan', `https://solscan.io/token/${mint}`)
     .row()
     .url('Trade on Jupiter', `https://jup.ag/swap/SOL-${mint}`);
 
-  return { text, replyMarkup: keyboard };
+  return { text, replyMarkup: keyboard, bannerUrl };
 }
 
 module.exports = { escapeHtml, formatPrice, formatNumber, formatChange, formatTokenMessage };

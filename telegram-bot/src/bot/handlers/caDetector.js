@@ -1,5 +1,6 @@
 const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
+const { sendTokenMessage } = require('../../utils/sendToken');
 
 // Match a message that is ONLY a Solana address (32-44 base58 chars)
 const SOLANA_CA_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -12,17 +13,7 @@ module.exports = (bot) => {
     try {
       const token = await tokensApi.getToken(mint);
       const message = formatTokenMessage(token);
-
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        statusMsg.message_id,
-        message.text,
-        {
-          parse_mode: 'HTML',
-          reply_markup: message.replyMarkup,
-          link_preview_options: { is_disabled: true }
-        }
-      );
+      await sendTokenMessage(ctx, statusMsg, message);
     } catch (error) {
       await ctx.api.editMessageText(
         ctx.chat.id,

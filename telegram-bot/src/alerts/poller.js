@@ -9,7 +9,7 @@ async function checkAlerts(bot) {
   const distinctMints = alertStore.getDistinctMints();
   if (distinctMints.length === 0) return;
 
-  // Batch fetch prices (up to 50 per request)
+  // Batch fetch token data (up to 50 per request)
   const tokenData = {};
   try {
     for (let i = 0; i < distinctMints.length; i += 50) {
@@ -23,30 +23,30 @@ async function checkAlerts(bot) {
       }
     }
   } catch (error) {
-    console.error('[Alerts] Failed to batch fetch prices:', error.message);
+    console.error('[Alerts] Failed to batch fetch token data:', error.message);
     return;
   }
 
-  // Check each active alert
+  // Check each active alert against current market cap
   const alerts = alertStore.getAllActive();
 
   for (const alert of alerts) {
     const token = tokenData[alert.mint];
-    if (!token || !token.price) continue;
+    if (!token || !token.marketCap) continue;
 
-    const currentPrice = token.price;
+    const currentMcap = token.marketCap;
     let triggered = false;
 
     switch (alert.condition) {
       case 'above':
-        triggered = currentPrice >= alert.target_value;
+        triggered = currentMcap >= alert.target_value;
         break;
       case 'below':
-        triggered = currentPrice <= alert.target_value;
+        triggered = currentMcap <= alert.target_value;
         break;
       case 'change': {
         const pctChange = Math.abs(
-          ((currentPrice - alert.price_at_creation) / alert.price_at_creation) * 100
+          ((currentMcap - alert.mcap_at_creation) / alert.mcap_at_creation) * 100
         );
         triggered = pctChange >= alert.target_value;
         break;
@@ -55,14 +55,14 @@ async function checkAlerts(bot) {
 
     if (triggered) {
       alertStore.trigger(alert.id);
-      await notifications.sendAlertNotification(bot, alert, currentPrice);
+      await notifications.sendAlertNotification(bot, alert, currentMcap);
     }
   }
 }
 
 module.exports = {
   start(bot) {
-    console.log(`[Alerts] Starting price polling every ${config.ALERT_POLL_INTERVAL_MS / 1000}s`);
+    console.log(`[Alerts] Starting market cap polling every ${config.ALERT_POLL_INTERVAL_MS / 1000}s`);
     checkAlerts(bot).catch(err => console.error('[Alerts] Initial poll error:', err.message));
     pollIntervalId = setInterval(() => {
       checkAlerts(bot).catch(err => console.error('[Alerts] Poll error:', err.message));

@@ -1,7 +1,7 @@
 const alertStore = require('../../alerts/store');
 const tokensApi = require('../../api/tokens');
 const { isValidSolanaAddress } = require('../../utils/solana');
-const { formatPrice } = require('../../utils/format');
+const { formatNumber } = require('../../utils/format');
 const config = require('../../config');
 
 module.exports = (bot) => {
@@ -11,9 +11,9 @@ module.exports = (bot) => {
     if (!args || args.length < 3) {
       return ctx.reply(
         'Usage:\n' +
-        '/alert &lt;CA&gt; above &lt;price&gt;\n' +
-        '/alert &lt;CA&gt; below &lt;price&gt;\n' +
-        '/alert &lt;CA&gt; change &lt;percent&gt;',
+        '/alert &lt;CA&gt; above &lt;mcap&gt; - Alert when market cap goes above (e.g. 1000000)\n' +
+        '/alert &lt;CA&gt; below &lt;mcap&gt; - Alert when market cap goes below\n' +
+        '/alert &lt;CA&gt; change &lt;percent&gt; - Alert on market cap % change',
         { parse_mode: 'HTML' }
       );
     }
@@ -47,13 +47,13 @@ module.exports = (bot) => {
 
     try {
       const token = await tokensApi.getToken(mint);
-      const currentPrice = token.price || 0;
+      const currentMcap = token.marketCap || 0;
 
-      if (currentPrice === 0) {
+      if (currentMcap === 0) {
         return ctx.api.editMessageText(
           ctx.chat.id,
           statusMsg.message_id,
-          'This token has no price data available. Cannot set alert.'
+          'This token has no market cap data available. Cannot set alert.'
         );
       }
 
@@ -65,16 +65,16 @@ module.exports = (bot) => {
         tokenSymbol: token.symbol || '???',
         condition,
         targetValue: value,
-        priceAtCreation: currentPrice
+        mcapAtCreation: currentMcap
       });
 
       let description;
       if (condition === 'above') {
-        description = `price goes above ${formatPrice(value)}`;
+        description = `market cap goes above ${formatNumber(value)}`;
       } else if (condition === 'below') {
-        description = `price goes below ${formatPrice(value)}`;
+        description = `market cap goes below ${formatNumber(value)}`;
       } else {
-        description = `price changes by ${value}%`;
+        description = `market cap changes by ${value}%`;
       }
 
       await ctx.api.editMessageText(
@@ -82,7 +82,7 @@ module.exports = (bot) => {
         statusMsg.message_id,
         `Alert #${alert.id} created!\n\n` +
         `Token: ${token.name || 'Unknown'} (${token.symbol || '???'})\n` +
-        `Current price: ${formatPrice(currentPrice)}\n` +
+        `Current market cap: ${formatNumber(currentMcap)}\n` +
         `Alert when: ${description}`
       );
     } catch (error) {

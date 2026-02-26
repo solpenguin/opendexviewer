@@ -11,6 +11,19 @@ module.exports = (bot) => {
       const token = await tokensApi.getToken(mint);
       const message = formatTokenMessage(token);
 
+      if (message.bannerUrl) {
+        try {
+          await ctx.replyWithPhoto(message.bannerUrl, {
+            caption: message.text,
+            parse_mode: 'HTML',
+            reply_markup: message.replyMarkup
+          });
+          return;
+        } catch {
+          // Banner URL broken — fall back to text
+        }
+      }
+
       await ctx.reply(message.text, {
         parse_mode: 'HTML',
         reply_markup: message.replyMarkup,
