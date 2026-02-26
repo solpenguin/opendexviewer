@@ -365,11 +365,7 @@ const tokenDetail = {
     // Price
     this.updatePriceDisplay();
 
-    // Price high/low (if available)
-    const highEl = document.getElementById('price-high');
-    const lowEl = document.getElementById('price-low');
-    if (highEl) highEl.textContent = token.priceHigh24h ? utils.formatPrice(token.priceHigh24h) : '--';
-    if (lowEl) lowEl.textContent = token.priceLow24h ? utils.formatPrice(token.priceLow24h) : '--';
+    // Price high/low — populated from OHLCV in updateHeaderHighLow() once chart data loads
 
     // Stats
     document.getElementById('stat-mcap').textContent = utils.formatNumber(token.marketCap);
@@ -458,6 +454,10 @@ const tokenDetail = {
 
       this.renderChart(this.chartData);
       this.updateChartStats(this.chartData);
+
+      // Derive 24h high/low from the 1H OHLCV data (last 24 candles = last 24 hours).
+      // Only update on the initial 1H load so the header values stay anchored to 24h.
+      if (interval === '1h') this.updateHeaderHighLow(this.chartData);
     } catch (error) {
       this.renderChartError(error);
     } finally {
@@ -537,6 +537,21 @@ const tokenDetail = {
     document.getElementById('chart-low').textContent = formatFn(low);
     document.getElementById('chart-close').textContent = formatFn(close);
     document.getElementById('chart-volume').textContent = utils.formatNumber(totalVolume);
+  },
+
+  // Update the token header 24h high/low from the last 24 hourly OHLCV candles
+  updateHeaderHighLow(data) {
+    const highEl = document.getElementById('price-high');
+    const lowEl  = document.getElementById('price-low');
+    if (!highEl || !lowEl) return;
+    if (!data?.data?.length) return;
+
+    const candles = data.data.slice(-24); // last 24 hours
+    const highs = candles.map(d => d.high || d.close || 0).filter(v => v > 0);
+    const lows  = candles.map(d => d.low  || d.close || 0).filter(v => v > 0);
+
+    if (highs.length > 0) highEl.textContent = utils.formatPrice(Math.max(...highs));
+    if (lows.length  > 0) lowEl.textContent  = utils.formatPrice(Math.min(...lows));
   },
 
   // Render chart

@@ -4643,6 +4643,16 @@ a:hover {
     order: 3;
     width: 100%;
     justify-content: center;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 2px;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
   }
 
   .main {
@@ -5173,9 +5183,9 @@ select {
     margin-bottom: 1.5rem;
   }
 
-  /* Stats grid to 1 column */
+  /* Stats grid - keep 2 columns on landscape phones */
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   /* Token table - horizontal scroll wrapper */
@@ -7008,6 +7018,15 @@ select {
     height: 48px;
   }
 
+  /* Truncate long mint address on mobile */
+  .token-address {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+  }
+
   .token-name-row h1 {
     font-size: 1.25rem;
   }
@@ -7043,7 +7062,7 @@ select {
 
 @media (max-width: 480px) {
   .chart-container {
-    height: 200px;
+    height: 230px;
   }
 
   .token-price-large {
@@ -7407,5 +7426,185 @@ body.landscape .hero h1 {
     background: var(--bg-secondary);
     padding: 1rem 0;
     margin-top: auto;
+  }
+}
+
+/* ============================================
+   ADDITIONAL MOBILE IMPROVEMENTS
+   ============================================ */
+
+/* ----- Sentiment section: stack footer on small phones ----- */
+@media (max-width: 480px) {
+  .sentiment-footer-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.625rem;
+  }
+
+  .sentiment-hint {
+    margin-left: 0;
+  }
+}
+
+/* ----- Token detail: compact header on small phones ----- */
+@media (max-width: 480px) {
+  /* Logo sits beside name/address (row) to save vertical space */
+  .token-header-left {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.875rem;
+  }
+
+  .token-logo-large {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+
+  .token-name-row h1 {
+    font-size: 1.125rem;
+  }
+
+  /* Left-align everything on small phones */
+  .token-header {
+    text-align: left;
+  }
+
+  .token-header-right {
+    text-align: left;
+  }
+
+  .price-stats-mini {
+    justify-content: flex-start;
+  }
+
+  .token-address-row {
+    justify-content: flex-start;
+  }
+}
+
+/* ----- Token detail grid: tighter gap on mobile ----- */
+@media (max-width: 600px) {
+  .token-content-grid {
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .token-header {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    gap: 0.875rem;
+  }
+}
+
+/* ----- Stats grid: 1-column only at very small screens ----- */
+@media (max-width: 360px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----- Community section: compact on mobile ----- */
+@media (max-width: 600px) {
+  .community-section {
+    margin-bottom: 1rem;
+  }
+
+  .community-section-header {
+    padding: 0.75rem 1rem;
+  }
+}
+
+/* ----- Token table: improve readability at 480px ----- */
+@media (max-width: 480px) {
+  /* Widen token column slightly */
+  .th-token {
+    min-width: 160px;
+  }
+
+  /* Reduce rank column to minimum */
+  .th-rank,
+  .cell-rank {
+    width: 32px;
+    padding-left: 0.375rem;
+    padding-right: 0.25rem;
+  }
+
+  /* Price column tighter */
+  .th-price {
+    width: 110px;
+  }
+}
+
+/* ----- Submissions section: compact on mobile ----- */
+@media (max-width: 480px) {
+  .submissions-header {
+    gap: 0.5rem;
+  }
+
+  .submissions-header h2 {
+    font-size: 1rem;
+  }
+
+  .submission-card {
+    gap: 0.5rem;
+  }
+
+  .vote-btn {
+    gap: 0.25rem;
+  }
+}
+
+/* ----- Chart section: compact controls on mobile ----- */
+@media (max-width: 600px) {
+  .chart-timeframes {
+    gap: 0.25rem;
+  }
+
+  .timeframe-btn {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.8125rem;
+    min-width: 36px;
+  }
+
+  .chart-header {
+    gap: 0.75rem;
+  }
+}
+
+/* ----- Watchlist button on mobile: touch-friendly ----- */
+@media (max-width: 600px) {
+  .watchlist-btn-header {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ----- Price freshness: compact on mobile ----- */
+@media (max-width: 480px) {
+  .price-freshness {
+    font-size: 0.65rem;
+  }
+
+  .price-change-badge {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.625rem;
+  }
+}
+
+/* ----- Hero section: tighter on mobile ----- */
+@media (max-width: 480px) {
+  .hero {
+    padding: 1rem 0 1.5rem;
+  }
+
+  .hero h1 {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .hero p {
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
   }
 }
