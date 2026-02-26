@@ -1681,6 +1681,127 @@ if (process.env.DATABASE_URL) {
   });
 }
 
+// =====================================================
+// SENTIMENT VOTING
+// =====================================================
+
+async function getSentimentVote(tokenMint, voterWallet) {
+  const result = await pool.query(
+    'SELECT sentiment FROM sentiment_votes WHERE token_mint = $1 AND voter_wallet = $2',
+    [tokenMint, voterWallet]
+  );
+  return result.rows[0]?.sentiment || null;
+}
+
+async function getSentimentTally(tokenMint) {
+  const result = await pool.query(
+    'SELECT bullish, bearish, score FROM sentiment_tallies WHERE token_mint = $1',
+    [tokenMint]
+  );
+  return result.rows[0] || { bullish: 0, bearish: 0, score: 0 };
+}
+
+async function getSentimentBatch(tokenMints) {
+  if (!tokenMints || tokenMints.length === 0) return {};
+  const result = await pool.query(
+    'SELECT token_mint, bullish, bearish, score FROM sentiment_tallies WHERE token_mint = ANY($1)',
+    [tokenMints]
+  );
+  const out = {};
+  for (const row of result.rows) {
+    out[row.token_mint] = { bullish: row.bullish, bearish: row.bearish, score: row.score };
+  }
+  return out;
+}
+
+async function castSentimentVote(tokenMint, voterWallet, sentiment) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      'SELECT sentiment FROM sentiment_votes WHERE token_mint = $1 AND voter_wallet = $2',
+      [tokenMint, voterWallet]
+    );
+    const prev = existing.rows[0]?.sentiment || null;
+
+    let action;
+    if (!prev) {
+      // New vote
+      await client.query(
+        'INSERT INTO sentiment_votes (token_mint, voter_wallet, sentiment) VALUES ($1, $2, $3)',
+        [tokenMint, voterWallet, sentiment]
+      );
+      const bDelta = sentiment === 'bullish' ? 1 : 0;
+      const rDelta = sentiment === 'bearish' ? 1 : 0;
+      const sDelta = sentiment === 'bullish' ? 1 : -1;
+      await client.query(
+        `INSERT INTO sentiment_tallies (token_mint, bullish, bearish, score)
+           VALUES ($1, $2, $3, $4)
+         ON CONFLICT (token_mint) DO UPDATE SET
+           bullish = sentiment_tallies.bullish + $2,
+           bearish = sentiment_tallies.bearish + $3,
+           score   = sentiment_tallies.score   + $4,
+           updated_at = NOW()`,
+        [tokenMint, bDelta, rDelta, sDelta]
+      );
+      action = 'created';
+    } else if (prev === sentiment) {
+      // Toggle off — remove vote
+      await client.query(
+        'DELETE FROM sentiment_votes WHERE token_mint = $1 AND voter_wallet = $2',
+        [tokenMint, voterWallet]
+      );
+      const bDelta = sentiment === 'bullish' ? 1 : 0;
+      const rDelta = sentiment === 'bearish' ? 1 : 0;
+      const sDelta = sentiment === 'bullish' ? 1 : -1;
+      await client.query(
+        `UPDATE sentiment_tallies SET
+           bullish = GREATEST(0, bullish - $2),
+           bearish = GREATEST(0, bearish - $3),
+           score   = score - $4,
+           updated_at = NOW()
+         WHERE token_mint = $1`,
+        [tokenMint, bDelta, rDelta, sDelta]
+      );
+      action = 'removed';
+    } else {
+      // Switch vote (prev !== sentiment)
+      await client.query(
+        'UPDATE sentiment_votes SET sentiment = $3, updated_at = NOW() WHERE token_mint = $1 AND voter_wallet = $2',
+        [tokenMint, voterWallet, sentiment]
+      );
+      // Switching bullish→bearish: bullish-1, bearish+1, score-2
+      // Switching bearish→bullish: bullish+1, bearish-1, score+2
+      const bDelta = sentiment === 'bullish' ? 1 : -1;
+      const rDelta = sentiment === 'bearish' ? 1 : -1;
+      const sDelta = sentiment === 'bullish' ? 2 : -2;
+      await client.query(
+        `UPDATE sentiment_tallies SET
+           bullish = GREATEST(0, bullish + $2),
+           bearish = GREATEST(0, bearish + $3),
+           score   = score + $4,
+           updated_at = NOW()
+         WHERE token_mint = $1`,
+        [tokenMint, bDelta, rDelta, sDelta]
+      );
+      action = 'switched';
+    }
+
+    const tallyRes = await client.query(
+      'SELECT bullish, bearish, score FROM sentiment_tallies WHERE token_mint = $1',
+      [tokenMint]
+    );
+    await client.query('COMMIT');
+    return { action, tally: tallyRes.rows[0] || { bullish: 0, bearish: 0, score: 0 } };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // Get initialization promise for startup checks if needed
 function getInitializationPromise() {
   return initializationPromise;
@@ -1755,6 +1876,11 @@ module.exports = {
   getApprovalThreshold,
   // GDPR data deletion
   deleteUserData,
+  // Sentiment voting
+  getSentimentVote,
+  getSentimentTally,
+  getSentimentBatch,
+  castSentimentVote,
   // Announcement operations
   getActiveAnnouncements,
   getAllAnnouncements,

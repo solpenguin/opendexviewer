@@ -775,6 +775,7 @@ a:hover {
 .th-volume { width: 140px; text-align: right; }
 .th-mcap { width: 140px; text-align: right; }
 .th-views { width: 90px; text-align: right; }
+.th-sentiment { width: 90px; text-align: center; font-size: 0.8rem; color: var(--text-muted); }
 
 /* Sortable columns */
 .sortable {
@@ -882,6 +883,34 @@ a:hover {
 
 .cell-views {
   color: var(--text-muted);
+}
+
+.cell-sentiment {
+  text-align: center;
+}
+
+.sentiment-chip {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.sentiment-chip.positive {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.sentiment-chip.negative {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.sentiment-chip.neutral {
+  color: var(--text-muted);
+  background: transparent;
 }
 
 /* Pending data indicator - shown when price data hasn't been fetched yet */
@@ -4620,9 +4649,11 @@ a:hover {
   .th-volume,
   .th-mcap,
   .th-views,
+  .th-sentiment,
   .cell-volume,
   .cell-mcap,
-  .cell-views {
+  .cell-views,
+  .cell-sentiment {
     display: none;
   }
 
@@ -6376,7 +6407,9 @@ select {
   }
 
   .th-views,
-  .cell-views {
+  .th-sentiment,
+  .cell-views,
+  .cell-sentiment {
     display: none;
   }
 

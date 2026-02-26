@@ -57,7 +57,8 @@ const tokenDetail = {
         this.loadChart(this.currentInterval),
         this.loadPools(),
         this.loadSubmissions(),
-        voting.initForPage() // Initialize voting (loads requirements & checks dev mode)
+        voting.initForPage(), // Initialize voting (loads requirements & checks dev mode)
+        sentiment.loadForToken(this.mint) // Load community sentiment
       ]);
 
       // Start price refresh and freshness timer

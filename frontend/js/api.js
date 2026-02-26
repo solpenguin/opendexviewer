@@ -586,6 +586,21 @@ const api = {
     }
   },
 
+  // Sentiment voting endpoints
+  sentiment: {
+    async get(tokenMint, wallet) {
+      const params = wallet ? `?wallet=${encodeURIComponent(wallet)}` : '';
+      return api.request(`/api/sentiment/${tokenMint}${params}`);
+    },
+
+    async cast(tokenMint, sentimentType, voterWallet) {
+      return api.request(`/api/sentiment/${tokenMint}`, {
+        method: 'POST',
+        body: JSON.stringify({ sentiment: sentimentType, voterWallet })
+      });
+    }
+  },
+
   // API Key endpoints (Public API v1)
   apiKeys: {
     async register(wallet, name = null) {

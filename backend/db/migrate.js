@@ -75,7 +75,7 @@ async function runMigrations() {
     log('Migrations completed successfully!', 'green');
 
     // Show table counts
-    const tables = ['tokens', 'submissions', 'votes', 'vote_tallies'];
+    const tables = ['tokens', 'submissions', 'votes', 'vote_tallies', 'sentiment_votes', 'sentiment_tallies'];
     log('\nCurrent table status:', 'blue');
 
     for (const table of tables) {

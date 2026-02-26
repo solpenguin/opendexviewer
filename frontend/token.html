@@ -268,6 +268,33 @@
           </div>
         </section>
 
+        <!-- Community Sentiment -->
+        <section class="sentiment-section" id="sentiment-section" style="display:none;">
+          <div class="section-header">
+            <h2 class="section-title">Community Sentiment</h2>
+          </div>
+          <div class="sentiment-body">
+            <div class="sentiment-bar-wrap">
+              <div class="sentiment-bar-fill" id="sentiment-bar-fill" style="width:50%;"></div>
+            </div>
+            <div class="sentiment-stats">
+              <span class="sentiment-percent" id="sentiment-percent">No votes yet</span>
+              <span class="sentiment-counts" id="sentiment-counts"></span>
+            </div>
+            <div class="sentiment-actions">
+              <button class="sentiment-btn bullish" id="sentiment-bullish-btn" onclick="sentiment.castVote('bullish')">
+                🐂 Bullish <span class="sentiment-btn-count" id="sentiment-bullish-count">0</span>
+              </button>
+              <button class="sentiment-btn bearish" id="sentiment-bearish-btn" onclick="sentiment.castVote('bearish')">
+                🐻 Bearish <span class="sentiment-btn-count" id="sentiment-bearish-count">0</span>
+              </button>
+            </div>
+            <p class="sentiment-hint" id="sentiment-hint">
+              <a onclick="wallet.connect()">Connect wallet</a> to vote
+            </p>
+          </div>
+        </section>
+
         <!-- Pools Section -->
         <section class="pools-section">
           <h2>Liquidity Pools</h2>
@@ -338,6 +365,7 @@
   <script src="js/wallet.js"></script>
   <script src="js/watchlist.js"></script>
   <script src="js/voting.js"></script>
+  <script src="js/sentiment.js"></script>
   <script src="js/tokenDetail.js"></script>
   <script src="js/announcements.js"></script>
 </body>

@@ -198,6 +198,27 @@ CREATE INDEX IF NOT EXISTS idx_announcements_active
     ON announcements (created_at DESC)
     WHERE is_active = TRUE;
 
+-- Community sentiment votes (bullish/bearish per token, one per wallet)
+CREATE TABLE IF NOT EXISTS sentiment_votes (
+    id SERIAL PRIMARY KEY,
+    token_mint VARCHAR(44) NOT NULL,
+    voter_wallet VARCHAR(44) NOT NULL,
+    sentiment VARCHAR(10) NOT NULL CHECK (sentiment IN ('bullish', 'bearish')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(token_mint, voter_wallet)
+);
+
+CREATE TABLE IF NOT EXISTS sentiment_tallies (
+    token_mint VARCHAR(44) PRIMARY KEY,
+    bullish INTEGER DEFAULT 0,
+    bearish INTEGER DEFAULT 0,
+    score INTEGER DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sentiment_votes_mint ON sentiment_votes (token_mint);
+
 -- =====================================================
 -- VIEWS (SQL Views, not page views)
 -- =====================================================

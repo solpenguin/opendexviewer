@@ -416,7 +416,7 @@ const tokenList = {
     if (needsWallet) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="8">
+          <td colspan="9">
             <div class="empty-state">
               <span class="empty-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -433,7 +433,7 @@ const tokenList = {
     } else {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="8">
+          <td colspan="9">
             <div class="empty-state">
               <span class="empty-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -579,7 +579,7 @@ const tokenList = {
     if (tbody) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="8">
+          <td colspan="9">
             <div class="loading-state">
               <div class="loading-spinner"></div>
               <span>Loading tokens...</span>
@@ -692,7 +692,7 @@ const tokenList = {
     if (!this.tokens || this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="8">
+          <td colspan="9">
             <div class="empty-state">
               <span class="empty-icon">🔍</span>
               <span>No tokens found</span>
@@ -751,6 +751,15 @@ const tokenList = {
           <td class="cell-volume" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data…"></span>' : utils.formatNumber(token.volume24h, '$')}</td>
           <td class="cell-mcap" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data…"></span>' : utils.formatNumber(token.marketCap, '$')}</td>
           <td class="cell-views" data-navigate="${safeAddress}">${token.views > 0 ? token.views.toLocaleString() : '0'}</td>
+          <td class="cell-sentiment" data-navigate="${safeAddress}">${(() => {
+            const s = token.sentimentScore || 0;
+            const b = token.sentimentBullish || 0;
+            const r = token.sentimentBearish || 0;
+            if (b === 0 && r === 0) return '<span class="sentiment-chip neutral">–</span>';
+            const cls = s > 0 ? 'positive' : s < 0 ? 'negative' : 'neutral';
+            const txt = s > 0 ? `+${s}` : `${s}`;
+            return `<span class="sentiment-chip ${cls}" title="${b} bullish · ${r} bearish">${txt}</span>`;
+          })()}</td>
           <td class="cell-watchlist">
             <button
               class="watchlist-btn ${inWatchlist ? 'active' : ''}"

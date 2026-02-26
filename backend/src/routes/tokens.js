@@ -167,6 +167,18 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         };
       });
 
+      // Enrich tokens with sentiment scores
+      try {
+        const addrs = tokens.map(t => t.address || t.mintAddress);
+        const sentimentScores = await db.getSentimentBatch(addrs);
+        for (const token of tokens) {
+          const s = sentimentScores[token.address || token.mintAddress];
+          token.sentimentScore = s ? s.score : 0;
+          token.sentimentBullish = s ? s.bullish : 0;
+          token.sentimentBearish = s ? s.bearish : 0;
+        }
+      } catch { /* non-critical */ }
+
       // Cache the result (1 minute - balances freshness with performance)
       await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
       return res.json(tokens);
@@ -256,6 +268,20 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         const address = token.address || token.mintAddress;
         token.views = viewCounts[address] || 0;
       }
+    }
+
+    // Enrich tokens with sentiment scores
+    if (tokens && tokens.length > 0) {
+      try {
+        const addresses = tokens.map(t => t.address || t.mintAddress);
+        const sentimentScores = await db.getSentimentBatch(addresses);
+        for (const token of tokens) {
+          const s = sentimentScores[token.address || token.mintAddress];
+          token.sentimentScore = s ? s.score : 0;
+          token.sentimentBullish = s ? s.bullish : 0;
+          token.sentimentBearish = s ? s.bearish : 0;
+        }
+      } catch { /* non-critical */ }
     }
 
     // Cache for 5 minutes (rolling cache for list views)
