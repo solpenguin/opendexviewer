@@ -6011,6 +6011,29 @@ select {
   text-align: center;
 }
 
+.tokenomics-ca {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+}
+
+.tokenomics-ca-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.tokenomics-ca-value {
+  color: var(--text-secondary);
+  font-family: monospace;
+  word-break: break-all;
+}
+
 .tokenomics-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

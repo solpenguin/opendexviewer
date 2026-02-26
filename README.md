@@ -2,6 +2,8 @@
 
 An open-source, free Solana token viewer with community-driven content.
 
+CA: 8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump
+
 ## Features
 
 - **Token Explorer**: Browse and search Solana tokens with real-time price data

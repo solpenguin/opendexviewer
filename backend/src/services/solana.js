@@ -400,7 +400,9 @@ async function getTokenMetadataBatch(mintAddresses) {
 
   try {
     // Helius getAssetBatch supports up to 1000 assets
-    const addresses = mintAddresses.slice(0, 1000);
+    // Filter out any null/undefined entries before sending — Helius rejects null IDs
+    const addresses = mintAddresses.filter(Boolean).slice(0, 1000);
+    if (addresses.length === 0) return {};
     console.log(`[Solana] Fetching batch token metadata for ${addresses.length} tokens`);
 
     const response = await axios.post(HELIUS_DAS_URL, {
