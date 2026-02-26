@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Documentation - OpenDex</title>
+  <meta name="description" content="Complete documentation for OpenDex - features, API endpoints, voting system, submissions, watchlist, Telegram bot, and more.">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <img src="OpenDEX_Logo.png" alt="OpenDex Logo" class="logo-img" width="28" height="28">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">Beta</span>
+      </a>
+
+      <nav class="nav">
+        <a href="/" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+        <a href="about.html" class="nav-link">About</a>
+        <a href="development.html" class="nav-link">Development</a>
+        <a href="api.html" class="nav-link">API</a>
+        <a href="docs.html" class="nav-link active">Docs</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
+      </div>
+    </div>
+  </header>
+  <div id="announcement-banner"></div>
+
+  <main class="main about-page">
+    <!-- Page Hero -->
+    <section class="submit-hero">
+      <div class="submit-hero-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          <line x1="8" y1="7" x2="16" y2="7"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+      </div>
+      <h1>Documentation</h1>
+      <p>Complete guide to every feature of the OpenDex platform</p>
+    </section>
+
+    <!-- Table of Contents -->
+    <section class="about-section docs-toc-section">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </div>
+        <h2>Table of Contents</h2>
+      </div>
+
+      <div class="docs-toc">
+        <a href="#overview" class="docs-toc-link">Platform Overview</a>
+        <a href="#token-explorer" class="docs-toc-link">Token Explorer</a>
+        <a href="#token-detail" class="docs-toc-link">Token Detail Page</a>
+        <a href="#community-submissions" class="docs-toc-link">Community Submissions</a>
+        <a href="#voting-system" class="docs-toc-link">Voting &amp; Approval System</a>
+        <a href="#sentiment" class="docs-toc-link">Community Sentiment</a>
+        <a href="#watchlist" class="docs-toc-link">Watchlist</a>
+        <a href="#telegram-bot" class="docs-toc-link">Telegram Bot</a>
+        <a href="#api-reference" class="docs-toc-link">API Reference</a>
+        <a href="#rate-limits" class="docs-toc-link">Rate Limits</a>
+        <a href="#data-sources" class="docs-toc-link">Data Sources &amp; Caching</a>
+      </div>
+    </section>
+
+    <!-- Overview -->
+    <section class="about-section" id="overview">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <h2>Platform Overview</h2>
+        <p>OpenDex is a free, open-source Solana token explorer with community-driven content</p>
+      </div>
+
+      <div class="about-content">
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </div>
+          <h3>What is OpenDex?</h3>
+          <p>OpenDex aggregates real-time Solana token data from Jupiter, GeckoTerminal, and on-chain sources. Token communities can submit and vote on banners, social links, and other content &mdash; no centralized authority decides what gets shown. The entire platform is free with no listing fees, premium tiers, or paid promotions.</p>
+        </div>
+
+        <div class="about-card">
+          <div class="about-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <h3>Key Features</h3>
+          <p>Real-time prices and charts &bull; Community-submitted banners and social links &bull; Holder-weighted voting system &bull; Watchlist with cross-device sync &bull; Bullish/Bearish sentiment voting &bull; Developer API with free keys &bull; Telegram bot for instant lookups &bull; Fully open source on GitHub</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Token Explorer -->
+    <section class="about-section" id="token-explorer">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <h2>Token Explorer</h2>
+        <p>The home page at <code>opendex.online</code></p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>Search</h3>
+        <p>Search for any Solana token by name, symbol, or mint address using the search bar. Results update as you type with a minimum of 2 characters.</p>
+
+        <h3>Filter Tabs</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Trending</strong>
+            <span>Tokens sorted by 24h trading volume (default view)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>New</strong>
+            <span>Recently added tokens, newest first</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Gainers</strong>
+            <span>Tokens with the highest positive 24h price change</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Losers</strong>
+            <span>Tokens with the largest negative 24h price change</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Most Viewed</strong>
+            <span>Tokens with the most page views on OpenDex</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Watchlist</strong>
+            <span>Your saved tokens (requires wallet connection)</span>
+          </div>
+        </div>
+
+        <h3>Token Table</h3>
+        <p>Each row shows: rank, token name/symbol with logo, current price, 24h change (color-coded green/red), 24h volume, market cap, view count, community sentiment score, and a watchlist star. Click any column header to sort. Click a row to open the token detail page. Data auto-refreshes with a freshness countdown timer.</p>
+      </div>
+    </section>
+
+    <!-- Token Detail -->
+    <section class="about-section" id="token-detail">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20V10"/>
+            <path d="M18 20V4"/>
+            <path d="M6 20v-4"/>
+          </svg>
+        </div>
+        <h2>Token Detail Page</h2>
+        <p>In-depth view at <code>token.html?mint=ADDRESS</code></p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>Header</h3>
+        <p>Displays the token logo, name, symbol, mint address with a copy button, Solscan explorer link, watchlist toggle, and current price with 24h change badge. Price auto-refreshes every 5 minutes with a visible countdown.</p>
+
+        <h3>Price Chart</h3>
+        <p>Interactive chart powered by GeckoTerminal OHLCV data. Toggle between <strong>Price</strong> and <strong>Market Cap</strong> metrics, switch between <strong>Line</strong> and <strong>Candlestick</strong> chart types, and choose from five timeframes: 15 minutes, 1 hour (default), 4 hours, 1 day, and 1 week. Chart stats (Open, High, Low, Close, Volume) are shown below.</p>
+
+        <h3>Statistics</h3>
+        <p>Market cap, 24h volume, total liquidity, holder count, total supply, circulating supply, and page views.</p>
+
+        <h3>Liquidity Pools</h3>
+        <p>Lists all available DEX pools (Raydium, Jupiter, Orca, etc.) with token pair and liquidity amount.</p>
+
+        <h3>Trade</h3>
+        <p>One-click link to trade on Jupiter aggregator with the token pre-selected.</p>
+
+        <h3>Community Section</h3>
+        <p>Shows the approved banner image (if any) with vote count, and approved social links (Twitter/X, Telegram, Discord, TikTok, Website). A "Contribute" button links to the submit page for this token.</p>
+
+        <h3>Community Sentiment</h3>
+        <p>Bullish vs Bearish voting bar. Any connected wallet can vote (no holder verification needed for sentiment). Shows total vote counts, percentages, and updates in real time.</p>
+
+        <h3>Community Submissions</h3>
+        <p>Two tabs &mdash; Banners and Social Links &mdash; listing all approved submissions sorted by votes. Each submission has up/down vote buttons with weighted scores. Auto-refreshes every 30 seconds.</p>
+      </div>
+    </section>
+
+    <!-- Community Submissions -->
+    <section class="about-section" id="community-submissions">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <h2>Community Submissions</h2>
+        <p>How to submit banners and social links for tokens at <code>submit.html</code></p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>Requirements</h3>
+        <p>You must connect a Solana wallet (Phantom or Solflare) and hold at least <strong>0.1%</strong> of the token's circulating supply. Your balance and share percentage are verified on-chain in real time. The submit page shows your holder status with a green checkmark or red error.</p>
+
+        <h3>Submission Types</h3>
+        <p>You can submit any combination of the following in a single form (up to 5 fields):</p>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Banner Image</strong>
+            <span>URL to an image (1500x500px recommended). Hosted on Imgur or similar.</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Twitter / X</strong>
+            <span>Official Twitter/X account URL (must be twitter.com or x.com)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Telegram</strong>
+            <span>Community group link (must be t.me)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Discord</strong>
+            <span>Server invite link (must be discord.gg or discord.com)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>TikTok</strong>
+            <span>Official TikTok profile (must be tiktok.com)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Website</strong>
+            <span>Official website URL (https required)</span>
+          </div>
+        </div>
+
+        <h3>Validation</h3>
+        <p>All URLs are validated for correct format and checked against a blocklist of known phishing domains, URL shorteners, and typosquatting domains. A live preview shows how your submissions will appear on the token page before you submit.</p>
+
+        <h3>Duplicate Prevention</h3>
+        <p>The same URL cannot be submitted twice for the same token and submission type. The database enforces this atomically, returning a duplicate error if the content already exists.</p>
+
+        <h3>My Submissions</h3>
+        <p>Below the form, a "My Submissions" section shows all your past submissions grouped by token, with their current status (pending, approved, or rejected), vote counts, and creation date.</p>
+      </div>
+    </section>
+
+    <!-- Voting System -->
+    <section class="about-section" id="voting-system">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+          </svg>
+        </div>
+        <h2>Voting &amp; Approval System</h2>
+        <p>Community-driven content moderation for submissions</p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>Who Can Vote</h3>
+        <p>Any wallet holding at least <strong>0.1%</strong> of a token's circulating supply can vote on that token's submissions. Holdings are verified on-chain via Solana RPC and cached for 2 minutes.</p>
+
+        <h3>Vote Weight Tiers</h3>
+        <p>Votes are weighted based on your share of the token supply. Larger holders have more influence, but even minimum holders can participate:</p>
+        <div class="voting-tiers">
+          <div class="tier">
+            <span class="tier-range">0.1% (minimum)</span>
+            <span class="tier-weight">1x weight</span>
+          </div>
+          <div class="tier">
+            <span class="tier-range">0.3%+</span>
+            <span class="tier-weight">1.5x weight</span>
+          </div>
+          <div class="tier">
+            <span class="tier-range">0.75%+</span>
+            <span class="tier-weight">2x weight</span>
+          </div>
+          <div class="tier">
+            <span class="tier-range">1.5%+</span>
+            <span class="tier-weight">2.5x weight</span>
+          </div>
+          <div class="tier">
+            <span class="tier-range">3%+ (maximum)</span>
+            <span class="tier-weight">3x weight</span>
+          </div>
+        </div>
+
+        <h3>How Voting Works</h3>
+        <p>Click the upvote or downvote button on any submission. Clicking the same button again removes your vote. Votes are queued in the UI and submitted in batches (500ms delay) to allow rapid voting on multiple submissions with a single action.</p>
+
+        <h3>Auto-Approval Thresholds</h3>
+        <p>Submissions are automatically approved when their weighted score reaches the threshold for the token's market cap tier. This means smaller communities (fewer holders) need fewer votes:</p>
+        <div class="threshold-indicators">
+          <div class="threshold approve">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>&lt;$50k market cap: +10 weighted score</span>
+          </div>
+          <div class="threshold approve">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>$50k &ndash; $100k market cap: +15 weighted score</span>
+          </div>
+          <div class="threshold approve">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>&gt;$100k market cap: +25 weighted score</span>
+          </div>
+          <div class="threshold reject">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            <span>&ndash;10 weighted score = Auto-Reject</span>
+          </div>
+        </div>
+
+        <h3>Review Periods</h3>
+        <p>After submission, content enters a mandatory review period before it can be approved:</p>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>First submission for a token</strong>
+            <span>5 minute review period (helps new tokens get content quickly)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Subsequent submissions</strong>
+            <span>1 hour review period (gives the community time to evaluate changes)</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sentiment -->
+    <section class="about-section" id="sentiment">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </div>
+        <h2>Community Sentiment</h2>
+        <p>Bullish or Bearish &mdash; what does the community think?</p>
+      </div>
+
+      <div class="docs-content-block">
+        <p>Each token detail page has a community sentiment section where any connected wallet can cast a Bullish or Bearish vote. Unlike submission voting, <strong>sentiment voting does not require holding the token</strong> &mdash; simply connecting your wallet is enough.</p>
+        <p>Sentiment is displayed as a visual bar showing the bullish/bearish split with vote counts and percentages. Clicking the same sentiment again removes your vote. The home page token table also shows a sentiment score column (Bullish minus Bearish count).</p>
+        <p>Sentiment data is fetched in bulk for the home page table using the batch endpoint, and individually per token on the detail page.</p>
+      </div>
+    </section>
+
+    <!-- Watchlist -->
+    <section class="about-section" id="watchlist">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <h2>Watchlist</h2>
+        <p>Save tokens for quick access across devices</p>
+      </div>
+
+      <div class="docs-content-block">
+        <p>Click the star icon on any token row or the watchlist button on a token detail page to add it to your watchlist. Your watchlist is stored on the server and synced to your wallet address, so it works across devices.</p>
+
+        <h3>Details</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Limit</strong>
+            <span>Maximum 100 tokens per wallet</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Persistence</strong>
+            <span>Server-side storage linked to your wallet address</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Access</strong>
+            <span>Use the "Watchlist" filter tab on the home page to view only your saved tokens</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Batch Loading</strong>
+            <span>Watchlist tokens are fetched in a single batch API request for speed</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Telegram Bot -->
+    <section class="about-section" id="telegram-bot">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          </svg>
+        </div>
+        <h2>Telegram Bot</h2>
+        <p>Look up tokens and set market cap alerts from Telegram</p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>Token Lookup</h3>
+        <p>Use <code>/token &lt;CA&gt;</code> to look up any Solana token by contract address. The bot returns the token name, price, 24h change, market cap, volume, liquidity, holder count, and community links. If the token has an approved banner, it's shown as an image. In DMs, you can also just paste a contract address directly and the bot will detect it automatically.</p>
+
+        <h3>Search</h3>
+        <p>Use <code>/search &lt;query&gt;</code> to search tokens by name or symbol. Returns up to 5 results with inline buttons to fetch full details for any result.</p>
+
+        <h3>Market Cap Alerts</h3>
+        <p>Set one-shot alerts that fire when a token's market cap hits your target:</p>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>/alert &lt;CA&gt; above &lt;value&gt;</strong>
+            <span>Alert when market cap rises above the target</span>
+          </div>
+          <div class="docs-feature">
+            <strong>/alert &lt;CA&gt; below &lt;value&gt;</strong>
+            <span>Alert when market cap drops below the target</span>
+          </div>
+          <div class="docs-feature">
+            <strong>/alert &lt;CA&gt; change &lt;percent&gt;</strong>
+            <span>Alert when market cap changes by the given percentage (up or down)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>/alerts</strong>
+            <span>List your active alerts</span>
+          </div>
+          <div class="docs-feature">
+            <strong>/removealert &lt;id&gt;</strong>
+            <span>Remove an alert by its ID</span>
+          </div>
+        </div>
+        <p>Alerts are one-shot: they fire once and then deactivate. Maximum 10 active alerts per user. Alerts are checked every 60 seconds using batch API requests.</p>
+
+        <h3>Group Behavior</h3>
+        <p>In group chats, the bot responds to <code>/token</code> and <code>/search</code> commands only &mdash; automatic contract address detection is disabled to avoid spam. The command menu shows a streamlined set of commands in groups.</p>
+
+        <h3>Other Commands</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>/start</strong>
+            <span>Welcome message</span>
+          </div>
+          <div class="docs-feature">
+            <strong>/help</strong>
+            <span>List all available commands</span>
+          </div>
+          <div class="docs-feature">
+            <strong>/stats</strong>
+            <span>Bot uptime and alert statistics</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Reference -->
+    <section class="about-section" id="api-reference">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+        </div>
+        <h2>API Reference</h2>
+        <p>All public endpoints. Base URL: <code>https://opendex-api-dy30.onrender.com</code></p>
+      </div>
+
+      <div class="api-docs-section">
+        <!-- Token Endpoints -->
+        <h3>Token Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens</code>
+          </div>
+          <p class="api-endpoint-desc">List tokens with filtering, sorting, and pagination</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>sort     string   price | volume | mcap | change | views (default: volume)
+order    string   asc | desc (default: desc)
+limit    number   1-100 (default: 50)
+offset   number   Pagination offset (default: 0)
+filter   string   trending | new | gainers | losers | most_viewed</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get detailed token information including price, volume, market cap, holders, supply, liquidity pools, and community submissions</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint/price</code>
+          </div>
+          <p class="api-endpoint-desc">Lightweight price endpoint &mdash; returns current price and 24h/7d change</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint/chart</code>
+          </div>
+          <p class="api-endpoint-desc">Price chart data from GeckoTerminal</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>interval   string   15m | 1h | 4h | 1d | 1w</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint/ohlcv</code>
+          </div>
+          <p class="api-endpoint-desc">OHLCV (Open, High, Low, Close, Volume) candle data with timestamps</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>interval   string   15m | 1h | 4h | 1d | 1w</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/search</code>
+          </div>
+          <p class="api-endpoint-desc">Search tokens by name, symbol, or mint address</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>q   string   Search query (minimum 1 character)</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/tokens/batch</code>
+          </div>
+          <p class="api-endpoint-desc">Batch fetch multiple tokens in a single request (used by watchlist)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "mints": ["mint1", "mint2", ...] }</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint/holder/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Check token holder balance and ownership percentage</p>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "wallet": "...",
+  "mint": "...",
+  "balance": 100.5,
+  "holdsToken": true,
+  "percentageHeld": 0.5,
+  "circulatingSupply": 20000
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/tokens/:mint/view</code>
+          </div>
+          <p class="api-endpoint-desc">Record a page view for a token (fire-and-forget)</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint/submissions</code>
+          </div>
+          <p class="api-endpoint-desc">Get all submissions (banners &amp; social links) for a token. Cached for 30 seconds.</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/:mint/pools</code>
+          </div>
+          <p class="api-endpoint-desc">Get liquidity pools for a token with DEX info, liquidity amounts, and reserves</p>
+        </div>
+
+        <!-- Submission Endpoints -->
+        <h3>Submission Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/submissions</code>
+          </div>
+          <p class="api-endpoint-desc">Create a new submission (requires holder verification)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{
+  "tokenMint": "...",
+  "submissionType": "banner | twitter | telegram | discord | tiktok | website",
+  "contentUrl": "https://...",
+  "submitterWallet": "..." (optional)
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/submissions/batch</code>
+          </div>
+          <p class="api-endpoint-desc">Create multiple submissions in one request (single signature)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{
+  "submissions": [
+    { "tokenMint": "...", "submissionType": "...", "contentUrl": "..." }
+  ],
+  "submitterWallet": "..."
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/submissions/token/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get all submissions for a token, filterable by type and status</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>type     string   banner | social | all
+status   string   pending | approved | rejected | all</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/submissions/wallet/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Get all submissions from a specific wallet</p>
+        </div>
+
+        <!-- Voting Endpoints -->
+        <h3>Voting Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/votes</code>
+          </div>
+          <p class="api-endpoint-desc">Cast a vote on a submission (requires holder verification)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{
+  "submissionId": 123,
+  "voteType": "up | down",
+  "voterWallet": "..."
+}</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "action": "created | updated | removed",
+  "voteType": "up",
+  "voteWeight": 1.5,
+  "tally": {
+    "upvotes": 10,
+    "downvotes": 2,
+    "score": 8,
+    "weightedScore": 12.5
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/votes/batch</code>
+          </div>
+          <p class="api-endpoint-desc">Cast multiple votes in one request</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{
+  "votes": [
+    { "submissionId": 123, "voteType": "up" },
+    { "submissionId": 124, "voteType": "down" }
+  ],
+  "voterWallet": "..."
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/votes/bulk-check</code>
+          </div>
+          <p class="api-endpoint-desc">Check if a wallet has voted on multiple submissions</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{
+  "submissionIds": [123, 124, 125],
+  "wallet": "..."
+}</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "123": { "hasVoted": true, "voteType": "up" },
+  "124": { "hasVoted": false }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/votes/requirements</code>
+          </div>
+          <p class="api-endpoint-desc">Get voting requirements: minimum balance, approval/rejection thresholds, weight tiers</p>
+        </div>
+
+        <!-- Watchlist Endpoints -->
+        <h3>Watchlist Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/watchlist/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Get a wallet's watchlist (token mints and timestamps)</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/watchlist</code>
+          </div>
+          <p class="api-endpoint-desc">Add a token to watchlist (max 100 per wallet)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "wallet": "...", "tokenMint": "..." }</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method delete">DELETE</span>
+            <code class="api-path">/api/watchlist</code>
+          </div>
+          <p class="api-endpoint-desc">Remove a token from watchlist</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "wallet": "...", "tokenMint": "..." }</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/watchlist/check-batch</code>
+          </div>
+          <p class="api-endpoint-desc">Check which tokens from a list are in the watchlist</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "wallet": "...", "tokenMints": ["mint1", "mint2"] }</code></pre>
+          </div>
+        </div>
+
+        <!-- Sentiment Endpoints -->
+        <h3>Sentiment Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/sentiment/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get bullish/bearish sentiment tally for a token. Add <code>?wallet=ADDRESS</code> to include your vote.</p>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "tally": { "bullish": 45, "bearish": 15, "score": 30 },
+  "userVote": { "sentiment": "bullish" }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/sentiment/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Cast a bullish/bearish vote (no holder verification required)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "voterWallet": "...", "sentiment": "bullish | bearish" }</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/sentiment/bulk</code>
+          </div>
+          <p class="api-endpoint-desc">Get sentiment for multiple tokens (max 100)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "mints": ["mint1", "mint2", ...] }</code></pre>
+          </div>
+        </div>
+
+        <!-- Community API (Key Required) -->
+        <h3>Community API (Key Required)</h3>
+        <p>These endpoints require an API key in the <code>X-API-Key</code> header. Register for a free key on the <a href="api.html" class="link">API page</a>.</p>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get top-voted community content (banner + social links) for a token</p>
+          <div class="api-example">
+            <div class="api-example-label">Example Request</div>
+            <pre><code>curl -H "X-API-Key: YOUR_KEY" \
+  https://opendex-api-dy30.onrender.com/api/v1/community/So111...112</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/:mint/all</code>
+          </div>
+          <p class="api-endpoint-desc">Get all approved submissions for a token (not just top-voted)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>type   string   Filter: banner | twitter | telegram | discord | website</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/v1/community/batch</code>
+          </div>
+          <p class="api-endpoint-desc">Batch fetch community content for up to 20 tokens</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>mints   string   Comma-separated token addresses (max 20)</code></pre>
+          </div>
+        </div>
+
+        <!-- Announcement & Health -->
+        <h3>Other Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/announcements/active</code>
+          </div>
+          <p class="api-endpoint-desc">Get currently active announcements (shown as site banners)</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/health</code>
+          </div>
+          <p class="api-endpoint-desc">Basic health check</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/health/detailed</code>
+          </div>
+          <p class="api-endpoint-desc">Detailed health check with database, cache, and external API status</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rate Limits -->
+    <section class="about-section" id="rate-limits">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <h2>Rate Limits</h2>
+        <p>Request limits to ensure fair access for everyone</p>
+      </div>
+
+      <div class="docs-content-block">
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Default</strong>
+            <span>100 requests per minute</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Search</strong>
+            <span>30 requests per minute</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Voting &amp; Watchlist</strong>
+            <span>30 requests per minute (per IP)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Submissions</strong>
+            <span>10 requests per minute</span>
+          </div>
+          <div class="docs-feature">
+            <strong>API Key Registration</strong>
+            <span>10 requests per minute</span>
+          </div>
+        </div>
+        <p>Rate limit headers (<code>X-RateLimit-Remaining</code>, <code>Retry-After</code>) are included in responses. When limits are exceeded, you'll receive a <code>429</code> status code.</p>
+
+        <h3>Error Codes</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>401</strong>
+            <span>Missing or invalid API key (for v1/ endpoints)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>403</strong>
+            <span>API key revoked or insufficient permissions</span>
+          </div>
+          <div class="docs-feature">
+            <strong>404</strong>
+            <span>Token or resource not found</span>
+          </div>
+          <div class="docs-feature">
+            <strong>409</strong>
+            <span>Duplicate submission</span>
+          </div>
+          <div class="docs-feature">
+            <strong>429</strong>
+            <span>Rate limit exceeded</span>
+          </div>
+          <div class="docs-feature">
+            <strong>503</strong>
+            <span>Service temporarily unavailable</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Data Sources -->
+    <section class="about-section" id="data-sources">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+          </svg>
+        </div>
+        <h2>Data Sources &amp; Caching</h2>
+        <p>Where the data comes from and how fresh it is</p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>External Data Sources</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Jupiter</strong>
+            <span>Token metadata, prices, volumes, and market caps</span>
+          </div>
+          <div class="docs-feature">
+            <strong>GeckoTerminal</strong>
+            <span>OHLCV price charts and historical candle data</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Helius</strong>
+            <span>Solana RPC &mdash; batch token metadata enrichment</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Solana RPC</strong>
+            <span>On-chain holder verification and token accounts</span>
+          </div>
+        </div>
+
+        <h3>Cache Freshness</h3>
+        <p>Data is cached at multiple levels to balance freshness with performance:</p>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Token List</strong>
+            <span>2 minutes (frontend) / 5 minutes (backend)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Prices</strong>
+            <span>5 minutes (frontend) / 1 minute (backend)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Charts</strong>
+            <span>5 minutes at both layers</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Submissions</strong>
+            <span>30 seconds (short TTL to reflect voting changes quickly)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Holder Verification</strong>
+            <span>2 minutes (cached to reduce Solana RPC load)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Search Results</strong>
+            <span>2 minutes</span>
+          </div>
+        </div>
+        <p>The frontend uses a stale-while-revalidate pattern: cached data is returned immediately while a background refresh runs in parallel, so you never block on network delays.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-left">
+        <p>OpenDex - Open Source Token Scanner</p>
+        <p class="footer-tagline">Community-powered Solana analytics</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          GitHub
+        </a>
+        <span class="separator">|</span>
+        <a href="submit.html">Submit Content</a>
+        <span class="separator">|</span>
+        <a href="api.html">Developer API</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/announcements.js"></script>
+</body>
+</html>
