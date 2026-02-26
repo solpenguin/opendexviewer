@@ -6482,6 +6482,20 @@ select {
     display: none;
   }
 
+  /* On mobile: market cap is more meaningful than raw price — swap them */
+  .th-price,
+  .cell-price {
+    display: none;
+  }
+
+  /* Restore market cap (hidden by the ≤768px rule) */
+  .th-mcap,
+  .cell-mcap {
+    display: table-cell;
+    white-space: nowrap;
+    padding: 0.75rem 0.5rem;
+  }
+
   /* Adjust remaining columns */
   .th-rank,
   .cell-rank {
@@ -6536,12 +6550,9 @@ select {
 
 @media (max-width: 480px) {
   /* Further simplify table at 480px */
-  .th-mcap,
-  .cell-mcap {
-    display: none;
-  }
+  /* mcap stays visible (shown at ≤600px — more useful than raw price on small screens) */
 
-  /* Show change column again since we have room */
+  /* Show change column */
   .th-change,
   .cell-change {
     display: table-cell;
