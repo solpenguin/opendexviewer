@@ -47,7 +47,10 @@ async function verifyHolderStatus(wallet, tokenMint) {
     let percentageHeld = null;
 
     // Try to get token info from cache for supply data
-    const tokenInfo = await cache.get(keys.tokenInfo(tokenMint));
+    // Token info is stored via setWithTimestamp which wraps with { _data, _cachedAt }
+    // Use getWithMeta to correctly unwrap the stored value
+    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(tokenMint));
+    const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo && tokenInfo.circulatingSupply) {
       circulatingSupply = tokenInfo.circulatingSupply;
     } else if (tokenInfo && tokenInfo.supply) {
@@ -157,7 +160,8 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
   // Try cache first, then fetch from GeckoTerminal
   let marketCap = null;
   try {
-    const tokenInfo = await cache.get(keys.tokenInfo(submission.token_mint));
+    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint));
+    const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo && tokenInfo.marketCap) {
       marketCap = tokenInfo.marketCap;
     } else {

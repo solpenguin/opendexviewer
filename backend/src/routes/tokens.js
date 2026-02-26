@@ -958,7 +958,9 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
     let percentageHeld = null;
 
     // Try to get token info for supply data
-    const tokenInfo = await cache.get(keys.tokenInfo(mint));
+    // Token info is stored via setWithTimestamp — use getWithMeta to unwrap correctly
+    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(mint));
+    const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo) {
       totalSupply = tokenInfo.supply || tokenInfo.totalSupply;
       liquidity = tokenInfo.liquidity;
