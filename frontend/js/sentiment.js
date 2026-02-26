@@ -4,25 +4,16 @@
 (function injectSentimentCSS() {
   const style = document.createElement('style');
   style.textContent = `
-    .sentiment-section {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg);
-      padding: 0.85rem 1rem;
-      margin-bottom: 1.25rem;
-    }
     .sentiment-header-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 0.5rem;
+      margin-bottom: 1rem;
     }
     .sentiment-section-title {
-      font-size: 0.8rem;
+      font-size: 1rem;
       font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      color: var(--text-primary);
     }
     .sentiment-percent {
       font-size: 0.85rem;
@@ -33,11 +24,11 @@
     .sentiment-percent.bearish { color: #ef4444; }
     .sentiment-bar-wrap {
       width: 100%;
-      height: 5px;
+      height: 6px;
       background: var(--bg-tertiary);
       border-radius: 3px;
       overflow: hidden;
-      margin-bottom: 0.6rem;
+      margin-bottom: 0.85rem;
     }
     .sentiment-bar-fill {
       height: 100%;

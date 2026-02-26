@@ -1665,9 +1665,22 @@ a:hover {
 .token-content-grid {
   display: grid;
   grid-template-columns: 1fr 380px;
+  grid-template-rows: auto auto auto;
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
+
+/* Explicit column placement: chart spans full left column, sidebar items stack right */
+.chart-section {
+  grid-column: 1;
+  grid-row: 1 / 4;
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-section  { grid-column: 2; grid-row: 1; }
+.pools-section  { grid-column: 2; grid-row: 2; }
+.trade-section  { grid-column: 2; grid-row: 3; align-self: start; }
 
 /* Card Base */
 .chart-section,
@@ -1675,11 +1688,17 @@ a:hover {
 .social-section,
 .trade-section,
 .submissions-section,
-.pools-section {
+.pools-section,
+.sentiment-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: 1.5rem;
+}
+
+/* Sentiment section sits full-width between grid and submissions */
+.sentiment-section {
+  margin-bottom: 2rem;
 }
 
 .chart-section h2,
@@ -1804,7 +1823,8 @@ a:hover {
 
 .chart-container {
   position: relative;
-  height: 360px;
+  flex: 1;
+  min-height: 320px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -4579,6 +4599,21 @@ a:hover {
 @media (max-width: 1024px) {
   .token-content-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .chart-section,
+  .stats-section,
+  .pools-section,
+  .trade-section {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
+  }
+
+  .chart-container {
+    flex: none;
+    min-height: 300px;
   }
 
   .pool-card {
@@ -4975,6 +5010,16 @@ select {
 @media (max-width: 900px) {
   .token-content-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .chart-section,
+  .stats-section,
+  .pools-section,
+  .trade-section {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
   }
 
   .hero h1 {
@@ -5280,7 +5325,8 @@ select {
   .social-section,
   .trade-section,
   .submissions-section,
-  .pools-section {
+  .pools-section,
+  .sentiment-section {
     padding: 1rem;
   }
 
