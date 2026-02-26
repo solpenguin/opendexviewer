@@ -1,5 +1,6 @@
 const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
+const { downloadImage } = require('../../utils/sendToken');
 
 module.exports = (bot) => {
   bot.callbackQuery(/^lookup:(.+)$/, async (ctx) => {
@@ -13,14 +14,15 @@ module.exports = (bot) => {
 
       if (message.bannerUrl) {
         try {
-          await ctx.replyWithPhoto(message.bannerUrl, {
+          const photo = await downloadImage(message.bannerUrl);
+          await ctx.replyWithPhoto(photo, {
             caption: message.text,
             parse_mode: 'HTML',
             reply_markup: message.replyMarkup
           });
           return;
         } catch {
-          // Banner URL broken — fall back to text
+          // Banner download failed — fall back to text
         }
       }
 
