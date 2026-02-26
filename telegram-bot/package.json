@@ -1,0 +1,18 @@
+{
+  "name": "opendex-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for OpenDexViewer - Solana token lookup, search, and price alerts",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "grammy": "^1.21.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  }
+}

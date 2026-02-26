@@ -113,6 +113,27 @@ services:
         value: "20"
 
   # =====================================================
+  # Telegram Bot (Long polling worker)
+  # =====================================================
+  - type: worker
+    name: opendex-telegram-bot
+    runtime: node
+    region: oregon
+    plan: starter
+    rootDir: telegram-bot
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OPENDEX_API_URL
+        value: https://opendex-api-dy30.onrender.com
+      - key: OPENDEX_FRONTEND_URL
+        value: https://opendex.online
+      - key: NODE_ENV
+        value: production
+
+  # =====================================================
   # Redis (BullMQ job queue)
   # =====================================================
   - type: redis

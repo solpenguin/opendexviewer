@@ -8,6 +8,7 @@ package-lock.json
 .env.production
 backend/.env
 backend/.env.local
+telegram-bot/.env
 
 # Logs
 logs/
@@ -46,3 +47,4 @@ temp/
 # Database
 *.sqlite
 *.db
+telegram-bot/data/
