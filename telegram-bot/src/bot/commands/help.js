@@ -4,7 +4,7 @@ module.exports = (bot) => {
       `<b>OpenDEX Bot Commands</b>\n\n` +
       `<b>Token Lookup</b>\n` +
       `/token &lt;CA&gt; - Look up a token by contract address\n` +
-      `Or just paste a CA directly — I'll detect it automatically\n\n` +
+      `In DMs, just paste a CA directly — I'll detect it automatically\n\n` +
       `<b>Search</b>\n` +
       `/search &lt;query&gt; - Search tokens by name or symbol\n\n` +
       `<b>Market Cap Alerts</b>\n` +

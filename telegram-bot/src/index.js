@@ -34,15 +34,37 @@ require('./bot/middleware/errorHandler')(bot);
 // Start alert polling
 const poller = require('./alerts/poller');
 
+// Register command menus with Telegram (shown when users type "/")
+async function setCommands(bot) {
+  // Private chat commands — full list including alerts
+  await bot.api.setMyCommands([
+    { command: 'token', description: 'Look up a token by contract address' },
+    { command: 'search', description: 'Search tokens by name or symbol' },
+    { command: 'alert', description: 'Set a market cap alert' },
+    { command: 'alerts', description: 'List your active alerts' },
+    { command: 'removealert', description: 'Remove an alert' },
+    { command: 'stats', description: 'Bot statistics' },
+    { command: 'help', description: 'Show all commands' },
+  ], { scope: { type: 'all_private_chats' } });
+
+  // Group chat commands — subset (no alert management to keep menu clean)
+  await bot.api.setMyCommands([
+    { command: 'token', description: 'Look up a token by contract address' },
+    { command: 'search', description: 'Search tokens by name or symbol' },
+    { command: 'help', description: 'Show all commands' },
+  ], { scope: { type: 'all_group_chats' } });
+}
+
 // Start bot
 bot.start({
-  onStart: (botInfo) => {
+  onStart: async (botInfo) => {
     console.log(`
   OpenDEX Telegram Bot started
   Bot: @${botInfo.username}
   API: ${config.API_BASE_URL}
   Alert polling: every ${config.ALERT_POLL_INTERVAL_MS / 1000}s
     `);
+    await setCommands(bot).catch(err => console.error('[Bot] Failed to set commands:', err.message));
     poller.start(bot);
   }
 });

@@ -11,9 +11,9 @@ async function checkAlerts(bot) {
 
   // Batch fetch token data (up to 50 per request)
   const tokenData = {};
-  try {
-    for (let i = 0; i < distinctMints.length; i += 50) {
-      const chunk = distinctMints.slice(i, i + 50);
+  for (let i = 0; i < distinctMints.length; i += 50) {
+    const chunk = distinctMints.slice(i, i + 50);
+    try {
       const results = await tokensApi.batchGetTokens(chunk);
       if (Array.isArray(results)) {
         for (const token of results) {
@@ -21,10 +21,10 @@ async function checkAlerts(bot) {
           if (addr) tokenData[addr] = token;
         }
       }
+    } catch (error) {
+      console.error('[Alerts] Failed to fetch batch chunk:', error.message);
+      // Continue with remaining chunks instead of aborting the entire cycle
     }
-  } catch (error) {
-    console.error('[Alerts] Failed to batch fetch token data:', error.message);
-    return;
   }
 
   // Check each active alert against current market cap
@@ -45,17 +45,24 @@ async function checkAlerts(bot) {
         triggered = currentMcap <= alert.target_value;
         break;
       case 'change': {
-        const pctChange = Math.abs(
-          ((currentMcap - alert.mcap_at_creation) / alert.mcap_at_creation) * 100
-        );
-        triggered = pctChange >= alert.target_value;
+        if (alert.mcap_at_creation > 0) {
+          const pctChange = Math.abs(
+            ((currentMcap - alert.mcap_at_creation) / alert.mcap_at_creation) * 100
+          );
+          triggered = pctChange >= alert.target_value;
+        }
         break;
       }
     }
 
     if (triggered) {
-      alertStore.trigger(alert.id);
-      await notifications.sendAlertNotification(bot, alert, currentMcap);
+      const sent = await notifications.sendAlertNotification(bot, alert, currentMcap);
+      if (sent) {
+        alertStore.trigger(alert.id);
+      } else {
+        // Notification failed — leave alert active so it retries next cycle
+        console.warn(`[Alerts] Alert #${alert.id} triggered but notification failed, will retry`);
+      }
     }
   }
 }

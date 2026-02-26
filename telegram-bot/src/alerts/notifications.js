@@ -20,8 +20,18 @@ module.exports = {
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true }
       });
+      return true;
     } catch (error) {
       console.error(`[Alerts] Failed to send notification to chat ${alert.chat_id}:`, error.message);
+      // If chat is gone or bot was blocked, deactivate alert permanently
+      const permanent = error.description?.includes('blocked') ||
+        error.description?.includes('chat not found') ||
+        error.description?.includes('deactivated');
+      if (permanent) {
+        console.warn(`[Alerts] Chat ${alert.chat_id} unreachable, alert will be deactivated`);
+        return true; // Allow trigger() to deactivate it
+      }
+      return false; // Transient error — retry next cycle
     }
   }
 };

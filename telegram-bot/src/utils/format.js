@@ -89,11 +89,17 @@ function formatTokenMessage(token) {
     (token.holders ? `<b>Holders:</b> ${Number(token.holders).toLocaleString('en-US')}\n` : '') +
     communityLinks;
 
+  const hasApprovedSubmissions = bannerUrl || communityLinks.length > 0;
+
   const keyboard = new InlineKeyboard()
     .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${mint}`)
     .url('Solscan', `https://solscan.io/token/${mint}`)
     .row()
     .url('Trade on Jupiter', `https://jup.ag/swap/SOL-${mint}`);
+
+  if (!hasApprovedSubmissions) {
+    keyboard.row().url('Submit Community Info', `${config.FRONTEND_URL}/submit.html?mint=${mint}`);
+  }
 
   return { text, replyMarkup: keyboard, bannerUrl };
 }

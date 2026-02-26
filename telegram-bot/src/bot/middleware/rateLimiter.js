@@ -28,6 +28,8 @@ module.exports = (bot) => {
     userData.count++;
 
     if (userData.count > config.RATE_LIMIT_MAX_REQUESTS) {
+      // In groups, silently ignore to avoid spamming the chat with rate limit messages
+      if (ctx.chat?.type !== 'private') return;
       return ctx.reply('You are sending too many requests. Please wait a moment.');
     }
 
