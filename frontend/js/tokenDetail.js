@@ -354,7 +354,7 @@ const tokenDetail = {
     if (symbolEl) symbolEl.textContent = token.symbol || '???';
 
     const addressEl = document.getElementById('token-address');
-    if (addressEl) addressEl.textContent = utils.truncateAddress(this.mint, 6, 6);
+    if (addressEl) addressEl.textContent = this.mint;
 
     // Explorer link
     const explorerLink = document.getElementById('explorer-link');

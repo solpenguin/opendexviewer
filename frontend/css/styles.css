@@ -1379,8 +1379,8 @@ a:hover {
 }
 
 .token-logo-large {
-  width: 72px;
-  height: 72px;
+  width: 86px;
+  height: 86px;
   border-radius: var(--radius-full);
   background: var(--bg-tertiary);
   box-shadow: var(--shadow-md);
@@ -1420,6 +1420,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .token-address {
@@ -1428,6 +1429,8 @@ a:hover {
   color: var(--text-muted);
   cursor: pointer;
   transition: color var(--transition-fast);
+  word-break: break-all;
+  min-width: 0;
 }
 
 .token-address:hover {
