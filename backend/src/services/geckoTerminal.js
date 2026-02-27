@@ -262,10 +262,10 @@ async function getMultiTokenInfo(addresses) {
       const address = attrs.address;
       if (address) {
         result[address] = {
-          price: parseFloat(attrs.price_usd) || 0,
-          volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
-          marketCap: parseFloat(attrs.market_cap_usd) || 0,
-          fdv: parseFloat(attrs.fdv_usd) || 0,
+          price: parseFloat(attrs.price_usd) || null,
+          volume24h: parseFloat(attrs.volume_usd?.h24) || null,
+          marketCap: parseFloat(attrs.market_cap_usd) || null,
+          fdv: parseFloat(attrs.fdv_usd) || null,
           name: attrs.name,
           symbol: attrs.symbol,
           decimals: attrs.decimals,
@@ -653,12 +653,12 @@ async function searchTokens(query, limit = 20) {
         priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
         volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
         liquidity: parseFloat(attrs.reserve_in_usd) || 0,
-        marketCap: parseFloat(attrs.fdv_usd) || 0,
+        marketCap: parseFloat(attrs.market_cap_usd) || parseFloat(attrs.fdv_usd) || 0,
         pairCreatedAt: attrs.pool_created_at || null
       });
     }
 
-    // Enrich with full token info
+    // Enrich with full token info (name, symbol, logo, and fill missing market data)
     if (tokens.length > 0) {
       const addresses = tokens.map(t => t.address);
       const tokenInfoMap = await getMultiTokenInfo(addresses);
@@ -671,7 +671,13 @@ async function searchTokens(query, limit = 20) {
           token.decimals = info.decimals || token.decimals;
           token.logoUri = info.logoUri || token.logoUri;
           token.logoURI = info.logoUri || token.logoURI;
+          // Use token-level market cap if available (more accurate than pool-level)
           if (info.marketCap) token.marketCap = info.marketCap;
+          else if (!token.marketCap && info.fdv) token.marketCap = info.fdv;
+          // Back-fill volume if pool search didn't have it
+          if (!token.volume24h && info.volume24h) token.volume24h = info.volume24h;
+          // Back-fill price if pool search didn't have it
+          if (!token.price && info.price) token.price = info.price;
         }
       }
     }
