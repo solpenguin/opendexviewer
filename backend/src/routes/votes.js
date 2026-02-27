@@ -304,6 +304,18 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
         voterBalance = holderData.balance || 0;
       }
 
+      // Fetch market cap for tiered approval thresholds
+      let marketCap = null;
+      try {
+        const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint));
+        const tokenInfo = tokenInfoMeta?.value ?? null;
+        if (tokenInfo && tokenInfo.marketCap) {
+          marketCap = tokenInfo.marketCap;
+        }
+      } catch (err) {
+        // Continue with null market cap (will use lowest threshold)
+      }
+
       // Check for existing vote
       const existingVote = await db.getVote(submissionId, voterWallet);
 
@@ -328,11 +340,11 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
 
         if (existingVote.vote_type === voteType) {
           // Same vote - remove it (toggle off)
-          await db.deleteVote(submissionId, voterWallet);
+          await db.deleteVote(submissionId, voterWallet, marketCap);
           result = { action: 'removed', voteWeight: 0 };
         } else {
           // Different vote - update it
-          await db.updateVote(submissionId, voterWallet, voteType);
+          await db.updateVote(submissionId, voterWallet, voteType, marketCap);
           result = { action: 'updated', voteType, voteWeight };
         }
       } else {
@@ -437,7 +449,8 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
 
     // Fetch market cap for tiered threshold display
     try {
-      const tokenInfo = await cache.get(keys.tokenInfo(submission.token_mint));
+      const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint));
+      const tokenInfo = tokenInfoMeta?.value ?? null;
       if (tokenInfo && tokenInfo.marketCap) {
         marketCap = tokenInfo.marketCap;
       } else {

@@ -95,8 +95,8 @@ const watchlist = {
       this.updateWatchlistCount();
 
       // If on watchlist filter, refresh the list
-      if (typeof tokens !== 'undefined' && tokens.currentFilter === 'watchlist') {
-        tokens.loadTokens();
+      if (typeof tokenList !== 'undefined' && tokenList.currentFilter === 'watchlist') {
+        tokenList.loadTokens();
       }
 
       return true;

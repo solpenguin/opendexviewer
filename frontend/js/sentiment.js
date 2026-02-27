@@ -214,7 +214,7 @@ const sentiment = {
     const countsEl = document.getElementById('sentiment-counts');
     const hintEl = document.getElementById('sentiment-hint');
 
-    if (!bullishBtn) return;
+    if (!bullishBtn || !bearishBtn) return;
 
     const { bullish, bearish } = this.tally;
     const total = bullish + bearish;

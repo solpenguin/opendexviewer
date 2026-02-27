@@ -581,7 +581,7 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
        ON CONFLICT (submission_id) DO UPDATE SET
          upvotes = GREATEST(0, vote_tallies.upvotes + $2),
          downvotes = GREATEST(0, vote_tallies.downvotes + $3),
-         score = (vote_tallies.upvotes + $2) - (vote_tallies.downvotes + $3),
+         score = GREATEST(0, vote_tallies.upvotes + $2) - GREATEST(0, vote_tallies.downvotes + $3),
          weighted_score = vote_tallies.weighted_score + $4,
          updated_at = NOW()`,
       [submissionId, upvoteDelta, downvoteDelta, weightedDelta]
@@ -621,7 +621,7 @@ async function getVotesBatch(submissionIds, voterWallet) {
 async function updateVote(submissionId, voterWallet, voteType, marketCap = null) {
   if (!pool) return;
   await pool.query(
-    `UPDATE votes SET vote_type = $3, created_at = NOW()
+    `UPDATE votes SET vote_type = $3, updated_at = NOW()
      WHERE submission_id = $1 AND voter_wallet = $2`,
     [submissionId, voterWallet, voteType]
   );
@@ -1382,6 +1382,31 @@ async function deleteUserData(walletAddress) {
       'DELETE FROM api_keys WHERE owner_wallet = $1',
       [walletAddress]
     );
+
+    // Delete sentiment votes and update tallies
+    const sentimentTokens = await client.query(
+      'SELECT DISTINCT token_mint FROM sentiment_votes WHERE voter_wallet = $1',
+      [walletAddress]
+    );
+    counts.sentimentVotes = sentimentTokens.rows.length;
+
+    await client.query(
+      'DELETE FROM sentiment_votes WHERE voter_wallet = $1',
+      [walletAddress]
+    );
+
+    // Recalculate sentiment tallies for affected tokens
+    for (const row of sentimentTokens.rows) {
+      await client.query(
+        `UPDATE sentiment_tallies SET
+           bullish = (SELECT COUNT(*) FROM sentiment_votes WHERE token_mint = $1 AND sentiment = 'bullish'),
+           bearish = (SELECT COUNT(*) FROM sentiment_votes WHERE token_mint = $1 AND sentiment = 'bearish'),
+           score = (SELECT COUNT(*) FILTER (WHERE sentiment = 'bullish') - COUNT(*) FILTER (WHERE sentiment = 'bearish') FROM sentiment_votes WHERE token_mint = $1),
+           updated_at = NOW()
+         WHERE token_mint = $1`,
+        [row.token_mint]
+      );
+    }
 
     await client.query('COMMIT');
 

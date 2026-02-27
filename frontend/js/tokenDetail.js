@@ -1198,6 +1198,7 @@ const tokenDetail = {
 
       const votes = document.createElement('div');
       votes.className = 'submission-votes';
+      votes.dataset.submissionId = s.id;
 
       const submissionId = parseInt(s.id);
 
@@ -1218,12 +1219,13 @@ const tokenDetail = {
         // Pending: show vote buttons
         const upBtn = document.createElement('button');
         upBtn.className = `vote-btn vote-up ${s.userVote === 'up' ? 'voted' : ''}`;
+        upBtn.dataset.submission = submissionId;
         upBtn.addEventListener('click', () => voting.vote(submissionId, 'up'));
         upBtn.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="18 15 12 9 6 15"></polyline>
           </svg>
-          <span>${parseInt(s.upvotes) || 0}</span>
+          <span data-upvotes="${submissionId}">${parseInt(s.upvotes) || 0}</span>
         `;
 
         // Score display with weighted score
@@ -1261,12 +1263,13 @@ const tokenDetail = {
         // Downvote button
         const downBtn = document.createElement('button');
         downBtn.className = `vote-btn vote-down ${s.userVote === 'down' ? 'voted' : ''}`;
+        downBtn.dataset.submission = submissionId;
         downBtn.addEventListener('click', () => voting.vote(submissionId, 'down'));
         downBtn.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
-          <span>${parseInt(s.downvotes) || 0}</span>
+          <span data-downvotes="${submissionId}">${parseInt(s.downvotes) || 0}</span>
         `;
 
         votes.appendChild(upBtn);

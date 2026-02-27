@@ -102,7 +102,7 @@ const apiCache = {
         const refreshPromise = fetchFn().then(data => {
           if (data) this.set(key, data, ttl);
         }).catch(error => {
-          if (typeof config !== 'undefined' && config.debug) {
+          if (typeof config !== 'undefined' && config.app?.debug) {
             console.warn(`[Cache] Background refresh failed for ${key}:`, error.message);
           }
         }).finally(() => {
@@ -270,7 +270,7 @@ const api = {
     }
 
     // Don't log full error details in production console
-    if (typeof config !== 'undefined' && config.debug) {
+    if (typeof config !== 'undefined' && config.app?.debug) {
       console.error(`API Error (${endpoint}):`, lastError.message);
     }
     latencyTracker.record(endpoint, performance.now() - _t0, false);

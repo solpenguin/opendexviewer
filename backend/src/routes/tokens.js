@@ -1020,7 +1020,7 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
     };
 
     // Cache for 1 minute (balances change frequently)
-    await cache.set(cacheKey, result, 60);
+    await cache.set(cacheKey, result, 60000);
 
     res.json(result);
   } catch (error) {
