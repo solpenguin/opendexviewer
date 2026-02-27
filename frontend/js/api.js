@@ -884,6 +884,24 @@ const utils = {
     return d.toLocaleDateString();
   },
 
+  // Format age duration (without "ago" suffix — suitable for stat labels)
+  formatAge(date) {
+    const now = new Date();
+    const d = new Date(date);
+    const seconds = Math.floor((now - d) / 1000);
+
+    if (seconds < 0) return 'N/A';
+    if (seconds < 60) return '< 1m';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+    const days = Math.floor(seconds / 86400);
+    if (days < 30) return `${days}d`;
+    if (days < 365) return `${Math.floor(days / 30)}mo`;
+    const years = Math.floor(days / 365);
+    const remainingMonths = Math.floor((days % 365) / 30);
+    return remainingMonths > 0 ? `${years}y ${remainingMonths}mo` : `${years}y`;
+  },
+
   // Validate Solana address
   isValidSolanaAddress(address) {
     return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);

@@ -1833,10 +1833,21 @@ a:hover {
   flex-shrink: 0;
 }
 
+.similar-token-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .similar-token-address {
   font-size: 0.75rem;
   font-family: var(--font-mono);
   color: var(--text-muted);
+}
+
+.similar-token-age {
+  font-size: 0.6875rem;
+  color: var(--text-dim);
 }
 
 .similar-token-score {

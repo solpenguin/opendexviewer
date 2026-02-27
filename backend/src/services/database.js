@@ -140,9 +140,13 @@ async function initializeDatabase() {
         symbol VARCHAR(50),
         decimals INTEGER,
         logo_uri TEXT,
+        pair_created_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
+
+      -- Migration: add pair_created_at for existing databases
+      ALTER TABLE tokens ADD COLUMN IF NOT EXISTS pair_created_at TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS submissions (
         id SERIAL PRIMARY KEY,
@@ -367,18 +371,19 @@ async function upsertToken(token) {
     console.warn('Database not available - skipping token upsert');
     return null;
   }
-  const { mintAddress, name, symbol, decimals, logoUri } = token;
+  const { mintAddress, name, symbol, decimals, logoUri, pairCreatedAt } = token;
   const result = await pool.query(
-    `INSERT INTO tokens (mint_address, name, symbol, decimals, logo_uri)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO tokens (mint_address, name, symbol, decimals, logo_uri, pair_created_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (mint_address) DO UPDATE SET
        name = EXCLUDED.name,
        symbol = EXCLUDED.symbol,
        decimals = EXCLUDED.decimals,
        logo_uri = EXCLUDED.logo_uri,
+       pair_created_at = COALESCE(EXCLUDED.pair_created_at, tokens.pair_created_at),
        updated_at = NOW()
      RETURNING *`,
-    [mintAddress, name, symbol, decimals, logoUri]
+    [mintAddress, name, symbol, decimals, logoUri, pairCreatedAt || null]
   );
   return result.rows[0];
 }
@@ -457,7 +462,7 @@ async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
   // Minimum threshold of 0.15 on either name or symbol prevents irrelevant noise
   const result = await pool.query(
     `SELECT
-       mint_address, name, symbol, decimals, logo_uri,
+       mint_address, name, symbol, decimals, logo_uri, pair_created_at,
        similarity(LOWER(name), $1) AS name_sim,
        similarity(LOWER(symbol), $2) AS symbol_sim,
        (similarity(LOWER(name), $1) * 0.4 + similarity(LOWER(symbol), $2) * 0.6) AS combined_score
@@ -475,6 +480,7 @@ async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
     symbol: row.symbol,
     decimals: row.decimals,
     logoURI: row.logo_uri,
+    pairCreatedAt: row.pair_created_at || null,
     similarityScore: parseFloat(row.combined_score.toFixed(3)),
     nameSimilarity: parseFloat(row.name_sim.toFixed(3)),
     symbolSimilarity: parseFloat(row.symbol_sim.toFixed(3)),

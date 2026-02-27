@@ -259,6 +259,15 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
     // Privacy: Don't log token counts or data
 
+    // Filter out tokens without valid Solana addresses (defensive: some API responses
+    // occasionally include entries with missing address fields)
+    if (tokens && tokens.length > 0) {
+      tokens = tokens.filter(t => {
+        const addr = t.address || t.mintAddress;
+        return addr && SOLANA_ADDRESS_REGEX.test(addr);
+      });
+    }
+
     // Enrich tokens with view counts from database
     if (tokens && tokens.length > 0) {
       const addresses = tokens.map(t => t.address || t.mintAddress);
@@ -578,6 +587,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
         // Normalize external results and add unique ones
         for (const token of externalResults) {
           const address = token.address || token.mint;
+          if (!address || !SOLANA_ADDRESS_REGEX.test(address)) continue;
           if (!seenAddresses.has(address)) {
             seenAddresses.add(address);
             results.push({
@@ -731,6 +741,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         totalSupply: gecko.totalSupply || null,
         // Holder count from Helius (cached daily)
         holders: holders || null,
+        // Token age (first pool creation timestamp from GeckoTerminal)
+        pairCreatedAt: gecko.pairCreatedAt || null,
         // Additional metadata
         coingeckoId: gecko.coingeckoId || null,
         // Submissions
@@ -749,7 +761,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
           name: tokenName,
           symbol: tokenSymbol,
           decimals: helius.decimals || gecko.decimals || 9,
-          logoUri: helius.logoUri || gecko.logoUri
+          logoUri: helius.logoUri || gecko.logoUri,
+          pairCreatedAt: gecko.pairCreatedAt || null
         }).catch(() => { /* Privacy: Don't log error details */ });
       }
 
@@ -1104,6 +1117,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
               symbol: token.symbol,
               decimals: token.decimals || 9,
               logoURI: token.logoUri || token.logoURI || null,
+              pairCreatedAt: null,
               similarityScore: null,
               nameSimilarity: null,
               symbolSimilarity: null,
@@ -1134,6 +1148,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
               symbol: token.symbol,
               decimals: token.decimals || 9,
               logoURI: token.logoUri || token.logoURI || null,
+              pairCreatedAt: null,
               similarityScore: null,
               nameSimilarity: null,
               symbolSimilarity: null,

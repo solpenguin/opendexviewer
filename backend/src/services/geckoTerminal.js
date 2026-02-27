@@ -337,7 +337,8 @@ async function getTokenOverview(mintAddress) {
       priceChange24h,
       liquidity,
       totalSupply: null, // Helius provides supply
-      holder: null
+      holder: null,
+      pairCreatedAt: topPool.pool_created_at || null
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenOverview error:', error.message);

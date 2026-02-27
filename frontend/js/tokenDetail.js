@@ -380,6 +380,16 @@ const tokenDetail = {
     const circulatingEl = document.getElementById('stat-circulating');
     if (circulatingEl) circulatingEl.textContent = token.circulatingSupply ? utils.formatNumber(token.circulatingSupply, '') : '--';
 
+    const ageEl = document.getElementById('stat-age');
+    if (ageEl) {
+      if (token.pairCreatedAt) {
+        ageEl.textContent = utils.formatAge(token.pairCreatedAt);
+        ageEl.title = new Date(token.pairCreatedAt).toLocaleDateString();
+      } else {
+        ageEl.textContent = 'N/A';
+      }
+    }
+
     // Trade links - Jupiter with proper URL format
     const jupiterLink = document.getElementById('jupiter-link');
     if (jupiterLink) {
@@ -464,6 +474,9 @@ const tokenDetail = {
           const scoreHtml = token.similarityScore !== null
             ? `<span class="similar-token-score" title="Similarity score">${Math.round(token.similarityScore * 100)}% match</span>`
             : `<span class="similar-token-score external" title="Found via search">External match</span>`;
+          const ageHtml = token.pairCreatedAt
+            ? `<span class="similar-token-age" title="${new Date(token.pairCreatedAt).toLocaleDateString()}">${utils.formatAge(token.pairCreatedAt)}</span>`
+            : '';
 
           return `
             <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
@@ -474,7 +487,10 @@ const tokenDetail = {
                   <span class="similar-token-name">${name}</span>
                   <span class="similar-token-symbol">${symbol}</span>
                 </div>
-                <span class="similar-token-address" title="${address}">${truncAddr}</span>
+                <div class="similar-token-meta-row">
+                  <span class="similar-token-address" title="${address}">${truncAddr}</span>
+                  ${ageHtml}
+                </div>
               </div>
               ${scoreHtml}
             </a>

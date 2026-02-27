@@ -718,7 +718,7 @@ const tokenList = {
       // This prevents XSS via malicious addresses
       const address = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawAddress) ? rawAddress : '';
       if (!address) {
-        console.warn('[TokenList] Skipping token with invalid address:', rawAddress);
+        if (config.app.debug) console.warn('[TokenList] Skipping token with invalid address:', rawAddress);
         return ''; // Skip this token
       }
       const logo = token.logoUri || token.logoURI || token.logo || defaultLogo;
