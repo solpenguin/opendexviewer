@@ -42,6 +42,16 @@ function formatChange(change) {
   return `${arrow} ${prefix}${num.toFixed(2)}%`;
 }
 
+function isSafeUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 function formatTokenMessage(token) {
   const mint = token.mintAddress || token.address;
   const name = escapeHtml(token.name || 'Unknown');
@@ -51,7 +61,7 @@ function formatTokenMessage(token) {
   let bannerUrl = null;
   if (token.submissions?.banners?.length > 0) {
     const approvedBanner = token.submissions.banners.find(b => b.status === 'approved');
-    if (approvedBanner) {
+    if (approvedBanner && isSafeUrl(approvedBanner.content_url)) {
       bannerUrl = approvedBanner.content_url;
     }
   }
@@ -61,17 +71,17 @@ function formatTokenMessage(token) {
   if (token.submissions?.socials) {
     const linkMap = {};
     for (const sub of token.submissions.socials) {
-      if (sub.status === 'approved' && !linkMap[sub.submission_type]) {
+      if (sub.status === 'approved' && !linkMap[sub.submission_type] && isSafeUrl(sub.content_url)) {
         linkMap[sub.submission_type] = sub.content_url;
       }
     }
 
     const parts = [];
-    if (linkMap.twitter) parts.push(`<a href="${linkMap.twitter}">Twitter</a>`);
-    if (linkMap.telegram) parts.push(`<a href="${linkMap.telegram}">Telegram</a>`);
-    if (linkMap.discord) parts.push(`<a href="${linkMap.discord}">Discord</a>`);
-    if (linkMap.website) parts.push(`<a href="${linkMap.website}">Website</a>`);
-    if (linkMap.tiktok) parts.push(`<a href="${linkMap.tiktok}">TikTok</a>`);
+    if (linkMap.twitter) parts.push(`<a href="${escapeHtml(linkMap.twitter)}">Twitter</a>`);
+    if (linkMap.telegram) parts.push(`<a href="${escapeHtml(linkMap.telegram)}">Telegram</a>`);
+    if (linkMap.discord) parts.push(`<a href="${escapeHtml(linkMap.discord)}">Discord</a>`);
+    if (linkMap.website) parts.push(`<a href="${escapeHtml(linkMap.website)}">Website</a>`);
+    if (linkMap.tiktok) parts.push(`<a href="${escapeHtml(linkMap.tiktok)}">TikTok</a>`);
 
     if (parts.length > 0) {
       communityLinks = `\n<b>Community:</b> ${parts.join(' | ')}\n`;
@@ -91,15 +101,16 @@ function formatTokenMessage(token) {
 
   const hasApprovedSubmissions = bannerUrl || communityLinks.length > 0;
 
+  const safeMint = encodeURIComponent(mint);
   const keyboard = new InlineKeyboard()
-    .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${mint}`)
-    .url('Solscan', `https://solscan.io/token/${mint}`)
+    .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${safeMint}`)
+    .url('Solscan', `https://solscan.io/token/${safeMint}`)
     .row()
-    .url('Trade on Jupiter', `https://jup.ag/swap/SOL-${mint}`)
-    .url('Bubblemaps', `https://app.bubblemaps.io/sol/token/${mint}`);
+    .url('Trade on Jupiter', `https://jup.ag/swap/SOL-${safeMint}`)
+    .url('Bubblemaps', `https://app.bubblemaps.io/sol/token/${safeMint}`);
 
   if (!hasApprovedSubmissions) {
-    keyboard.row().url('Submit Community Info', `${config.FRONTEND_URL}/submit.html?mint=${mint}`);
+    keyboard.row().url('Submit Community Info', `${config.FRONTEND_URL}/submit.html?mint=${safeMint}`);
   }
 
   return { text, replyMarkup: keyboard, bannerUrl };

@@ -1348,10 +1348,14 @@ async function getAllSubmissions({ status, limit = 50, offset = 0, sortBy = 'cre
     query += ` WHERE s.status = $${params.length}`;
   }
 
-  // Handle sorting - score/weighted_score come from vote_tallies
-  const sortColumnFull = (sortColumn === 'score' || sortColumn === 'weighted_score')
-    ? `vt.${sortColumn}`
-    : `s.${sortColumn}`;
+  // Handle sorting - use explicit map to prevent interpolation of user input
+  const SORT_COLUMN_MAP = {
+    'created_at': 's.created_at',
+    'score': 'vt.score',
+    'weighted_score': 'vt.weighted_score',
+    'status': 's.status'
+  };
+  const sortColumnFull = SORT_COLUMN_MAP[sortColumn] || 's.created_at';
   query += ` ORDER BY ${sortColumnFull} ${order} NULLS LAST`;
 
   params.push(limit, offset);
@@ -1484,6 +1488,65 @@ async function getMostViewedTokens(limit = 10) {
     [limit]
   );
   return result.rows;
+}
+
+// ==========================================
+// Community Leaderboard operations
+// ==========================================
+
+// Get tokens ranked by watchlist count (most watchlisted first)
+async function getMostWatchlistedTokens(limit = 25, offset = 0) {
+  if (!pool) return { tokens: [], total: 0 };
+
+  const [dataResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT w.token_mint, COUNT(*) AS watchlist_count,
+              t.name, t.symbol, t.logo_uri,
+              t.price, t.market_cap, t.volume_24h, t.price_change_24h
+       FROM watchlist w
+       LEFT JOIN tokens t ON w.token_mint = t.mint_address
+       GROUP BY w.token_mint, t.name, t.symbol, t.logo_uri,
+                t.price, t.market_cap, t.volume_24h, t.price_change_24h
+       ORDER BY watchlist_count DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    ),
+    pool.query(
+      `SELECT COUNT(DISTINCT token_mint) AS total FROM watchlist`
+    )
+  ]);
+
+  return {
+    tokens: dataResult.rows,
+    total: parseInt(countResult.rows[0]?.total || 0)
+  };
+}
+
+// Get tokens ranked by sentiment score (most bullish first)
+async function getTopSentimentTokens(limit = 25, offset = 0) {
+  if (!pool) return { tokens: [], total: 0 };
+
+  const [dataResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT st.token_mint, st.bullish, st.bearish, st.score,
+              t.name, t.symbol, t.logo_uri,
+              t.price, t.market_cap, t.volume_24h, t.price_change_24h
+       FROM sentiment_tallies st
+       LEFT JOIN tokens t ON st.token_mint = t.mint_address
+       WHERE (st.bullish + st.bearish) > 0
+       ORDER BY st.score DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS total FROM sentiment_tallies WHERE (bullish + bearish) > 0`
+    )
+  ]);
+
+  return {
+    tokens: dataResult.rows,
+    total: parseInt(countResult.rows[0]?.total || 0)
+  };
 }
 
 // ==========================================
@@ -2146,6 +2209,9 @@ module.exports = {
   getTokenViewsBatch,
   getMostViewedTokens,
   getApprovalThreshold,
+  // Community leaderboards
+  getMostWatchlistedTokens,
+  getTopSentimentTokens,
   // GDPR data deletion
   deleteUserData,
   // Sentiment voting

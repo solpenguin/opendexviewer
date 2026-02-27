@@ -8447,3 +8447,134 @@ body.landscape .hero h1 {
     justify-content: center;
   }
 }
+
+/* ==========================================
+   Community Page
+   ========================================== */
+
+.community-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.community-section {
+  margin: 2rem 0 3rem;
+}
+
+/* Tab Switcher */
+.community-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 0;
+}
+
+.community-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.25rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--transition-fast);
+}
+
+.community-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.community-tab:hover {
+  color: var(--text-primary);
+}
+
+.community-tab.active {
+  color: var(--accent-primary);
+}
+
+.community-tab.active::after {
+  background: var(--accent-primary);
+}
+
+.community-tab svg {
+  opacity: 0.7;
+}
+
+.community-tab.active svg {
+  opacity: 1;
+}
+
+/* Table Container */
+.community-table-container {
+  overflow-x: auto;
+}
+
+.community-table .cell-metric {
+  text-align: right;
+  min-width: 100px;
+}
+
+.community-table .cell-rank {
+  width: 48px;
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Watchlist count badge */
+.community-watchlist-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: var(--accent-muted);
+  color: var(--accent-primary);
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Sentiment display */
+.community-sentiment {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+}
+
+.sentiment-breakdown {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .community-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .community-tab {
+    padding: 0.75rem 1rem;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+  }
+
+  .community-table .cell-volume,
+  .community-table .cell-mcap {
+    display: none;
+  }
+}

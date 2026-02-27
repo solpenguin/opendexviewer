@@ -82,15 +82,16 @@ module.exports = (bot) => {
         if (t.similarityScore) {
           lines.push(`Similarity: ${(t.similarityScore * 100).toFixed(0)}%`);
         }
-        lines.push(`\u{1FAE7} <a href="https://app.bubblemaps.io/sol/token/${addr}">Bubblemaps</a>`);
+        lines.push(`\u{1FAE7} <a href="https://app.bubblemaps.io/sol/token/${encodeURIComponent(addr)}">Bubblemaps</a>`);
         lines.push('');
       });
 
       lines.push('<i>Always verify the contract address to avoid spoofed tokens.</i>');
 
+      const safeMint = encodeURIComponent(mint);
       const keyboard = new InlineKeyboard()
-        .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${mint}`)
-        .url('Solscan', `https://solscan.io/token/${mint}`);
+        .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${safeMint}`)
+        .url('Solscan', `https://solscan.io/token/${safeMint}`);
 
       await ctx.api.editMessageText(
         ctx.chat.id,

@@ -1,5 +1,5 @@
 const alertStore = require('../../alerts/store');
-const { formatNumber } = require('../../utils/format');
+const { formatNumber, escapeHtml } = require('../../utils/format');
 
 module.exports = (bot) => {
   bot.command('alerts', async (ctx) => {
@@ -22,7 +22,7 @@ module.exports = (bot) => {
         conditionText = `change ${alert.target_value}%`;
       }
 
-      text += `#${alert.id} | <b>${alert.token_symbol || '???'}</b> | mcap ${conditionText}\n`;
+      text += `#${alert.id} | <b>${escapeHtml(alert.token_symbol || '???')}</b> | mcap ${conditionText}\n`;
       text += `  Set at: ${formatNumber(alert.mcap_at_creation)}\n\n`;
     }
 

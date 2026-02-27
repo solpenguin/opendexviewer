@@ -471,8 +471,9 @@ const tokenDetail = {
 
       if (listEl) {
         listEl.style.display = 'flex';
+        const defaultLogo = utils.getDefaultLogo();
         listEl.innerHTML = similar.map(token => {
-          const logoSrc = this.escapeHtml(token.logoURI || utils.getDefaultLogo());
+          const logoSrc = this.escapeHtml(token.logoURI || defaultLogo);
           const name = this.escapeHtml(token.name || 'Unknown');
           const symbol = this.escapeHtml(token.symbol || '???');
           const address = this.escapeHtml(token.address);
@@ -484,12 +485,9 @@ const tokenDetail = {
           const mcapVal = token.marketCap ? utils.formatNumber(token.marketCap) : null;
           const volVal = token.volume24h ? utils.formatNumber(token.volume24h) : null;
 
-          const bubbleUrl = `https://app.bubblemaps.io/sol/token/${encodeURIComponent(token.address)}`;
-
           return `
             <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
-              <img src="${logoSrc}" alt="${name}" class="similar-token-logo"
-                   onerror="this.src='${utils.getDefaultLogo()}'">
+              <img src="${logoSrc}" alt="${name}" class="similar-token-logo">
               <div class="similar-token-info">
                 <div class="similar-token-name-row">
                   <span class="similar-token-name">${name}</span>
@@ -505,13 +503,25 @@ const tokenDetail = {
               </div>
               <span class="similar-token-actions">
                 ${scoreHtml}
-                <span class="similar-token-bubble" title="View on Bubblemaps" onclick="event.preventDefault();event.stopPropagation();window.open('${bubbleUrl}','_blank')">
+                <span class="similar-token-bubble" title="View on Bubblemaps" data-bubble-addr="${encodeURIComponent(token.address)}">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><line x1="7" y1="7" x2="10" y2="10"/><line x1="14" y1="10" x2="17" y2="7"/><line x1="7" y1="17" x2="10" y2="14"/><line x1="14" y1="14" x2="17" y2="17"/></svg>
                 </span>
               </span>
             </a>
           `;
         }).join('');
+
+        // Attach event listeners via delegation instead of inline handlers
+        listEl.querySelectorAll('.similar-token-logo').forEach(img => {
+          img.onerror = function() { this.onerror = null; this.src = defaultLogo; };
+        });
+        listEl.querySelectorAll('.similar-token-bubble[data-bubble-addr]').forEach(el => {
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(`https://app.bubblemaps.io/sol/token/${el.dataset.bubbleAddr}`, '_blank');
+          });
+        });
       }
     } catch (error) {
       // Non-critical section — fail silently, keep hidden

@@ -540,7 +540,7 @@ const adminPanel = {
           </td>
           <td><span class="type-badge">${this.escapeHtml(sub.submission_type)}</span></td>
           <td class="content-url">
-            <a href="${this.escapeHtml(sub.content_url)}" target="_blank" rel="noopener">${this.escapeHtml(sub.content_url)}</a>
+            <a href="${/^https?:\/\//i.test(sub.content_url) ? this.escapeHtml(sub.content_url) : '#'}" target="_blank" rel="noopener">${this.escapeHtml(sub.content_url)}</a>
           </td>
           <td>
             <span class="score-display ${sub.score > 0 ? 'score-up' : sub.score < 0 ? 'score-down' : 'score-neutral'}">
@@ -552,10 +552,10 @@ const adminPanel = {
           <td>
             <div class="table-actions">
               ${sub.status === 'pending' ? `
-                <button class="action-btn approve" onclick="adminPanel.approveSubmission(${sub.id})">Approve</button>
-                <button class="action-btn reject" onclick="adminPanel.rejectSubmission(${sub.id})">Reject</button>
+                <button class="action-btn approve" onclick="adminPanel.approveSubmission(${parseInt(sub.id, 10) || 0})">Approve</button>
+                <button class="action-btn reject" onclick="adminPanel.rejectSubmission(${parseInt(sub.id, 10) || 0})">Reject</button>
               ` : ''}
-              <button class="action-btn delete" onclick="adminPanel.deleteSubmission(${sub.id})">Delete</button>
+              <button class="action-btn delete" onclick="adminPanel.deleteSubmission(${parseInt(sub.id, 10) || 0})">Delete</button>
             </div>
           </td>
         </tr>
@@ -617,9 +617,9 @@ const adminPanel = {
           <td>
             <div class="table-actions">
               ${key.is_active ? `
-                <button class="action-btn revoke" onclick="adminPanel.revokeApiKey(${key.id})">Revoke</button>
+                <button class="action-btn revoke" onclick="adminPanel.revokeApiKey(${parseInt(key.id, 10) || 0})">Revoke</button>
               ` : ''}
-              <button class="action-btn delete" onclick="adminPanel.deleteApiKey(${key.id})">Delete</button>
+              <button class="action-btn delete" onclick="adminPanel.deleteApiKey(${parseInt(key.id, 10) || 0})">Delete</button>
             </div>
           </td>
         </tr>

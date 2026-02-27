@@ -1,4 +1,4 @@
-const { formatNumber } = require('../utils/format');
+const { formatNumber, escapeHtml } = require('../utils/format');
 const config = require('../config');
 
 // Throttle to stay under Telegram's 30 msg/sec limit
@@ -22,11 +22,11 @@ module.exports = {
 
     const text =
       `<b>Market Cap Alert Triggered!</b>\n\n` +
-      `<b>${alert.token_name || 'Unknown'}</b> (${alert.token_symbol || '???'})\n` +
+      `<b>${escapeHtml(alert.token_name || 'Unknown')}</b> (${escapeHtml(alert.token_symbol || '???')})\n` +
       `Market cap ${conditionText}\n\n` +
       `Current market cap: ${formatNumber(currentMcap)}\n` +
       `Market cap when set: ${formatNumber(alert.mcap_at_creation)}\n\n` +
-      `<a href="${config.FRONTEND_URL}/token.html?mint=${alert.mint}">View on OpenDEX</a>`;
+      `<a href="${config.FRONTEND_URL}/token.html?mint=${encodeURIComponent(alert.mint)}">View on OpenDEX</a>`;
 
     try {
       await throttle();

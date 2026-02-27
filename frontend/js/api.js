@@ -487,6 +487,29 @@ const api = {
         apiCache.TTL.tokenDetail,
         true
       );
+    },
+
+    // Community leaderboards
+    async leaderboardWatchlist(params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const cacheKey = `tokens:leaderboard:watchlist:${query}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/leaderboard/watchlist?${query}`),
+        apiCache.TTL.tokenList,
+        true
+      );
+    },
+
+    async leaderboardSentiment(params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const cacheKey = `tokens:leaderboard:sentiment:${query}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/leaderboard/sentiment?${query}`),
+        apiCache.TTL.tokenList,
+        true
+      );
     }
   },
 
