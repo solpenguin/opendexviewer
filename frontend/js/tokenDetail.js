@@ -474,15 +474,9 @@ const tokenDetail = {
           const scoreHtml = token.similarityScore !== null
             ? `<span class="similar-token-score" title="Similarity score">${Math.round(token.similarityScore * 100)}% match</span>`
             : `<span class="similar-token-score external" title="Found via search">External match</span>`;
-          const ageHtml = token.pairCreatedAt
-            ? `<span class="similar-token-stat" title="${new Date(token.pairCreatedAt).toLocaleDateString()}">Age ${utils.formatAge(token.pairCreatedAt)}</span>`
-            : '';
-          const mcapHtml = token.marketCap
-            ? `<span class="similar-token-stat" title="Market Cap: $${Number(token.marketCap).toLocaleString()}">MCap ${utils.formatNumber(token.marketCap)}</span>`
-            : '';
-          const volHtml = token.volume24h
-            ? `<span class="similar-token-stat" title="24h Volume: $${Number(token.volume24h).toLocaleString()}">Vol ${utils.formatNumber(token.volume24h)}</span>`
-            : '';
+          const ageVal = token.pairCreatedAt ? utils.formatAge(token.pairCreatedAt) : null;
+          const mcapVal = token.marketCap ? utils.formatNumber(token.marketCap) : null;
+          const volVal = token.volume24h ? utils.formatNumber(token.volume24h) : null;
 
           return `
             <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
@@ -495,9 +489,10 @@ const tokenDetail = {
                 </div>
                 <div class="similar-token-meta-row">
                   <span class="similar-token-address" title="${address}">${truncAddr}</span>
-                  ${mcapHtml}
-                  ${volHtml}
-                  ${ageHtml}
+                  <span class="similar-token-divider"></span>
+                  <span class="similar-token-stat" title="${token.marketCap ? 'Market Cap: $' + Number(token.marketCap).toLocaleString() : 'Market Cap unavailable'}"><span class="stat-label">MCap</span> <span class="stat-value${mcapVal ? '' : ' no-data'}">${mcapVal || '--'}</span></span>
+                  <span class="similar-token-stat" title="${token.volume24h ? '24h Volume: $' + Number(token.volume24h).toLocaleString() : '24h Volume unavailable'}"><span class="stat-label">Vol</span> <span class="stat-value${volVal ? '' : ' no-data'}">${volVal || '--'}</span></span>
+                  <span class="similar-token-stat" title="${token.pairCreatedAt ? new Date(token.pairCreatedAt).toLocaleDateString() : 'Age unavailable'}"><span class="stat-label">Age</span> <span class="stat-value${ageVal ? '' : ' no-data'}">${ageVal || '--'}</span></span>
                 </div>
               </div>
               ${scoreHtml}

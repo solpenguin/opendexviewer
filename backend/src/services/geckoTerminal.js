@@ -653,7 +653,8 @@ async function searchTokens(query, limit = 20) {
         priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
         volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
         liquidity: parseFloat(attrs.reserve_in_usd) || 0,
-        marketCap: parseFloat(attrs.fdv_usd) || 0
+        marketCap: parseFloat(attrs.fdv_usd) || 0,
+        pairCreatedAt: attrs.pool_created_at || null
       });
     }
 

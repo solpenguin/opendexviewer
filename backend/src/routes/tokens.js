@@ -1136,7 +1136,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
               symbol: token.symbol,
               decimals: token.decimals || 9,
               logoURI: token.logoUri || token.logoURI || null,
-              pairCreatedAt: null,
+              pairCreatedAt: token.pairCreatedAt || null,
               price: token.price || null,
               marketCap: token.marketCap || null,
               volume24h: token.volume24h || null,
@@ -1170,7 +1170,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
               symbol: token.symbol,
               decimals: token.decimals || 9,
               logoURI: token.logoUri || token.logoURI || null,
-              pairCreatedAt: null,
+              pairCreatedAt: token.pairCreatedAt || null,
               price: token.price || null,
               marketCap: token.marketCap || null,
               volume24h: token.volume24h || null,
@@ -1189,8 +1189,8 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
 
       // Enrich any results that are missing market data via a single batch call.
       // Local DB tokens may lack data if they were stored before the schema migration
-      // or haven't been viewed recently.
-      const needsEnrichment = final.filter(t => !t.price && !t.marketCap);
+      // or haven't been viewed recently.  Use OR so any missing field triggers enrichment.
+      const needsEnrichment = final.filter(t => !t.price || !t.marketCap || !t.volume24h);
       if (needsEnrichment.length > 0) {
         try {
           const enriched = await geckoService.getMultiTokenInfo(
@@ -1199,9 +1199,9 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
           for (const token of needsEnrichment) {
             const data = enriched[token.address];
             if (data) {
-              if (!token.price) token.price = data.price || null;
+              if (!token.price && data.price) token.price = data.price;
               if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
-              if (!token.volume24h) token.volume24h = data.volume24h || null;
+              if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
               if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
             }
           }
