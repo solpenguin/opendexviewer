@@ -285,10 +285,10 @@ const tokenDetail = {
 
   // Load token data
   async loadToken() {
-    console.log('[TokenDetail] Loading token:', this.mint);
+    if (config.app.debug) console.log('[TokenDetail] Loading token:', this.mint);
     this.token = await api.tokens.get(this.mint);
 
-    console.log('[TokenDetail] Token data received:', JSON.stringify(this.token, null, 2));
+    if (config.app.debug) console.log('[TokenDetail] Token data received:', JSON.stringify(this.token, null, 2));
 
     if (!this.token) {
       throw new Error('Token not found');
@@ -303,7 +303,7 @@ const tokenDetail = {
     const price = this.token.price || 0;
     const change = this.token.priceChange24h || 0;
 
-    console.log('[TokenDetail] Price display:', { price, change, token: this.token });
+    if (config.app.debug) console.log('[TokenDetail] Price display:', { price, change, token: this.token });
 
     const changeEl = document.getElementById('price-change');
     const priceEl = document.getElementById('token-price');

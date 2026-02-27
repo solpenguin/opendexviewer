@@ -6,14 +6,27 @@ const config = require('../config');
 let pollIntervalId = null;
 let isPolling = false;
 
+// Cancellable timeout — avoids unhandled rejection when the poll finishes first
+function timeoutWithCancel(ms) {
+  let timer;
+  const promise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Poll timeout after ${ms}ms`)), ms);
+  });
+  return { promise, cancel: () => clearTimeout(timer) };
+}
+
 async function checkAlerts(bot) {
   // Prevent overlapping poll cycles
   if (isPolling) return;
   isPolling = true;
 
+  const timeout = timeoutWithCancel(55000);
   try {
-    await _doCheckAlerts(bot);
+    await Promise.race([_doCheckAlerts(bot), timeout.promise]);
+  } catch (err) {
+    console.error('[Alerts] Poll cycle error:', err.message);
   } finally {
+    timeout.cancel();
     isPolling = false;
   }
 }

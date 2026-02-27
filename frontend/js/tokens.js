@@ -278,27 +278,27 @@ const tokenList = {
         offset: (this.currentPage - 1) * this.pageSize
       };
 
-      console.log('[TokenList] Loading tokens with params:', params);
+      if (config.app.debug) console.log('[TokenList] Loading tokens with params:', params);
 
       this.tokens = await api.tokens.list(params);
 
-      console.log(`[TokenList] Received ${this.tokens?.length || 0} tokens`);
-
-      // Debug: log sample token data
-      if (this.tokens && this.tokens.length > 0) {
-        const sample = this.tokens[0];
-        console.log('[TokenList] Sample token:', {
-          name: sample.name,
-          symbol: sample.symbol,
-          price: sample.price,
-          priceChange24h: sample.priceChange24h,
-          volume24h: sample.volume24h,
-          marketCap: sample.marketCap,
-          mintAddress: sample.mintAddress,
-          address: sample.address,
-          logoUri: sample.logoUri,
-          logoURI: sample.logoURI
-        });
+      if (config.app.debug) {
+        console.log(`[TokenList] Received ${this.tokens?.length || 0} tokens`);
+        if (this.tokens && this.tokens.length > 0) {
+          const sample = this.tokens[0];
+          console.log('[TokenList] Sample token:', {
+            name: sample.name,
+            symbol: sample.symbol,
+            price: sample.price,
+            priceChange24h: sample.priceChange24h,
+            volume24h: sample.volume24h,
+            marketCap: sample.marketCap,
+            mintAddress: sample.mintAddress,
+            address: sample.address,
+            logoUri: sample.logoUri,
+            logoURI: sample.logoURI
+          });
+        }
       }
 
       // Apply client-side sorting (API may return pre-sorted data from external sources)
@@ -653,7 +653,7 @@ const tokenList = {
     const field = sortFieldMap[this.currentSort] || 'marketCap';
     const isDesc = this.sortOrder === 'desc';
 
-    console.log(`[TokenList] Sorting by ${field} (${this.sortOrder})`);
+    if (config.app.debug) console.log(`[TokenList] Sorting by ${field} (${this.sortOrder})`);
 
     this.tokens.sort((a, b) => {
       // Get values, treating null/undefined as 0 for numeric comparison

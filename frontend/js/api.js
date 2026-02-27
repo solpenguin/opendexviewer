@@ -96,15 +96,20 @@ const apiCache = {
 
     // If stale cache exists and allowStale, return it and refresh in background
     if (cached && allowStale) {
-      // Background refresh (fire and forget, but log errors for debugging)
-      fetchFn().then(data => {
-        if (data) this.set(key, data, ttl);
-      }).catch(error => {
-        // Log background refresh failures for debugging, but don't throw
-        if (typeof config !== 'undefined' && config.debug) {
-          console.warn(`[Cache] Background refresh failed for ${key}:`, error.message);
-        }
-      });
+      // Deduplicate background refreshes — skip if one is already in-flight
+      if (!this.inFlight) this.inFlight = new Map();
+      if (!this.inFlight.has(key)) {
+        const refreshPromise = fetchFn().then(data => {
+          if (data) this.set(key, data, ttl);
+        }).catch(error => {
+          if (typeof config !== 'undefined' && config.debug) {
+            console.warn(`[Cache] Background refresh failed for ${key}:`, error.message);
+          }
+        }).finally(() => {
+          this.inFlight.delete(key);
+        });
+        this.inFlight.set(key, refreshPromise);
+      }
       return cached.data;
     }
 

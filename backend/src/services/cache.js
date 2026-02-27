@@ -259,11 +259,26 @@ class RedisCache {
     }
   }
 
+  // Cursor-based SCAN to avoid blocking Redis with KEYS
+  async _scanKeys(pattern) {
+    const keys = [];
+    let cursor = '0';
+    do {
+      const [nextCursor, batch] = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      keys.push(...batch);
+    } while (cursor !== '0');
+    return keys;
+  }
+
   async clear() {
     try {
-      const keys = await this.client.keys(this._prefixKey('*'));
+      const keys = await this._scanKeys(this._prefixKey('*'));
       if (keys.length > 0) {
-        await this.client.del(...keys);
+        // Delete in batches to avoid overwhelming Redis
+        for (let i = 0; i < keys.length; i += 1000) {
+          await this.client.del(...keys.slice(i, i + 1000));
+        }
       }
       console.log(`[Redis] Cleared ${keys.length} keys`);
     } catch (err) {
@@ -273,9 +288,11 @@ class RedisCache {
 
   async clearPattern(pattern) {
     try {
-      const keys = await this.client.keys(this._prefixKey(pattern.replace(/\*/g, '*')));
+      const keys = await this._scanKeys(this._prefixKey(pattern));
       if (keys.length > 0) {
-        await this.client.del(...keys);
+        for (let i = 0; i < keys.length; i += 1000) {
+          await this.client.del(...keys.slice(i, i + 1000));
+        }
         console.log(`[Redis] Cleared ${keys.length} keys matching pattern: ${pattern}`);
       }
     } catch (err) {
@@ -288,8 +305,8 @@ class RedisCache {
     let size = 0;
 
     try {
-      const keys = await this.client.keys(this._prefixKey('*'));
-      size = keys.length;
+      // Use DBSIZE for a fast key count approximation instead of scanning all keys
+      size = await this.client.dbsize();
     } catch (err) {
       console.error('[Redis] Stats error:', err.message);
     }

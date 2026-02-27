@@ -667,7 +667,7 @@ const wallet = {
       // Another tab connected - try to reconnect with same wallet
       // We no longer receive full address for privacy, so just trigger reconnect
       if (!this.connected) {
-        this.silentReconnect(data.wallet, null);
+        this.silentReconnect(data.wallet);
       }
     } else if (data.action === 'disconnected') {
       // Another tab disconnected
@@ -693,7 +693,7 @@ const wallet = {
       const data = JSON.parse(newValue);
       if (data.connected && data.wallet) {
         if (!this.connected) {
-          this.silentReconnect(data.wallet, null);
+          this.silentReconnect(data.wallet);
         }
       }
     } catch (e) {
@@ -702,7 +702,8 @@ const wallet = {
   },
 
   // Silent reconnect (from another tab's connection)
-  async silentReconnect(walletId, expectedAddress) {
+  // onlyIfTrusted ensures the wallet only connects if the user already approved this site
+  async silentReconnect(walletId) {
     const provider = this.getProviderFor(walletId);
     if (!provider) return;
 
@@ -710,30 +711,25 @@ const wallet = {
       // Check if provider is already connected
       if (provider.isConnected && provider.publicKey) {
         const currentAddress = provider.publicKey.toString();
-        if (currentAddress === expectedAddress) {
-          this.connected = true;
-          this.address = currentAddress;
-          this.provider = provider;
-          this.providerName = walletId;
-          this.updateUI();
-          return;
-        }
+        this.connected = true;
+        this.address = currentAddress;
+        this.provider = provider;
+        this.providerName = walletId;
+        this.updateUI();
+        return;
       }
 
       // Try silent connect (some wallets support this)
       if (provider.connect) {
         const response = await provider.connect({ onlyIfTrusted: true });
-        if (response.publicKey.toString() === expectedAddress) {
-          this.connected = true;
-          this.address = response.publicKey.toString();
-          this.provider = provider;
-          this.providerName = walletId;
-          this.updateUI();
-        }
+        this.connected = true;
+        this.address = response.publicKey.toString();
+        this.provider = provider;
+        this.providerName = walletId;
+        this.updateUI();
       }
     } catch (e) {
       // Silent connect failed - that's ok, user will need to manually connect
-      console.log('Silent reconnect failed:', e.message);
     }
   },
 

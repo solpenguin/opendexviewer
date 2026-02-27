@@ -35,16 +35,34 @@ function scheduleSave() {
 }
 
 async function _persistToDisk() {
-  if (isSaving) return;
+  if (isSaving) {
+    // A save is in progress — reschedule so the latest data is eventually written
+    scheduleSave();
+    return;
+  }
   isSaving = true;
   try {
+    _pruneOldAlerts();
     const tmpPath = dbPath + '.tmp';
-    await fsPromises.writeFile(tmpPath, JSON.stringify(data, null, 2));
+    await fsPromises.writeFile(tmpPath, JSON.stringify(data));
     await fsPromises.rename(tmpPath, dbPath);
   } catch (err) {
     console.error('[Store] Failed to save:', err.message);
   } finally {
     isSaving = false;
+  }
+}
+
+// Remove triggered/inactive alerts older than 7 days to prevent unbounded growth
+function _pruneOldAlerts() {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const before = data.alerts.length;
+  data.alerts = data.alerts.filter(a =>
+    a.is_active === 1 || !a.triggered_at || new Date(a.triggered_at).getTime() > cutoff
+  );
+  const pruned = before - data.alerts.length;
+  if (pruned > 0) {
+    console.log(`[Store] Pruned ${pruned} old triggered alerts`);
   }
 }
 

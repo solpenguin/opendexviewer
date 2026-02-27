@@ -396,8 +396,8 @@ async function gracefulShutdown(signal) {
 
   // Destroy HTTP agents
   try {
-    const { destroyAll } = require('./services/httpAgent');
-    destroyAll();
+    const { destroy } = require('./services/httpAgent');
+    destroy();
     console.log('[Shutdown] HTTP agents destroyed');
   } catch (err) {
     console.error('[Shutdown] HTTP agent cleanup error:', err.message);

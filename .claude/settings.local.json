@@ -37,7 +37,11 @@
       "Bash(grep -v \"^ \\\\+//\")",
       "Bash(find /c/VS/OPENDEX/opendexviewer/backend/src/services -type f -name \"*.js\" -exec wc -l {} +)",
       "Bash(ls -la /c/VS/OPENDEX/opendexviewer/backend/.env*)",
-      "Bash(ls -la /c/VS/OPENDEX/opendexviewer/telegram-bot/.env*)"
+      "Bash(ls -la /c/VS/OPENDEX/opendexviewer/telegram-bot/.env*)",
+      "Bash(git add backend/src/services/database.js backend/db/migrate.js)",
+      "Bash(git add backend/src/middleware/validation.js)",
+      "Bash(ls -la \"c:\\\\VS\\\\OPENDEX\\\\opendexviewer\\\\telegram-bot\\\\src\"\" 2>/dev/null || echo \"Directory listing failed \")",
+      "Bash(git add backend/src/services/database.js backend/src/services/rateLimiter.js backend/src/services/httpAgent.js backend/src/services/circuitBreaker.js backend/src/services/raydium.js backend/src/services/jupiter.js frontend/js/announcements.js render.yaml telegram-bot/src/alerts/store.js telegram-bot/src/alerts/poller.js telegram-bot/src/alerts/notifications.js telegram-bot/src/api/client.js telegram-bot/src/index.js)"
     ]
   }
 }

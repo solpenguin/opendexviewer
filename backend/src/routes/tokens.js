@@ -360,20 +360,23 @@ router.post('/batch', asyncHandler(async (req, res) => {
         }
       }
 
-      // Priority 2: Try local database
+      // Priority 2: Try local database (batch query)
       const localTokens = {};
-      for (const mint of uncachedMints) {
-        if (!heliusData[mint]) {
-          const local = await db.getToken(mint);
-          if (local) {
-            localTokens[mint] = {
-              mintAddress: mint,
-              address: mint,
-              name: local.name,
-              symbol: local.symbol,
-              decimals: local.decimals,
-              logoUri: local.logo_uri
-            };
+      const mintsToQuery = uncachedMints.filter(m => !heliusData[m]);
+      if (mintsToQuery.length > 0) {
+        const localRows = await db.getTokensBatch(mintsToQuery);
+        if (localRows) {
+          for (const local of localRows) {
+            if (local && local.mint_address) {
+              localTokens[local.mint_address] = {
+                mintAddress: local.mint_address,
+                address: local.mint_address,
+                name: local.name,
+                symbol: local.symbol,
+                decimals: local.decimals,
+                logoUri: local.logo_uri
+              };
+            }
           }
         }
       }

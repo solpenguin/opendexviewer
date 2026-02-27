@@ -9,6 +9,7 @@ async function downloadImage(url) {
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
     timeout: 10000,
+    maxContentLength: 5 * 1024 * 1024, // 5MB limit
     headers: { 'User-Agent': 'OpenDEX-Bot/1.0' }
   });
   const buffer = Buffer.from(response.data);

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { httpsAgent } = require('./httpAgent');
 const { circuitBreakers } = require('./circuitBreaker');
 
 // RPC endpoint configuration with failover
@@ -71,7 +72,8 @@ async function rpcCall(method, params = [], retryCount = 0) {
         params
       }, {
         timeout: 15000, // 15 second timeout (reduced from 30s for faster failover)
-        headers: HELIUS_HEADERS
+        headers: HELIUS_HEADERS,
+        httpsAgent
       });
 
       // Defensive check for malformed responses
@@ -233,7 +235,8 @@ async function getTokenHolderCount(mintAddress) {
       }
     }, {
       timeout: 10000,
-      headers: HELIUS_HEADERS
+      headers: HELIUS_HEADERS,
+      httpsAgent
     });
 
     if (response.data.error) {
@@ -318,7 +321,8 @@ async function getTokenMetadata(mintAddress) {
       }
     }, {
       timeout: 10000,
-      headers: HELIUS_HEADERS
+      headers: HELIUS_HEADERS,
+      httpsAgent
     });
 
     if (response.data.error) {
@@ -417,7 +421,8 @@ async function getTokenMetadataBatch(mintAddresses) {
       }
     }, {
       timeout: 15000,
-      headers: HELIUS_HEADERS
+      headers: HELIUS_HEADERS,
+      httpsAgent
     });
 
     if (response.data.error) {

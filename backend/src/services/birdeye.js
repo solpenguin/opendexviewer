@@ -1,4 +1,6 @@
 const axios = require('axios');
+const { httpsAgent } = require('./httpAgent');
+const { circuitBreakers } = require('./circuitBreaker');
 const { rateLimitedRequest } = require('./rateLimiter');
 
 // Birdeye API - Free tier available at https://birdeye.so
@@ -38,7 +40,9 @@ setInterval(() => {
  * @returns {Promise<any>}
  */
 async function birdeyeRequest(requestFn) {
-  return rateLimitedRequest('birdeye', requestFn);
+  return circuitBreakers.birdeye.execute(() =>
+    rateLimitedRequest('birdeye', requestFn)
+  );
 }
 
 // Get API headers
@@ -64,7 +68,8 @@ async function getTokenPrice(mintAddress) {
         params: {
           address: mintAddress
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -96,7 +101,8 @@ async function getMultiTokenPrices(addresses) {
         params: {
           list_address: addressList
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -146,7 +152,8 @@ async function getTokenOverview(mintAddress) {
         params: {
           address: mintAddress
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -235,7 +242,8 @@ async function getPriceHistory(mintAddress, options = {}) {
           time_from: timeFrom || defaultTimeFrom,
           time_to: timeTo || now
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -299,7 +307,8 @@ async function getOHLCV(mintAddress, options = {}) {
           time_from: timeFrom || now - 86400,
           time_to: timeTo || now
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -351,7 +360,8 @@ async function getTrendingTokens(options = {}) {
           offset: 0,
           limit: Math.min(limit, 20) // Birdeye limits to 20 max
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -430,7 +440,8 @@ async function getNewTokens(limit = 20) {
           offset: 0,
           limit: Math.min(limit, 50)
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 
@@ -496,7 +507,8 @@ async function searchTokens(query, limit = 20) {
           keyword: query,
           limit
         },
-        headers: getHeaders()
+        headers: getHeaders(),
+        httpsAgent
       })
     );
 

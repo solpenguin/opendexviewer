@@ -1,4 +1,6 @@
 const axios = require('axios');
+const { httpsAgent } = require('./httpAgent');
+const { circuitBreakers } = require('./circuitBreaker');
 const { rateLimitedRequest } = require('./rateLimiter');
 
 /**
@@ -39,7 +41,8 @@ function createClient() {
   return axios.create({
     baseURL: JUPITER_BASE_URL,
     timeout: 10000,
-    headers
+    headers,
+    httpsAgent
   });
 }
 
@@ -60,7 +63,9 @@ async function jupiterRequest(requestFn, dedupeKey) {
     return inFlightRequests.get(dedupeKey);
   }
 
-  const promise = rateLimitedRequest('jupiter', requestFn).finally(() => {
+  const promise = circuitBreakers.jupiter.execute(() =>
+    rateLimitedRequest('jupiter', requestFn)
+  ).finally(() => {
     if (dedupeKey) inFlightRequests.delete(dedupeKey);
   });
 

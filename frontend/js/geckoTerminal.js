@@ -55,10 +55,13 @@ const directGecko = {
     const cached = this.getCachedPool(mint);
     if (cached) return cached;
 
+    const poolCtrl = new AbortController();
+    const poolTimer = setTimeout(() => poolCtrl.abort(), 15000);
     const res = await fetch(
       `${GECKO_BASE}/networks/${GECKO_NETWORK}/tokens/${mint}/pools?page=1`,
-      { headers: GECKO_HEADERS }
+      { headers: GECKO_HEADERS, signal: poolCtrl.signal }
     );
+    clearTimeout(poolTimer);
     if (!res.ok) throw new Error(`Pools fetch ${res.status}`);
 
     const json  = await res.json();
@@ -111,7 +114,10 @@ const directGecko = {
       url.searchParams.set('currency',  'usd');
       url.searchParams.set('token',     'base');
 
-      const res = await fetch(url.toString(), { headers: GECKO_HEADERS });
+      const ohlcvCtrl = new AbortController();
+      const ohlcvTimer = setTimeout(() => ohlcvCtrl.abort(), 15000);
+      const res = await fetch(url.toString(), { headers: GECKO_HEADERS, signal: ohlcvCtrl.signal });
+      clearTimeout(ohlcvTimer);
       if (!res.ok) throw new Error(`OHLCV fetch ${res.status}`);
 
       const json      = await res.json();
