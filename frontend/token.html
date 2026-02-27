@@ -324,15 +324,15 @@
         </div>
         <div class="sentiment-footer-row">
           <div class="sentiment-actions">
-            <button class="sentiment-btn bullish" id="sentiment-bullish-btn" onclick="sentiment.castVote('bullish')">
+            <button class="sentiment-btn bullish" id="sentiment-bullish-btn">
               🐂 Bullish <span class="sentiment-btn-count" id="sentiment-bullish-count">0</span>
             </button>
-            <button class="sentiment-btn bearish" id="sentiment-bearish-btn" onclick="sentiment.castVote('bearish')">
+            <button class="sentiment-btn bearish" id="sentiment-bearish-btn">
               🐻 Bearish <span class="sentiment-btn-count" id="sentiment-bearish-count">0</span>
             </button>
           </div>
           <span class="sentiment-counts" id="sentiment-counts"></span>
-          <p class="sentiment-hint" id="sentiment-hint"><a onclick="wallet.connect()">Connect wallet</a> to vote</p>
+          <p class="sentiment-hint" id="sentiment-hint"><a href="#" id="sentiment-connect-link">Connect wallet</a> to vote</p>
         </div>
       </section>
 

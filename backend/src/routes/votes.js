@@ -218,8 +218,8 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
     result = { message: 'Vote cast', action: 'created', voteType, voteWeight };
   }
 
-  // Clear cache for this token's submissions
-  await cache.clearPattern(keys.submissions(submission.token_mint));
+  // Clear cache for this token's submissions (key format: submissions:{mint}:{type}:{status})
+  await cache.clearPattern(keys.submissions(submission.token_mint) + '*');
 
   // Get updated tally
   const tally = await db.getVoteTally(parsedId);
@@ -387,9 +387,9 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
     }
   }
 
-  // Clear cache for all affected tokens
+  // Clear cache for all affected tokens (key format: submissions:{mint}:{type}:{status})
   for (const tokenMint of tokensToInvalidate) {
-    await cache.clearPattern(keys.submissions(tokenMint));
+    await cache.clearPattern(keys.submissions(tokenMint) + '*');
   }
 
   // Return results
@@ -501,7 +501,12 @@ router.get('/check', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 
-  const vote = await db.getVote(parseInt(submissionId), wallet);
+  const parsedId = parseInt(submissionId);
+  if (isNaN(parsedId)) {
+    return res.status(400).json({ error: 'Invalid submission ID' });
+  }
+
+  const vote = await db.getVote(parsedId, wallet);
 
   res.json({
     hasVoted: !!vote,

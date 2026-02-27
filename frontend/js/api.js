@@ -988,7 +988,7 @@ const utils = {
     };
 
     // Setup for existing table wrappers
-    document.querySelectorAll('.token-table-wrapper').forEach(setupScrollIndicator);
+    document.querySelectorAll('.token-table-container').forEach(setupScrollIndicator);
 
     // Observe for dynamically added table wrappers
     const observer = new MutationObserver((mutations) => {
@@ -998,7 +998,7 @@ const utils = {
             if (node.classList?.contains('token-table-wrapper')) {
               setupScrollIndicator(node);
             }
-            node.querySelectorAll?.('.token-table-wrapper').forEach(setupScrollIndicator);
+            node.querySelectorAll?.('.token-table-container').forEach(setupScrollIndicator);
           }
         });
       });

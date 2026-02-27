@@ -16,13 +16,13 @@ setInterval(() => {
   const now = Date.now();
   let evicted = 0;
   for (const [key, entry] of historyCache) {
-    if (now - entry.timestamp > CACHE_DURATION) {
+    if (now >= entry.expiry) {
       historyCache.delete(key);
       evicted++;
     }
   }
   if (historyCache.size > MAX_HISTORY_CACHE_SIZE) {
-    const entries = [...historyCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const entries = [...historyCache.entries()].sort((a, b) => a[1].expiry - b[1].expiry);
     const toRemove = entries.slice(0, entries.length - MAX_HISTORY_CACHE_SIZE);
     for (const [key] of toRemove) {
       historyCache.delete(key);

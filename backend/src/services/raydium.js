@@ -24,7 +24,7 @@ setInterval(() => {
   const now = Date.now();
   let evicted = 0;
   for (const [key, entry] of poolCache) {
-    if (now - entry.expiry < 0 || now >= entry.expiry) {
+    if (now >= entry.expiry) {
       poolCache.delete(key);
       evicted++;
     }

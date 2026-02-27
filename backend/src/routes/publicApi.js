@@ -23,6 +23,82 @@ const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
 // ==========================================
 
 /**
+ * GET /api/v1/community/batch
+ * Get community content for multiple tokens at once
+ * Query param: mints (comma-separated, max 20)
+ * NOTE: Must be registered BEFORE /community/:mint to avoid :mint capturing "batch"
+ */
+router.get('/community/batch',
+  validateApiKey,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const { mints } = req.query;
+
+    if (!mints) {
+      return res.status(400).json({
+        success: false,
+        error: 'mints parameter required (comma-separated token addresses)'
+      });
+    }
+
+    const mintList = mints.split(',').map(m => m.trim()).filter(Boolean);
+
+    // Limit to 20 tokens per request
+    if (mintList.length > 20) {
+      return res.status(400).json({
+        success: false,
+        error: 'Maximum 20 tokens per batch request'
+      });
+    }
+
+    // Validate all addresses
+    for (const mint of mintList) {
+      if (!SOLANA_ADDRESS_REGEX.test(mint)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid token address in batch'
+        });
+      }
+    }
+
+    // Fetch community content for each token
+    const results = {};
+    await Promise.all(mintList.map(async (mint) => {
+      const submissions = await db.getApprovedSubmissions(mint);
+
+      const community = {
+        banner: null,
+        links: {
+          twitter: null,
+          telegram: null,
+          discord: null,
+          tiktok: null,
+          website: null
+        }
+      };
+
+      for (const sub of submissions) {
+        if (sub.submission_type === 'banner' && !community.banner) {
+          community.banner = sub.content_url;
+        } else if (sub.submission_type !== 'banner') {
+          const linkType = sub.submission_type;
+          if (community.links[linkType] === null) {
+            community.links[linkType] = sub.content_url;
+          }
+        }
+      }
+
+      results[mint] = community;
+    }));
+
+    res.json({
+      success: true,
+      data: results
+    });
+  })
+);
+
+/**
  * GET /api/v1/community/:mint
  * Get all approved community content for a token
  * Returns banner, social links, and description
@@ -113,81 +189,6 @@ router.get('/community/:mint/all',
         count: formatted.length,
         submissions: formatted
       }
-    });
-  })
-);
-
-/**
- * GET /api/v1/community/batch
- * Get community content for multiple tokens at once
- * Query param: mints (comma-separated, max 20)
- */
-router.get('/community/batch',
-  validateApiKey,
-  requireDatabase,
-  asyncHandler(async (req, res) => {
-    const { mints } = req.query;
-
-    if (!mints) {
-      return res.status(400).json({
-        success: false,
-        error: 'mints parameter required (comma-separated token addresses)'
-      });
-    }
-
-    const mintList = mints.split(',').map(m => m.trim()).filter(Boolean);
-
-    // Limit to 20 tokens per request
-    if (mintList.length > 20) {
-      return res.status(400).json({
-        success: false,
-        error: 'Maximum 20 tokens per batch request'
-      });
-    }
-
-    // Validate all addresses
-    for (const mint of mintList) {
-      if (!SOLANA_ADDRESS_REGEX.test(mint)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid token address in batch'
-        });
-      }
-    }
-
-    // Fetch community content for each token
-    const results = {};
-    await Promise.all(mintList.map(async (mint) => {
-      const submissions = await db.getApprovedSubmissions(mint);
-
-      const community = {
-        banner: null,
-        links: {
-          twitter: null,
-          telegram: null,
-          discord: null,
-          tiktok: null,
-          website: null
-        }
-      };
-
-      for (const sub of submissions) {
-        if (sub.submission_type === 'banner' && !community.banner) {
-          community.banner = sub.content_url;
-        } else if (sub.submission_type !== 'banner') {
-          const linkType = sub.submission_type;
-          if (community.links[linkType] === null) {
-            community.links[linkType] = sub.content_url;
-          }
-        }
-      }
-
-      results[mint] = community;
-    }));
-
-    res.json({
-      success: true,
-      data: results
     });
   })
 );

@@ -517,7 +517,7 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
 
     // Check if vote already exists to calculate delta
     const existingVote = await client.query(
-      `SELECT vote_type, vote_weight FROM votes
+      `SELECT * FROM votes
        WHERE submission_id = $1 AND voter_wallet = $2`,
       [submissionId, voterWallet]
     );
@@ -1656,10 +1656,11 @@ async function repairDatabaseSchema() {
 
           case 'missing_index':
             if (issue.table === 'submissions') {
-              // Create unique index for duplicate prevention
+              // Create unique index for duplicate prevention (must match initializeDatabase)
               await pool.query(`
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_submissions_unique_content
-                ON submissions(token_mint, submission_type, content_url)
+                ON submissions(token_mint, submission_type, LOWER(TRIM(TRAILING '/' FROM content_url)))
+                WHERE status != 'rejected'
               `);
               repairs.push({
                 type: 'index_added',

@@ -110,7 +110,9 @@ class MemoryCache {
   }
 
   async clearPattern(pattern) {
-    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    // Escape regex special chars, then convert glob * to .*
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    const regex = new RegExp('^' + escaped + '$');
     for (const key of this.cache.keys()) {
       if (regex.test(key)) {
         this.cache.delete(key);
@@ -562,7 +564,7 @@ class CacheService {
     }
   }
 
-  getStats() {
+  async getStats() {
     return this.backend.getStats();
   }
 

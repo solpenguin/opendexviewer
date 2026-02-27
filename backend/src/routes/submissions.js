@@ -76,8 +76,8 @@ router.post('/', strictLimiter, validateSubmission, validateSubmissionSignature,
       submitterWallet: submitterWallet || null
     });
 
-    // Clear cache for this token's submissions
-    await cache.clearPattern(keys.submissions(tokenMint));
+    // Clear cache for this token's submissions (key format: submissions:{mint}:{type}:{status})
+    await cache.clearPattern(keys.submissions(tokenMint) + '*');
 
     res.status(201).json({
       ...sanitizeSubmissionOutput(submission),
@@ -135,8 +135,8 @@ router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubm
     }
   }
 
-  // Clear cache for this token's submissions
-  await cache.clearPattern(keys.submissions(tokenMint));
+  // Clear cache for this token's submissions (key format: submissions:{mint}:{type}:{status})
+  await cache.clearPattern(keys.submissions(tokenMint) + '*');
 
   // Determine response status
   const successCount = results.length;

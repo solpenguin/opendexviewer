@@ -101,9 +101,9 @@ setInterval(() => {
       poolAddressCache.delete(key);
     }
   }
-  // Clean error cache
+  // Clean error cache (entries stored with { expiry: Date.now() + TTL })
   for (const [key, entry] of errorCache) {
-    if (now - entry.timestamp > ERROR_CACHE_TTL) {
+    if (now >= entry.expiry) {
       errorCache.delete(key);
     }
   }

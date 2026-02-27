@@ -17,6 +17,7 @@ const {
   sanitizeString
 } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { cache, keys } = require('../services/cache');
 
 // Login attempt tracking for account lockout
 const loginAttempts = new Map();
@@ -276,7 +277,10 @@ router.patch('/submissions/:id/status',
       });
     }
 
-    // Privacy: Don't log admin actions with details
+    // Invalidate submission cache for this token
+    if (updated.token_mint) {
+      await cache.clearPattern(keys.submissions(updated.token_mint) + '*');
+    }
 
     res.json({
       success: true,
@@ -312,8 +316,17 @@ router.delete('/submissions/:id',
       });
     }
 
-    // Delete submission (votes will cascade delete due to foreign key)
+    // Delete vote tally first, then submission (votes cascade via foreign key)
+    await db.pool.query('DELETE FROM vote_tallies WHERE submission_id = $1', [submissionId]);
     await db.pool.query('DELETE FROM submissions WHERE id = $1', [submissionId]);
+
+    // Invalidate submission cache for this token
+    if (submission.token_mint) {
+      await cache.clearPattern(keys.submissions(submission.token_mint) + '*');
+    }
+
+    // Invalidate admin stats cache
+    db.invalidateAdminStatsCache();
 
     res.json({
       success: true,

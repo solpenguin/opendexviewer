@@ -110,6 +110,26 @@ const sentiment = {
   userVote: null,
   tally: { bullish: 0, bearish: 0, score: 0 },
   _casting: false,
+  _bound: false,
+
+  // Bind event listeners (CSP-safe, replaces inline onclick handlers)
+  bindEvents() {
+    if (this._bound) return;
+    this._bound = true;
+
+    const bullishBtn = document.getElementById('sentiment-bullish-btn');
+    const bearishBtn = document.getElementById('sentiment-bearish-btn');
+    const connectLink = document.getElementById('sentiment-connect-link');
+
+    if (bullishBtn) bullishBtn.addEventListener('click', () => this.castVote('bullish'));
+    if (bearishBtn) bearishBtn.addEventListener('click', () => this.castVote('bearish'));
+    if (connectLink) {
+      connectLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (typeof wallet !== 'undefined') wallet.connect();
+      });
+    }
+  },
 
   async loadForToken(mint) {
     this.currentMint = mint;
@@ -119,6 +139,9 @@ const sentiment = {
     const section = document.getElementById('sentiment-section');
     if (!section) return;
     section.style.display = '';
+
+    // Bind click handlers on first load
+    this.bindEvents();
 
     try {
       const walletAddr = (typeof wallet !== 'undefined' && wallet.connected) ? wallet.address : null;

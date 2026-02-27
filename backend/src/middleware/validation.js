@@ -545,6 +545,15 @@ function validateWalletSignature(req, res, next) {
     });
   }
 
+  // Reject future timestamps (prevents non-expiring replay attacks)
+  if (timestamp > now + 10000) {
+    return res.status(400).json({
+      error: 'Invalid timestamp',
+      message: 'Signature timestamp is in the future',
+      code: 'FUTURE_TIMESTAMP'
+    });
+  }
+
   // Validate signature format (should be array of numbers)
   if (!Array.isArray(signature) || signature.length !== 64) {
     return res.status(400).json({

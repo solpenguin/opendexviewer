@@ -448,6 +448,9 @@ const tokenDetail = {
 
       // Direct GeckoTerminal only — no backend fallback so the shared backend
       // rate-limit budget (30 req/min) is reserved for token list and price endpoints.
+      if (!preload && typeof directGecko === 'undefined') {
+        throw new Error('GeckoTerminal client not available');
+      }
       this.chartData = preload
         ? await preload
         : await directGecko.getOHLCV(this.mint, interval);
