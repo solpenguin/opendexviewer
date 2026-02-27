@@ -23,6 +23,7 @@ require('./bot/commands/alert')(bot);
 require('./bot/commands/alerts')(bot);
 require('./bot/commands/removealert')(bot);
 require('./bot/commands/stats')(bot);
+require('./bot/commands/pvp')(bot);
 
 // Register message handlers (must come AFTER commands)
 require('./bot/handlers/caDetector')(bot);
@@ -40,6 +41,7 @@ async function setCommands(bot) {
   await bot.api.setMyCommands([
     { command: 'token', description: 'Look up a token by contract address' },
     { command: 'search', description: 'Search tokens by name or symbol' },
+    { command: 'pvp', description: 'Find similar tokens (anti-spoofing)' },
     { command: 'alert', description: 'Set a market cap alert' },
     { command: 'alerts', description: 'List your active alerts' },
     { command: 'removealert', description: 'Remove an alert' },
@@ -51,6 +53,7 @@ async function setCommands(bot) {
   await bot.api.setMyCommands([
     { command: 'token', description: 'Look up a token by contract address' },
     { command: 'search', description: 'Search tokens by name or symbol' },
+    { command: 'pvp', description: 'Find similar tokens (anti-spoofing)' },
     { command: 'help', description: 'Show all commands' },
   ], { scope: { type: 'all_group_chats' } });
 }

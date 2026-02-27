@@ -24,5 +24,10 @@ module.exports = {
   async getSubmissions(mint) {
     const { data } = await client.get(`/api/tokens/${mint}/submissions`);
     return data;
+  },
+
+  async getSimilarTokens(mint) {
+    const { data } = await client.get(`/api/tokens/${mint}/similar`);
+    return data;
   }
 };

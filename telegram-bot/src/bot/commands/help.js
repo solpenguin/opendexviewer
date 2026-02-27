@@ -13,6 +13,8 @@ module.exports = (bot) => {
       `/alert &lt;CA&gt; change &lt;percent&gt; - Alert on market cap % change\n` +
       `/alerts - List your active alerts\n` +
       `/removealert &lt;id&gt; - Remove an alert\n\n` +
+      `<b>Anti-Spoofing</b>\n` +
+      `/pvp &lt;CA&gt; - Find tokens with similar names/tickers\n\n` +
       `<b>Other</b>\n` +
       `/stats - Bot statistics\n` +
       `/help - This message`,

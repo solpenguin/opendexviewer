@@ -1492,7 +1492,17 @@ document.addEventListener('DOMContentLoaded', () => {
   tokenDetail.init();
 });
 
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
+// Reinitialize when restored from bfcache (browser back/forward navigation).
+// DOMContentLoaded does NOT fire when a page is restored from bfcache, so
+// the chart and intervals remain destroyed from the pagehide handler.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    tokenDetail.destroy();
+    tokenDetail.init();
+  }
+});
+
+// Cleanup on page hide (works with bfcache, unlike beforeunload)
+window.addEventListener('pagehide', () => {
   tokenDetail.destroy();
 });
