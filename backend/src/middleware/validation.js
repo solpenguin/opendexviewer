@@ -1126,6 +1126,17 @@ function createSentimentSignatureMessage(sentiment, mint, wallet, timestamp) {
 }
 
 /**
+ * Create signature message for token calls
+ * @param {string} mint - The token mint address
+ * @param {string} wallet - The caller wallet address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createCallSignatureMessage(mint, wallet, timestamp) {
+  return `OpenDex Call: ${mint} by ${wallet} at ${timestamp}`;
+}
+
+/**
  * Create signature message for API key registration
  * @param {string} wallet - The wallet address
  * @param {number} timestamp - Unix timestamp in milliseconds
@@ -1235,6 +1246,59 @@ function validateSentimentSignature(req, res, next) {
   }
 
   const isValid = verifyWalletSignature(expectedMessage, signature, voterWallet);
+
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
+  }
+
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  next();
+}
+
+/**
+ * Middleware to validate wallet signature for token calls
+ * Signature is optional — if not provided, skip validation
+ */
+function validateCallSignature(req, res, next) {
+  const { callerWallet, signature, signatureTimestamp } = req.body;
+
+  // Signature is optional - if not provided, skip validation
+  if (!signature || !signatureTimestamp) {
+    return next();
+  }
+
+  if (!callerWallet || !SOLANA_ADDRESS_REGEX.test(callerWallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({ error: 'Signature expired', message: 'Please sign a fresh request', code: 'SIGNATURE_EXPIRED' });
+  }
+
+  if (timestamp > now + 10000) {
+    return res.status(400).json({ error: 'Invalid timestamp', message: 'Signature timestamp is in the future', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({ error: 'Invalid signature format', code: 'INVALID_SIGNATURE_FORMAT' });
+  }
+
+  const mint = req.params.mint || '';
+  const expectedMessage = createCallSignatureMessage(mint, callerWallet, timestamp);
+
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
+  const isValid = verifyWalletSignature(expectedMessage, signature, callerWallet);
 
   if (!isValid) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
@@ -1422,9 +1486,11 @@ module.exports = {
   createDataDeletionSignatureMessage,
   createWatchlistSignatureMessage,
   createSentimentSignatureMessage,
+  createCallSignatureMessage,
   createApiKeySignatureMessage,
   validateWatchlistSignature,
   validateSentimentSignature,
+  validateCallSignature,
   validateApiKeySignature,
   SIGNATURE_EXPIRY_MS,
   // Admin functions

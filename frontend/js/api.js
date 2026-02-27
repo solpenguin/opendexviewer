@@ -510,6 +510,17 @@ const api = {
         apiCache.TTL.tokenList,
         true
       );
+    },
+
+    async leaderboardCalls(params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const cacheKey = `tokens:leaderboard:calls:${query}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/leaderboard/calls?${query}`),
+        apiCache.TTL.tokenList,
+        true
+      );
     }
   },
 
@@ -636,6 +647,20 @@ const api = {
         method: 'POST',
         body: JSON.stringify({ sentiment: sentimentType, voterWallet })
       });
+    }
+  },
+
+  // Token call endpoints
+  calls: {
+    async call(tokenMint, callerWallet) {
+      return api.request(`/api/calls/${encodeURIComponent(tokenMint)}`, {
+        method: 'POST',
+        body: JSON.stringify({ callerWallet })
+      });
+    },
+
+    async getCooldown(wallet) {
+      return api.request(`/api/calls/cooldown/${encodeURIComponent(wallet)}`);
     }
   },
 

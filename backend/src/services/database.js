@@ -324,6 +324,18 @@ async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_sentiment_votes_mint ON sentiment_votes(token_mint);
 
+      -- Token calls table (rolling 24h endorsements)
+      CREATE TABLE IF NOT EXISTS token_calls (
+        id SERIAL PRIMARY KEY,
+        token_mint VARCHAR(44) NOT NULL,
+        caller_wallet VARCHAR(44) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_token_calls_wallet_created ON token_calls(caller_wallet, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_token_calls_mint_created ON token_calls(token_mint, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_token_calls_created ON token_calls(created_at DESC);
+
       -- Bug reports table for user-submitted bug reports
       CREATE TABLE IF NOT EXISTS bug_reports (
         id SERIAL PRIMARY KEY,
@@ -1550,6 +1562,113 @@ async function getTopSentimentTokens(limit = 25, offset = 0) {
 }
 
 // ==========================================
+// Token Call operations
+// ==========================================
+
+// Call (endorse) a token — one call per wallet per 24h rolling window
+// Uses transaction + advisory lock to prevent race conditions
+async function callToken(tokenMint, callerWallet) {
+  if (!pool) throw new Error('Database not initialized');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Advisory lock on wallet to serialize concurrent requests from same wallet
+    // Uses a hash of the wallet address as the lock key
+    const lockKey = Math.abs(callerWallet.split('').reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0));
+    await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
+
+    // Check cooldown within the locked transaction
+    const cooldownCheck = await client.query(
+      `SELECT token_mint, created_at FROM token_calls
+       WHERE caller_wallet = $1 AND created_at > NOW() - INTERVAL '24 hours'
+       ORDER BY created_at DESC LIMIT 1`,
+      [callerWallet]
+    );
+
+    if (cooldownCheck.rows.length > 0) {
+      await client.query('COMMIT');
+      const existing = cooldownCheck.rows[0];
+      const cooldownEnd = new Date(new Date(existing.created_at).getTime() + 24 * 60 * 60 * 1000);
+      return {
+        success: false,
+        error: 'cooldown',
+        existingMint: existing.token_mint,
+        cooldownEndsAt: cooldownEnd.toISOString()
+      };
+    }
+
+    await client.query(
+      'INSERT INTO token_calls (token_mint, caller_wallet) VALUES ($1, $2)',
+      [tokenMint, callerWallet]
+    );
+
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Check cooldown status for a wallet
+async function getCallCooldown(callerWallet) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `SELECT token_mint, created_at FROM token_calls
+     WHERE caller_wallet = $1 AND created_at > NOW() - INTERVAL '24 hours'
+     ORDER BY created_at DESC LIMIT 1`,
+    [callerWallet]
+  );
+
+  if (result.rows.length === 0) return null;
+
+  const existing = result.rows[0];
+  const cooldownEnd = new Date(new Date(existing.created_at).getTime() + 24 * 60 * 60 * 1000);
+
+  return {
+    tokenMint: existing.token_mint,
+    calledAt: existing.created_at,
+    cooldownEndsAt: cooldownEnd.toISOString()
+  };
+}
+
+// Get tokens ranked by call count in the last 24 hours
+async function getMostCalledTokens(limit = 25, offset = 0) {
+  if (!pool) return { tokens: [], total: 0 };
+
+  const [dataResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT tc.token_mint, COUNT(*) AS call_count,
+              t.name, t.symbol, t.logo_uri,
+              t.price, t.market_cap, t.volume_24h
+       FROM token_calls tc
+       LEFT JOIN tokens t ON tc.token_mint = t.mint_address
+       WHERE tc.created_at > NOW() - INTERVAL '24 hours'
+       GROUP BY tc.token_mint, t.name, t.symbol, t.logo_uri,
+                t.price, t.market_cap, t.volume_24h
+       ORDER BY call_count DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    ),
+    pool.query(
+      `SELECT COUNT(DISTINCT token_mint) AS total
+       FROM token_calls
+       WHERE created_at > NOW() - INTERVAL '24 hours'`
+    )
+  ]);
+
+  return {
+    tokens: dataResult.rows,
+    total: parseInt(countResult.rows[0]?.total || 0)
+  };
+}
+
+// ==========================================
 // GDPR Data Deletion operations
 // ==========================================
 
@@ -2212,6 +2331,10 @@ module.exports = {
   // Community leaderboards
   getMostWatchlistedTokens,
   getTopSentimentTokens,
+  // Token calls
+  callToken,
+  getCallCooldown,
+  getMostCalledTokens,
   // GDPR data deletion
   deleteUserData,
   // Sentiment voting

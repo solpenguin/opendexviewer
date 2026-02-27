@@ -743,6 +743,53 @@ router.get('/leaderboard/sentiment', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// GET /api/tokens/leaderboard/calls - Most called tokens (24h rolling window)
+router.get('/leaderboard/calls', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 25), 100);
+  const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+  const cacheKey = `leaderboard:calls:${limit}:${offset}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
+  const { tokens: rows, total } = await db.getMostCalledTokens(limit, offset);
+
+  if (!rows || rows.length === 0) {
+    const empty = { tokens: [], total: 0 };
+    await cache.set(cacheKey, empty, TTL.MEDIUM);
+    return res.json(empty);
+  }
+
+  const missingMints = rows.filter(r => !r.name).map(r => r.token_mint);
+  let heliusMetadata = {};
+  if (missingMints.length > 0 && solanaService.isHeliusConfigured()) {
+    try {
+      heliusMetadata = await solanaService.getTokenMetadataBatch(missingMints);
+    } catch (err) { /* continue without */ }
+  }
+
+  const tokens = rows.map(r => {
+    const helius = heliusMetadata[r.token_mint];
+    return {
+      mintAddress: r.token_mint,
+      address: r.token_mint,
+      name: r.name || helius?.name || `${r.token_mint.slice(0, 4)}...${r.token_mint.slice(-4)}`,
+      symbol: r.symbol || helius?.symbol || '???',
+      price: parseFloat(r.price) || 0,
+      priceChange24h: 0,
+      volume24h: parseFloat(r.volume_24h) || 0,
+      marketCap: parseFloat(r.market_cap) || 0,
+      logoUri: r.logo_uri || helius?.logoUri || null,
+      logoURI: r.logo_uri || helius?.logoUri || null,
+      callCount: parseInt(r.call_count) || 0
+    };
+  });
+
+  const result = { tokens, total };
+  await cache.set(cacheKey, result, TTL.MEDIUM);
+  res.json(result);
+}));
+
 // GET /api/tokens/:mint - Get single token details
 // Uses 5-minute cache but requires data < 1 minute old (fresh) for individual token views
 // Optimized: Uses getOrSetWithFreshness for stampede prevention on concurrent requests
