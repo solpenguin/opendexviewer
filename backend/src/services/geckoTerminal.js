@@ -2,19 +2,32 @@ const axios = require('axios');
 const { rateLimitedRequest, sleep } = require('./rateLimiter');
 const { httpsAgent } = require('./httpAgent');
 
-// GeckoTerminal API - Free, no API key required
-// Docs: https://apiguide.geckoterminal.com/
-const GECKO_API = 'https://api.geckoterminal.com/api/v2';
+// GeckoTerminal / CoinGecko Onchain API
+// Free tier: https://api.geckoterminal.com/api/v2 (30 req/min, no key)
+// Paid tier: https://pro-api.coingecko.com/api/v3/onchain (higher limits, key required)
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || '';
+const GECKO_API = COINGECKO_API_KEY
+  ? 'https://pro-api.coingecko.com/api/v3/onchain'
+  : 'https://api.geckoterminal.com/api/v2';
 const NETWORK = 'solana';
 
+if (COINGECKO_API_KEY) {
+  console.log('[GeckoTerminal] Using CoinGecko Pro API (paid tier)');
+} else {
+  console.log('[GeckoTerminal] Using free GeckoTerminal API (30 req/min)');
+}
+
 // Create axios instance with connection pooling for GeckoTerminal
+const geckoHeaders = { 'Accept': 'application/json' };
+if (COINGECKO_API_KEY) {
+  geckoHeaders['x-cg-pro-api-key'] = COINGECKO_API_KEY;
+}
+
 const geckoAxios = axios.create({
   baseURL: GECKO_API,
   httpsAgent,
   timeout: 30000,
-  headers: {
-    'Accept': 'application/json'
-  }
+  headers: geckoHeaders
 });
 
 // Retry configuration for 429 errors
@@ -153,11 +166,13 @@ async function geckoRequest(requestFn, context = 'geckoRequest') {
   );
 }
 
-// Get API headers
+// Get API headers (includes API key when configured)
 function getHeaders() {
-  return {
-    'Accept': 'application/json'
-  };
+  const headers = { 'Accept': 'application/json' };
+  if (COINGECKO_API_KEY) {
+    headers['x-cg-pro-api-key'] = COINGECKO_API_KEY;
+  }
+  return headers;
 }
 
 /**

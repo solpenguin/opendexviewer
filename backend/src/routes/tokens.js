@@ -1185,9 +1185,32 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
         }
       }
 
-      // Market data (price, mcap, volume) comes from the tokens table directly
-      // — populated whenever a token is viewed via GET /:mint
-      return results.slice(0, 5);
+      const final = results.slice(0, 5);
+
+      // Enrich any results that are missing market data via a single batch call.
+      // Local DB tokens may lack data if they were stored before the schema migration
+      // or haven't been viewed recently.
+      const needsEnrichment = final.filter(t => !t.price && !t.marketCap);
+      if (needsEnrichment.length > 0) {
+        try {
+          const enriched = await geckoService.getMultiTokenInfo(
+            needsEnrichment.map(t => t.address)
+          );
+          for (const token of needsEnrichment) {
+            const data = enriched[token.address];
+            if (data) {
+              if (!token.price) token.price = data.price || null;
+              if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
+              if (!token.volume24h) token.volume24h = data.volume24h || null;
+              if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
+            }
+          }
+        } catch (err) {
+          // Non-critical — return results without enrichment
+        }
+      }
+
+      return final;
     }, TTL.HOUR);
 
     res.json(result);
