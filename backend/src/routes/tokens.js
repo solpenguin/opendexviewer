@@ -313,8 +313,6 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   }
 }));
 
-// Solana address regex for exact match detection
-const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const MIN_SEARCH_RESULTS = 5;
 const MAX_BATCH_SIZE = 50; // Limit batch requests to prevent abuse
 
