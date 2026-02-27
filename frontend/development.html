@@ -187,6 +187,157 @@
       </div>
     </section>
 
+    <!-- Planned Expenditures Section -->
+    <section class="about-section expenditures-section">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <h2>Planned Expenditures</h2>
+        <p>Transparent breakdown of infrastructure and service costs to scale OpenDex</p>
+      </div>
+
+      <!-- Render Services -->
+      <div class="expenditure-group">
+        <h3 class="expenditure-group-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2"/>
+            <circle cx="6" cy="6" r="1" fill="currentColor"/>
+            <circle cx="6" cy="18" r="1" fill="currentColor"/>
+          </svg>
+          Render Services — Pro Plan Upgrades
+        </h3>
+        <p class="expenditure-group-desc">Upgrading all Render services to Pro plans for improved performance, reliability, and zero-downtime deployments.</p>
+
+        <div class="expenditure-table">
+          <div class="expenditure-row expenditure-header-row">
+            <span class="expenditure-service">Service</span>
+            <span class="expenditure-detail">Details</span>
+            <span class="expenditure-cost">Est. Cost</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Web Service (API)</span>
+            <span class="expenditure-detail">Pro plan — faster cold starts, auto-scaling, more RAM</span>
+            <span class="expenditure-cost">$25/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Background Worker</span>
+            <span class="expenditure-detail">Pro plan — dedicated resources for job processing</span>
+            <span class="expenditure-cost">$25/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Telegram Bot Worker</span>
+            <span class="expenditure-detail">Pro plan — persistent long-polling with zero downtime</span>
+            <span class="expenditure-cost">$25/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">PostgreSQL</span>
+            <span class="expenditure-detail">Pro plan — higher connection limits, automated backups</span>
+            <span class="expenditure-cost">$20/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Redis</span>
+            <span class="expenditure-detail">Pro plan — larger cache, persistence, high availability</span>
+            <span class="expenditure-cost">$20/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Static Site (Frontend)</span>
+            <span class="expenditure-detail">Pro plan — global CDN, custom headers, faster builds</span>
+            <span class="expenditure-cost">$15/mo</span>
+          </div>
+          <div class="expenditure-row expenditure-total-row">
+            <span class="expenditure-service">Estimated Server Total</span>
+            <span class="expenditure-detail"></span>
+            <span class="expenditure-cost">~$1,000/mo</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Access -->
+      <div class="expenditure-group">
+        <h3 class="expenditure-group-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          Upgraded API Access
+        </h3>
+        <p class="expenditure-group-desc">Premium API tiers for higher rate limits, real-time data, and priority access to blockchain and market data providers.</p>
+
+        <div class="expenditure-table">
+          <div class="expenditure-row expenditure-header-row">
+            <span class="expenditure-service">Provider</span>
+            <span class="expenditure-detail">What It Provides</span>
+            <span class="expenditure-cost">Est. Cost</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Helius</span>
+            <span class="expenditure-detail">Solana RPC, token metadata, holder data, DAS API — dedicated infrastructure with priority throughput</span>
+            <span class="expenditure-cost">$999/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">CoinGecko</span>
+            <span class="expenditure-detail">Market data, price feeds, OHLCV charts, pool data — higher rate limits and real-time updates</span>
+            <span class="expenditure-cost">$499/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">Jupiter</span>
+            <span class="expenditure-detail">Token pricing, swap routing, verified token lists — scalable from starter to enterprise tiers</span>
+            <span class="expenditure-cost">$200–$10,000/mo</span>
+          </div>
+          <div class="expenditure-row expenditure-total-row">
+            <span class="expenditure-service">Estimated API Total</span>
+            <span class="expenditure-detail"></span>
+            <span class="expenditure-cost">$1,698–$11,498/mo</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI & OpenClaw -->
+      <div class="expenditure-group">
+        <h3 class="expenditure-group-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a4 4 0 0 1 4 4v1a1 1 0 0 0 1 1h1a4 4 0 0 1 0 8h-1a1 1 0 0 0-1 1v1a4 4 0 0 1-8 0v-1a1 1 0 0 0-1-1H6a4 4 0 0 1 0-8h1a1 1 0 0 0 1-1V6a4 4 0 0 1 4-4z"/>
+            <circle cx="12" cy="12" r="2"/>
+          </svg>
+          AI &amp; OpenClaw
+        </h3>
+        <p class="expenditure-group-desc">AI-powered tooling for automated market analysis, content moderation, and the OpenClaw intelligent agent platform.</p>
+
+        <div class="expenditure-table">
+          <div class="expenditure-row expenditure-header-row">
+            <span class="expenditure-service">Item</span>
+            <span class="expenditure-detail">Details</span>
+            <span class="expenditure-cost">Est. Cost</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">AI API Access</span>
+            <span class="expenditure-detail">LLM API usage for intelligent analysis, content moderation, and automated insights</span>
+            <span class="expenditure-cost">$250/mo</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">OpenClaw Establishment</span>
+            <span class="expenditure-detail">Initial setup, infrastructure provisioning, and integration development for the OpenClaw agent platform</span>
+            <span class="expenditure-cost">$1,000 initial</span>
+          </div>
+          <div class="expenditure-row">
+            <span class="expenditure-service">OpenClaw Ongoing</span>
+            <span class="expenditure-detail">Hosting, maintenance, and operational costs for the OpenClaw platform</span>
+            <span class="expenditure-cost">$250/mo</span>
+          </div>
+          <div class="expenditure-row expenditure-total-row">
+            <span class="expenditure-service">Estimated AI Total</span>
+            <span class="expenditure-detail"></span>
+            <span class="expenditure-cost">$1,000 + $500/mo</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Twitter/X Feed Section -->
     <section class="about-section twitter-section">
       <div class="about-header">

@@ -6324,6 +6324,139 @@ select {
 }
 
 /* =============================================
+   Development Page - Planned Expenditures
+   ============================================= */
+
+.expenditures-section {
+  text-align: center;
+}
+
+.expenditure-group {
+  margin-top: 2.5rem;
+  text-align: left;
+}
+
+.expenditure-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.expenditure-group-title svg {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.expenditure-group-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 1.25rem;
+}
+
+.expenditure-table {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.expenditure-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 1rem;
+  padding: 0.875rem 1.25rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+
+.expenditure-row:last-child {
+  border-bottom: none;
+}
+
+.expenditure-row:not(.expenditure-header-row):not(.expenditure-total-row):hover {
+  background: var(--bg-tertiary);
+}
+
+.expenditure-header-row {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0.625rem 1.25rem;
+}
+
+.expenditure-total-row {
+  background: var(--bg-tertiary);
+  border-top: 2px solid var(--border-color);
+}
+
+.expenditure-service {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.expenditure-total-row .expenditure-service {
+  color: var(--accent-primary);
+}
+
+.expenditure-detail {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.expenditure-cost {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.expenditure-total-row .expenditure-cost {
+  color: var(--accent-primary);
+  font-size: 1rem;
+}
+
+@media (max-width: 640px) {
+  .expenditure-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .expenditure-header-row {
+    display: none;
+  }
+
+  .expenditure-cost {
+    text-align: left;
+    color: var(--accent-primary);
+  }
+
+  .expenditure-detail {
+    font-size: 0.8rem;
+  }
+
+  .expenditure-total-row {
+    text-align: center;
+  }
+
+  .expenditure-total-row .expenditure-service,
+  .expenditure-total-row .expenditure-cost {
+    text-align: center;
+  }
+}
+
+/* =============================================
    Development Page - Phase Status Badges
    ============================================= */
 
