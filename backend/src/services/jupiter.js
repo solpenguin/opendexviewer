@@ -44,12 +44,28 @@ function createClient() {
 }
 
 /**
- * Make a rate-limited request to Jupiter API
+ * In-flight request deduplication
+ * Prevents multiple concurrent requests for the same resource
+ */
+const inFlightRequests = new Map();
+
+/**
+ * Make a rate-limited, deduplicated request to Jupiter API
  * @param {Function} requestFn - Function that returns an axios promise
+ * @param {string} [dedupeKey] - Optional key for deduplication
  * @returns {Promise<any>}
  */
-async function jupiterRequest(requestFn) {
-  return rateLimitedRequest('jupiter', requestFn);
+async function jupiterRequest(requestFn, dedupeKey) {
+  if (dedupeKey && inFlightRequests.has(dedupeKey)) {
+    return inFlightRequests.get(dedupeKey);
+  }
+
+  const promise = rateLimitedRequest('jupiter', requestFn).finally(() => {
+    if (dedupeKey) inFlightRequests.delete(dedupeKey);
+  });
+
+  if (dedupeKey) inFlightRequests.set(dedupeKey, promise);
+  return promise;
 }
 
 // Cache for token data
@@ -103,7 +119,8 @@ async function searchTokens(query) {
     const response = await jupiterRequest(() =>
       client.get(`/tokens/v2/search`, {
         params: { query }
-      })
+      }),
+      `search:${query}`
     );
 
     const tokens = response.data || [];
@@ -397,7 +414,8 @@ async function getTokenPrice(mintAddress) {
     const response = await jupiterRequest(() =>
       client.get(`/price/v3`, {
         params: { ids: mintAddress }
-      })
+      }),
+      `price:${mintAddress}`
     );
 
     const priceData = response.data?.data?.[mintAddress];
@@ -441,7 +459,8 @@ async function getTokenPrices(mintAddresses) {
     const response = await jupiterRequest(() =>
       client.get(`/price/v3`, {
         params: { ids }
-      })
+      }),
+      `prices:${ids}`
     );
 
     const data = response.data?.data || {};

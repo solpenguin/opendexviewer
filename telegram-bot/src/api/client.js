@@ -1,9 +1,18 @@
 const axios = require('axios');
+const https = require('https');
 const config = require('../config');
+
+const agent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 30000
+});
 
 const client = axios.create({
   baseURL: config.API_BASE_URL,
   timeout: 15000,
+  httpsAgent: agent,
   headers: { 'Content-Type': 'application/json' }
 });
 

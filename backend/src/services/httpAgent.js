@@ -13,8 +13,8 @@ const isProduction = process.env.NODE_ENV === 'production';
 const httpAgent = new http.Agent({
   keepAlive: true,
   keepAliveMsecs: 30000,          // Keep connections alive for 30s
-  maxSockets: isProduction ? 100 : 25,  // Max concurrent connections per host
-  maxFreeSockets: isProduction ? 25 : 5, // Max idle connections to keep
+  maxSockets: isProduction ? 250 : 25,  // Max concurrent connections per host
+  maxFreeSockets: isProduction ? 50 : 5, // Max idle connections to keep
   timeout: 30000,                  // Socket timeout
   scheduling: 'fifo'              // First-in-first-out for fairness
 });
@@ -23,8 +23,8 @@ const httpAgent = new http.Agent({
 const httpsAgent = new https.Agent({
   keepAlive: true,
   keepAliveMsecs: 30000,
-  maxSockets: isProduction ? 100 : 25,
-  maxFreeSockets: isProduction ? 25 : 5,
+  maxSockets: isProduction ? 250 : 25,
+  maxFreeSockets: isProduction ? 50 : 5,
   timeout: 30000,
   scheduling: 'fifo',
   // TLS session caching for faster reconnects

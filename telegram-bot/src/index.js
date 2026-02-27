@@ -81,3 +81,13 @@ const shutdown = async (signal) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Catch unhandled errors to prevent silent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Bot] Unhandled rejection:', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('[Bot] Uncaught exception:', error);
+  // Give time to log, then exit (let process manager restart)
+  setTimeout(() => process.exit(1), 1000);
+});

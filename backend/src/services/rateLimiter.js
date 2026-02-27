@@ -13,8 +13,8 @@ const requestQueues = new Map();
 const isProcessing = new Map();
 
 // Queue size limits to prevent unbounded growth under high load
-// REDUCED from 500/2000 to prevent cascading failures at high concurrency
-const MAX_QUEUE_SIZE = parseInt(process.env.API_QUEUE_MAX_SIZE) || 200;
+// Queue size limit to prevent unbounded growth under high load
+const MAX_QUEUE_SIZE = parseInt(process.env.API_QUEUE_MAX_SIZE) || 500;
 const QUEUE_TIMEOUT_MS = parseInt(process.env.API_QUEUE_TIMEOUT_MS) || 15000;
 
 // Track queue metrics for monitoring and backpressure
@@ -63,8 +63,17 @@ const RATE_LIMITS = {
     burstLimit: 2,       // Allow small bursts for parallel requests
     burstWindow: 4000,   // 4 second window
     useQueue: true,      // Force queue-based processing
-    maxQueueSize: 500,   // REDUCED from 2000 to prevent memory issues under high load
-    queueTimeout: 30000  // REDUCED from 60s to fail faster and provide backpressure
+    maxQueueSize: 2000,  // Large queue for high concurrency
+    queueTimeout: 45000  // 45s timeout before failing
+  },
+  raydium: {
+    minInterval: 334,    // ~3 requests/sec
+    maxJitter: 100,
+    burstLimit: 3,
+    burstWindow: 1000,
+    useQueue: true,
+    maxQueueSize: 500,
+    queueTimeout: 30000
   },
   jupiter: {
     minInterval: 100,    // Minimum 100ms between requests (10 req/sec max)

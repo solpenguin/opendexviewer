@@ -28,7 +28,7 @@ class CircuitBreaker {
     this.name = options.name || 'unknown';
     this.failureThreshold = options.failureThreshold || 5;
     this.resetTimeout = options.resetTimeout || 30000;
-    this.halfOpenMaxAttempts = options.halfOpenMaxAttempts || 3;
+    this.halfOpenMaxAttempts = options.halfOpenMaxAttempts || 5;
     this.isFailure = options.isFailure || (() => true);
 
     this.state = STATES.CLOSED;
@@ -259,6 +259,16 @@ const circuitBreakers = {
       if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') return true;
       if (error.message?.includes('timeout')) return true;
       return false; // RPC-level errors (like invalid params) don't trip the breaker
+    }
+  }),
+
+  raydium: new CircuitBreaker({
+    name: 'raydium',
+    failureThreshold: 5,
+    resetTimeout: 30000,
+    isFailure: (error) => {
+      if (error.response?.status === 429) return false;
+      return error.response?.status >= 500 || !error.response;
     }
   })
 };

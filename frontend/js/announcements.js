@@ -176,7 +176,23 @@ const announcements = {
 
   init() {
     this.fetchAndRender();
-    this._timer = setInterval(() => this.fetchAndRender(), this.POLL_INTERVAL_MS);
+    this._scheduleNext();
+  },
+
+  _scheduleNext() {
+    // Add 0-60s random jitter to prevent thundering herd across clients
+    const jitter = Math.floor(Math.random() * 60000);
+    this._timer = setTimeout(() => {
+      this.fetchAndRender();
+      this._scheduleNext();
+    }, this.POLL_INTERVAL_MS + jitter);
+  },
+
+  stop() {
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
   }
 };
 

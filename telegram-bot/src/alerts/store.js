@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const config = require('../config');
 
 const dbPath = path.resolve(config.DB_PATH);
@@ -21,8 +22,30 @@ if (fs.existsSync(dbPath)) {
   }
 }
 
-function save() {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+// Debounced async save to avoid blocking the event loop
+let saveTimer = null;
+let isSaving = false;
+
+function scheduleSave() {
+  if (saveTimer) return; // Already scheduled
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    _persistToDisk();
+  }, 500); // 500ms debounce
+}
+
+async function _persistToDisk() {
+  if (isSaving) return;
+  isSaving = true;
+  try {
+    const tmpPath = dbPath + '.tmp';
+    await fsPromises.writeFile(tmpPath, JSON.stringify(data, null, 2));
+    await fsPromises.rename(tmpPath, dbPath);
+  } catch (err) {
+    console.error('[Store] Failed to save:', err.message);
+  } finally {
+    isSaving = false;
+  }
 }
 
 module.exports = {
@@ -42,7 +65,7 @@ module.exports = {
       created_at: new Date().toISOString()
     };
     data.alerts.push(alert);
-    save();
+    scheduleSave();
     return alert;
   },
 
@@ -56,7 +79,7 @@ module.exports = {
     const alert = data.alerts.find(a => a.id === id && a.user_id === userId);
     if (!alert) return false;
     alert.is_active = 0;
-    save();
+    scheduleSave();
     return true;
   },
 
@@ -74,7 +97,7 @@ module.exports = {
     if (alert) {
       alert.is_active = 0;
       alert.triggered_at = new Date().toISOString();
-      save();
+      scheduleSave();
     }
   },
 
@@ -87,6 +110,16 @@ module.exports = {
   },
 
   close() {
-    save();
+    // Flush any pending save immediately on shutdown
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    // Synchronous final save for graceful shutdown
+    try {
+      fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    } catch (err) {
+      console.error('[Store] Failed to save on close:', err.message);
+    }
   }
 };

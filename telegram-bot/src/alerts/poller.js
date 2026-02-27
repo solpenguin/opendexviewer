@@ -4,8 +4,21 @@ const tokensApi = require('../api/tokens');
 const config = require('../config');
 
 let pollIntervalId = null;
+let isPolling = false;
 
 async function checkAlerts(bot) {
+  // Prevent overlapping poll cycles
+  if (isPolling) return;
+  isPolling = true;
+
+  try {
+    await _doCheckAlerts(bot);
+  } finally {
+    isPolling = false;
+  }
+}
+
+async function _doCheckAlerts(bot) {
   const distinctMints = alertStore.getDistinctMints();
   if (distinctMints.length === 0) return;
 
@@ -14,7 +27,7 @@ async function checkAlerts(bot) {
   // and returns reliable marketCap data, unlike the batch endpoint which may
   // return Helius-only metadata with marketCap: 0 after cache expires.
   const tokenData = {};
-  const CONCURRENCY = 5;
+  const CONCURRENCY = 20;
 
   for (let i = 0; i < distinctMints.length; i += CONCURRENCY) {
     const chunk = distinctMints.slice(i, i + CONCURRENCY);

@@ -108,9 +108,9 @@ services:
 
       # Worker performance tuning
       - key: WORKER_CONCURRENCY
-        value: "20"
+        value: "50"
       - key: WORKER_LIMITER_MAX
-        value: "20"
+        value: "50"
 
   # =====================================================
   # Telegram Bot (Long polling worker)

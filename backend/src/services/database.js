@@ -79,14 +79,14 @@ function createPool() {
   // Production: Higher pool for concurrent users
   // Development: Lower pool to avoid exhausting local DB
   const isProduction = process.env.NODE_ENV === 'production';
-  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 20 : 10);
+  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 50 : 10);
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
-    max: maxConnections,                    // Maximum connections in pool (100 for prod)
+    max: maxConnections,                    // Maximum connections in pool
     min: isProduction ? 10 : 2,             // Minimum idle connections
-    idleTimeoutMillis: 30000,               // Close idle connections after 30s
+    idleTimeoutMillis: 60000,               // Close idle connections after 60s
     connectionTimeoutMillis: 10000,         // Timeout for new connections
     statement_timeout: 30000,               // Kill queries running > 30s
     query_timeout: 30000,                   // Same as statement_timeout for safety

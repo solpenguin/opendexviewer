@@ -1,7 +1,18 @@
 const axios = require('axios');
+const { rateLimitedRequest } = require('./rateLimiter');
+const { circuitBreakers } = require('./circuitBreaker');
+const { httpsAgent } = require('./httpAgent');
 
 // Raydium API endpoints
 const RAYDIUM_API = 'https://api-v3.raydium.io';
+
+// Create axios instance with connection pooling
+const raydiumAxios = axios.create({
+  baseURL: RAYDIUM_API,
+  httpsAgent,
+  timeout: 15000,
+  headers: { 'Accept': 'application/json' }
+});
 
 // Cache for pool data
 const poolCache = new Map();
@@ -29,6 +40,15 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 /**
+ * Make a rate-limited, circuit-breaker-protected request to Raydium
+ */
+async function raydiumRequest(requestFn) {
+  return circuitBreakers.raydium.execute(() =>
+    rateLimitedRequest('raydium', requestFn)
+  );
+}
+
+/**
  * Get pool information for a token
  * @param {string} mintAddress - Token mint address
  * @returns {Promise<Array>} Pool data
@@ -42,17 +62,18 @@ async function getPoolsByToken(mintAddress) {
   }
 
   try {
-    // Search for pools containing this token
-    const response = await axios.get(`${RAYDIUM_API}/pools/info/mint`, {
-      params: {
-        mint1: mintAddress,
-        poolType: 'all',
-        poolSortField: 'volume24h',
-        sortType: 'desc',
-        pageSize: 10,
-        page: 1
-      }
-    });
+    const response = await raydiumRequest(() =>
+      raydiumAxios.get('/pools/info/mint', {
+        params: {
+          mint1: mintAddress,
+          poolType: 'all',
+          poolSortField: 'volume24h',
+          sortType: 'desc',
+          pageSize: 10,
+          page: 1
+        }
+      })
+    );
 
     const pools = response.data.data?.data || [];
 
@@ -99,11 +120,11 @@ async function getPoolInfo(poolId) {
   }
 
   try {
-    const response = await axios.get(`${RAYDIUM_API}/pools/info/ids`, {
-      params: {
-        ids: poolId
-      }
-    });
+    const response = await raydiumRequest(() =>
+      raydiumAxios.get('/pools/info/ids', {
+        params: { ids: poolId }
+      })
+    );
 
     const pool = response.data.data?.[0];
 
@@ -158,15 +179,17 @@ async function getTopPools(limit = 20) {
   }
 
   try {
-    const response = await axios.get(`${RAYDIUM_API}/pools/info/list`, {
-      params: {
-        poolType: 'all',
-        poolSortField: 'volume24h',
-        sortType: 'desc',
-        pageSize: limit,
-        page: 1
-      }
-    });
+    const response = await raydiumRequest(() =>
+      raydiumAxios.get('/pools/info/list', {
+        params: {
+          poolType: 'all',
+          poolSortField: 'volume24h',
+          sortType: 'desc',
+          pageSize: limit,
+          page: 1
+        }
+      })
+    );
 
     const pools = response.data.data?.data || [];
 
@@ -204,15 +227,17 @@ async function getTopPools(limit = 20) {
  */
 async function getPairLiquidity(mintA, mintB) {
   try {
-    const response = await axios.get(`${RAYDIUM_API}/pools/info/mint`, {
-      params: {
-        mint1: mintA,
-        mint2: mintB,
-        poolType: 'all',
-        pageSize: 5,
-        page: 1
-      }
-    });
+    const response = await raydiumRequest(() =>
+      raydiumAxios.get('/pools/info/mint', {
+        params: {
+          mint1: mintA,
+          mint2: mintB,
+          poolType: 'all',
+          pageSize: 5,
+          page: 1
+        }
+      })
+    );
 
     const pools = response.data.data?.data || [];
 
@@ -248,14 +273,16 @@ async function getPairLiquidity(mintA, mintB) {
  */
 async function getSwapQuote(inputMint, outputMint, amount) {
   try {
-    const response = await axios.get(`${RAYDIUM_API}/compute/swap-base-in`, {
-      params: {
-        inputMint,
-        outputMint,
-        amount,
-        slippageBps: 50 // 0.5% slippage
-      }
-    });
+    const response = await raydiumRequest(() =>
+      raydiumAxios.get('/compute/swap-base-in', {
+        params: {
+          inputMint,
+          outputMint,
+          amount,
+          slippageBps: 50 // 0.5% slippage
+        }
+      })
+    );
 
     const data = response.data.data;
 
