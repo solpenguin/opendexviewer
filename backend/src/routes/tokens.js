@@ -1187,18 +1187,21 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
 
       const final = results.slice(0, 5);
 
-      // Enrich any results that are missing market data via a single batch call.
-      // Local DB tokens may lack data if they were stored before the schema migration
-      // or haven't been viewed recently.  Use OR so any missing field triggers enrichment.
-      const needsEnrichment = final.filter(t => !t.price || !t.marketCap || !t.volume24h);
-      if (needsEnrichment.length > 0) {
+      // Step 5a: Batch-enrich tokens missing name, symbol, or market data via
+      // getMultiTokenInfo (single batch call for up to 30 addresses).
+      const needsTokenData = final.filter(t =>
+        !t.name || !t.symbol || !t.price || !t.marketCap || !t.volume24h || !t.logoURI
+      );
+      if (needsTokenData.length > 0) {
         try {
           const enriched = await geckoService.getMultiTokenInfo(
-            needsEnrichment.map(t => t.address)
+            needsTokenData.map(t => t.address)
           );
-          for (const token of needsEnrichment) {
+          for (const token of needsTokenData) {
             const data = enriched[token.address];
             if (data) {
+              if (!token.name && data.name) token.name = data.name;
+              if (!token.symbol && data.symbol) token.symbol = data.symbol;
               if (!token.price && data.price) token.price = data.price;
               if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
               if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
@@ -1207,6 +1210,46 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
           }
         } catch (err) {
           // Non-critical — return results without enrichment
+        }
+      }
+
+      // Step 5b: Enrich tokens still missing pairCreatedAt (age) via pool data.
+      // getMultiTokenInfo is a token endpoint and doesn't return pool_created_at,
+      // so we need individual getTokenOverview calls (fetches top pool per token).
+      // Results are cached for an hour so this is a one-time cost per token.
+      const needsAge = final.filter(t => !t.pairCreatedAt);
+      if (needsAge.length > 0) {
+        try {
+          const overviewResults = await Promise.allSettled(
+            needsAge.map(t => geckoService.getTokenOverview(t.address))
+          );
+          for (let i = 0; i < needsAge.length; i++) {
+            const result = overviewResults[i];
+            if (result.status === 'fulfilled' && result.value) {
+              const overview = result.value;
+              if (!needsAge[i].pairCreatedAt && overview.pairCreatedAt) {
+                needsAge[i].pairCreatedAt = overview.pairCreatedAt;
+              }
+              // Also back-fill any still-missing data from pool data
+              if (!needsAge[i].name && overview.name && overview.name !== '???') {
+                needsAge[i].name = overview.name;
+              }
+              if (!needsAge[i].symbol && overview.symbol && overview.symbol !== '???') {
+                needsAge[i].symbol = overview.symbol;
+              }
+              if (!needsAge[i].price && overview.price) {
+                needsAge[i].price = overview.price;
+              }
+              if (!needsAge[i].marketCap && overview.marketCap) {
+                needsAge[i].marketCap = overview.marketCap;
+              }
+              if (!needsAge[i].volume24h && overview.volume24h) {
+                needsAge[i].volume24h = overview.volume24h;
+              }
+            }
+          }
+        } catch (err) {
+          // Non-critical — age data is supplementary
         }
       }
 
