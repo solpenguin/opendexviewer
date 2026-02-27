@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
-const { asyncHandler } = require('../middleware/validation');
+const { asyncHandler, requireDatabase } = require('../middleware/validation');
 const { defaultLimiter } = require('../middleware/rateLimit');
 
 /**
@@ -16,6 +16,7 @@ const { defaultLimiter } = require('../middleware/rateLimit');
  */
 router.get('/active',
   defaultLimiter,
+  requireDatabase,
   asyncHandler(async (req, res) => {
     const announcements = await db.getActiveAnnouncements();
     res.json({ announcements });
