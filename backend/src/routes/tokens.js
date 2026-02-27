@@ -770,7 +770,10 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
           symbol: tokenSymbol,
           decimals: helius.decimals || gecko.decimals || 9,
           logoUri: helius.logoUri || gecko.logoUri,
-          pairCreatedAt: gecko.pairCreatedAt || null
+          pairCreatedAt: gecko.pairCreatedAt || null,
+          price: gecko.price || null,
+          marketCap: gecko.marketCap || gecko.fdv || null,
+          volume24h: gecko.volume24h || null
         }).catch(() => { /* Privacy: Don't log error details */ });
       }
 
@@ -1176,31 +1179,9 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
         }
       }
 
-      const finalResults = results.slice(0, 5);
-
-      // Enrich with market data (price, mcap, volume) via single batch API call
-      if (finalResults.length > 0) {
-        try {
-          const addresses = finalResults.map(r => r.address);
-          const marketData = await geckoService.getMultiTokenInfo(addresses);
-
-          for (const token of finalResults) {
-            const data = marketData[token.address];
-            if (data) {
-              token.price = data.price || null;
-              token.marketCap = data.marketCap || null;
-              token.volume24h = data.volume24h || null;
-              if (!token.logoURI && data.logoUri) {
-                token.logoURI = data.logoUri;
-              }
-            }
-          }
-        } catch (err) {
-          // Non-critical enrichment — return results without market data
-        }
-      }
-
-      return finalResults;
+      // Market data (price, mcap, volume) comes from the tokens table directly
+      // — populated whenever a token is viewed via GET /:mint
+      return results.slice(0, 5);
     }, TTL.HOUR);
 
     res.json(result);
