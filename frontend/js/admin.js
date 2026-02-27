@@ -165,6 +165,29 @@ const adminApi = {
     return this.request(`/admin/announcements/${id}`, {
       method: 'DELETE'
     });
+  },
+
+  // Bug Reports
+  async getBugReports(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/api/bug-reports/admin${query ? `?${query}` : ''}`);
+  },
+
+  async getBugReport(id) {
+    return this.request(`/api/bug-reports/admin/${id}`);
+  },
+
+  async updateBugReport(id, data) {
+    return this.request(`/api/bug-reports/admin/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async deleteBugReport(id) {
+    return this.request(`/api/bug-reports/admin/${id}`, {
+      method: 'DELETE'
+    });
   }
 };
 
@@ -174,7 +197,8 @@ const adminPanel = {
   pagination: {
     submissions: { page: 1, limit: 20, total: 0 },
     apikeys: { page: 1, limit: 20, total: 0 },
-    tokens: { page: 1, limit: 20, total: 0 }
+    tokens: { page: 1, limit: 20, total: 0 },
+    bugreports: { page: 1, limit: 20, total: 0 }
   },
 
   // Initialize
@@ -237,10 +261,18 @@ const adminPanel = {
       this.loadSubmissions();
     });
 
+    // Bug report refresh and filter
+    document.getElementById('refresh-bugreports')?.addEventListener('click', () => this.loadBugReports());
+    document.getElementById('bugreport-filter')?.addEventListener('change', () => {
+      this.pagination.bugreports.page = 1;
+      this.loadBugReports();
+    });
+
     // Pagination
     this.bindPagination('submissions');
     this.bindPagination('apikeys');
     this.bindPagination('tokens');
+    this.bindPagination('bugreports');
 
     // Modal
     document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.hideModal());
@@ -281,6 +313,9 @@ const adminPanel = {
         break;
       case 'tokens':
         this.loadTokens();
+        break;
+      case 'bugreports':
+        this.loadBugReports();
         break;
     }
   },
@@ -360,6 +395,9 @@ const adminPanel = {
       case 'announcements':
         this.loadAnnouncements();
         break;
+      case 'bug-reports':
+        this.loadBugReports();
+        break;
     }
   },
 
@@ -386,6 +424,18 @@ const adminPanel = {
         pendingBadge.style.display = 'inline';
       } else {
         pendingBadge.style.display = 'none';
+      }
+
+      // Update bug reports stat and badge
+      document.getElementById('stat-bugreports').textContent = stats.bugReports || 0;
+      const bugBadge = document.getElementById('bugreports-badge');
+      if (bugBadge) {
+        if (stats.bugReports > 0) {
+          bugBadge.textContent = stats.bugReports;
+          bugBadge.style.display = 'inline';
+        } else {
+          bugBadge.style.display = 'none';
+        }
       }
     } catch (error) {
       console.error('Failed to load stats:', error);
@@ -1070,6 +1120,186 @@ const adminPanel = {
     } finally {
       btn.disabled = false;
       btn.innerHTML = originalHtml;
+    }
+  },
+
+  // ── Bug Reports ──────────────────────────────────────────────
+
+  async loadBugReports() {
+    const tbody = document.getElementById('bugreports-table');
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+      <tr class="loading-row">
+        <td colspan="7">
+          <div class="loading-state">
+            <div class="loading-spinner"></div>
+            <span>Loading bug reports...</span>
+          </div>
+        </td>
+      </tr>
+    `;
+
+    try {
+      const status = document.getElementById('bugreport-filter')?.value || '';
+      const { page, limit } = this.pagination.bugreports;
+      const offset = (page - 1) * limit;
+
+      const result = await adminApi.getBugReports({ status, limit, offset });
+      const { reports, total } = result.data;
+
+      this.pagination.bugreports.total = total;
+      this.updatePaginationUI('bugreports');
+
+      if (reports.length === 0) {
+        tbody.innerHTML = `
+          <tr class="empty-row">
+            <td colspan="7">No bug reports found</td>
+          </tr>
+        `;
+        return;
+      }
+
+      const categoryLabels = {
+        ui_bug: 'UI Bug',
+        data_error: 'Data Error',
+        broken_link: 'Broken Link',
+        performance: 'Performance',
+        feature_request: 'Feature Request',
+        other: 'Other'
+      };
+
+      tbody.innerHTML = reports.map(report => `
+        <tr>
+          <td>${report.id}</td>
+          <td><span class="type-badge">${this.escapeHtml(categoryLabels[report.category] || report.category)}</span></td>
+          <td class="bug-desc-cell" title="${this.escapeHtml(report.description)}">${this.escapeHtml(report.description.length > 80 ? report.description.slice(0, 80) + '...' : report.description)}</td>
+          <td class="content-url">${report.page_url && /^https?:\/\//i.test(report.page_url) ? `<a href="${this.escapeHtml(report.page_url)}" target="_blank" rel="noopener">${this.escapeHtml(report.page_url.replace(/^https?:\/\/[^/]+/, ''))}</a>` : this.escapeHtml(report.page_url || '-')}</td>
+          <td><span class="status-badge ${this.escapeHtml(report.status)}">${this.escapeHtml(report.status)}</span></td>
+          <td>${this.formatDate(report.created_at)}</td>
+          <td>
+            <div class="table-actions">
+              <button class="action-btn view" data-bug-id="${report.id}">View</button>
+              ${report.status === 'new' ? `<button class="action-btn approve" data-bug-id="${report.id}" data-bug-action="acknowledged">Ack</button>` : ''}
+              ${report.status !== 'resolved' ? `<button class="action-btn approve" data-bug-id="${report.id}" data-bug-action="resolved">Resolve</button>` : ''}
+              ${report.status !== 'dismissed' ? `<button class="action-btn reject" data-bug-id="${report.id}" data-bug-action="dismissed">Dismiss</button>` : ''}
+              <button class="action-btn delete" data-bug-id="${report.id}" data-bug-delete="true">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+      // Wire status action buttons
+      tbody.querySelectorAll('.action-btn[data-bug-action]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = parseInt(btn.dataset.bugId);
+          const action = btn.dataset.bugAction;
+          try {
+            await adminApi.updateBugReport(id, { status: action });
+            toast.success(`Bug report marked as ${action}`);
+            this.loadBugReports();
+          } catch (err) {
+            toast.error(`Failed: ${err.message}`);
+          }
+        });
+      });
+
+      // Wire view buttons
+      tbody.querySelectorAll('.action-btn.view[data-bug-id]').forEach(btn => {
+        btn.addEventListener('click', () => this.viewBugReport(parseInt(btn.dataset.bugId)));
+      });
+
+      // Wire delete buttons
+      tbody.querySelectorAll('.action-btn[data-bug-delete]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.bugId);
+          this.showConfirmModal(
+            'Delete Bug Report',
+            'Are you sure you want to permanently delete this bug report?',
+            async () => {
+              try {
+                await adminApi.deleteBugReport(id);
+                toast.success('Bug report deleted');
+                this.loadBugReports();
+              } catch (err) {
+                toast.error(`Failed: ${err.message}`);
+              }
+            }
+          );
+        });
+      });
+
+    } catch (error) {
+      console.error('Failed to load bug reports:', error);
+      tbody.innerHTML = `
+        <tr class="empty-row">
+          <td colspan="7">Failed to load bug reports: ${this.escapeHtml(error.message)}</td>
+        </tr>
+      `;
+    }
+  },
+
+  async viewBugReport(id) {
+    try {
+      const result = await adminApi.getBugReport(id);
+      const report = result.data.report;
+
+      const categoryLabels = {
+        ui_bug: 'UI Bug', data_error: 'Data Error', broken_link: 'Broken Link',
+        performance: 'Performance', feature_request: 'Feature Request', other: 'Other'
+      };
+
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-title').textContent = `Bug Report #${report.id}`;
+      document.getElementById('confirm-message').innerHTML = `
+        <div style="text-align: left; font-size: 0.875rem; line-height: 1.6;">
+          <p><strong>Category:</strong> ${this.escapeHtml(categoryLabels[report.category] || report.category)}</p>
+          <p><strong>Status:</strong> <span class="status-badge ${this.escapeHtml(report.status)}">${this.escapeHtml(report.status)}</span></p>
+          <p><strong>Page:</strong> ${report.page_url && /^https?:\/\//i.test(report.page_url) ? `<a href="${this.escapeHtml(report.page_url)}" target="_blank" rel="noopener">${this.escapeHtml(report.page_url)}</a>` : this.escapeHtml(report.page_url || 'N/A')}</p>
+          <p><strong>Contact:</strong> ${this.escapeHtml(report.contact_info || 'N/A')}</p>
+          <p><strong>Submitted:</strong> ${this.formatDate(report.created_at)}</p>
+          <hr style="border-color: var(--border-color); margin: 0.75rem 0;">
+          <p><strong>Description:</strong></p>
+          <p style="white-space: pre-wrap; color: var(--text-primary);">${this.escapeHtml(report.description)}</p>
+          ${report.admin_notes ? `<hr style="border-color: var(--border-color); margin: 0.75rem 0;"><p><strong>Admin Notes:</strong></p><p style="white-space: pre-wrap;">${this.escapeHtml(report.admin_notes)}</p>` : ''}
+        </div>
+      `;
+
+      // Show modal with just a Close button
+      const confirmBtn = document.getElementById('confirm-ok');
+      const cancelBtn = document.getElementById('confirm-cancel');
+      confirmBtn.textContent = 'Close';
+      confirmBtn.className = 'btn btn-ghost';
+      cancelBtn.style.display = 'none';
+
+      const restoreModal = () => {
+        const btn = document.getElementById('confirm-ok');
+        if (btn) {
+          btn.textContent = 'Confirm';
+          btn.className = 'btn btn-danger';
+        }
+        cancelBtn.style.display = '';
+      };
+
+      // Clone to remove old listeners
+      const newBtn = confirmBtn.cloneNode(true);
+      confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+      newBtn.id = 'confirm-ok';
+      newBtn.addEventListener('click', () => {
+        this.hideModal();
+        restoreModal();
+      });
+
+      // Also restore when backdrop/cancel closes the modal
+      const backdropHandler = () => {
+        restoreModal();
+        document.querySelector('.modal-backdrop')?.removeEventListener('click', backdropHandler);
+      };
+      document.querySelector('.modal-backdrop')?.addEventListener('click', backdropHandler);
+
+      modal.style.display = 'flex';
+    } catch (error) {
+      toast.error(`Failed to load report: ${error.message}`);
     }
   }
 };

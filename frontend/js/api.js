@@ -606,6 +606,16 @@ const api = {
     }
   },
 
+  // Bug report endpoints
+  bugReports: {
+    async submit(data) {
+      return api.request('/api/bug-reports', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+    }
+  },
+
   // API Key endpoints (Public API v1)
   apiKeys: {
     async register(wallet, name = null) {

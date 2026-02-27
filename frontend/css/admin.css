@@ -810,9 +810,33 @@
 }
 
 .status-badge.rejected,
-.status-badge.revoked {
+.status-badge.revoked,
+.status-badge.dismissed {
   background: var(--red-light);
   color: var(--red);
+}
+
+.status-badge.new {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.status-badge.acknowledged {
+  background: var(--yellow-light);
+  color: var(--yellow);
+}
+
+.status-badge.resolved {
+  background: var(--green-light);
+  color: var(--green);
+}
+
+/* Bug report description cell */
+.bug-desc-cell {
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Type Badges */

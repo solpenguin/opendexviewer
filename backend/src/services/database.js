@@ -316,6 +316,24 @@ async function initializeDatabase() {
       );
 
       CREATE INDEX IF NOT EXISTS idx_sentiment_votes_mint ON sentiment_votes(token_mint);
+
+      -- Bug reports table for user-submitted bug reports
+      CREATE TABLE IF NOT EXISTS bug_reports (
+        id SERIAL PRIMARY KEY,
+        category VARCHAR(30) NOT NULL CHECK (category IN ('ui_bug','data_error','broken_link','performance','feature_request','other')),
+        description TEXT NOT NULL,
+        contact_info VARCHAR(255),
+        page_url TEXT,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        status VARCHAR(20) DEFAULT 'new' CHECK (status IN ('new','acknowledged','resolved','dismissed')),
+        admin_notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
+      CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at DESC);
     `);
 
     isConnected = true;
@@ -1021,7 +1039,8 @@ async function getAdminStats() {
       (SELECT COUNT(*) FROM api_keys WHERE is_active = true) as active_api_keys,
       (SELECT COUNT(*) FROM watchlist) as watchlist_entries,
       (SELECT COUNT(*) FROM submissions WHERE created_at > NOW() - INTERVAL '24 hours') as recent_submissions,
-      (SELECT COUNT(*) FROM votes WHERE created_at > NOW() - INTERVAL '24 hours') as recent_votes
+      (SELECT COUNT(*) FROM votes WHERE created_at > NOW() - INTERVAL '24 hours') as recent_votes,
+      (SELECT COUNT(*) FROM bug_reports WHERE status = 'new') as new_bug_reports
   `);
 
   const row = combinedStats.rows[0];
@@ -1044,6 +1063,7 @@ async function getAdminStats() {
   stats.watchlistEntries = parseInt(row.watchlist_entries);
   stats.recentSubmissions = parseInt(row.recent_submissions);
   stats.recentVotes = parseInt(row.recent_votes);
+  stats.bugReports = parseInt(row.new_bug_reports);
 
   // Update cache
   adminStatsCache = {
@@ -1129,6 +1149,120 @@ async function deleteAnnouncement(id) {
     [id]
   );
   return result.rowCount > 0;
+}
+
+// ============================================================
+// Bug report operations
+// ============================================================
+
+async function createBugReport({ category, description, contactInfo, pageUrl, ipAddress, userAgent }) {
+  if (!pool) throw new Error('Database not available');
+  const result = await pool.query(
+    `INSERT INTO bug_reports (category, description, contact_info, page_url, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, category, description, contact_info, page_url, status, created_at`,
+    [category, description, contactInfo || null, pageUrl || null, ipAddress || null, userAgent || null]
+  );
+  return result.rows[0];
+}
+
+async function getAllBugReports({ status, limit = 50, offset = 0 } = {}) {
+  if (!pool) return { reports: [], total: 0 };
+
+  let whereClause = '';
+  const params = [];
+  let paramIdx = 1;
+
+  if (status && status !== 'all') {
+    whereClause = `WHERE status = $${paramIdx++}`;
+    params.push(status);
+  }
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*) FROM bug_reports ${whereClause}`,
+    params
+  );
+
+  const countParams = [...params];
+  countParams.push(Math.min(Math.max(1, parseInt(limit) || 50), 100));
+  countParams.push(Math.max(0, parseInt(offset) || 0));
+
+  const result = await pool.query(
+    `SELECT id, category, description, contact_info, page_url, status, admin_notes, created_at, updated_at
+     FROM bug_reports
+     ${whereClause}
+     ORDER BY created_at DESC
+     LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+    countParams
+  );
+
+  return {
+    reports: result.rows,
+    total: parseInt(countResult.rows[0].count)
+  };
+}
+
+async function getBugReport(id) {
+  if (!pool) return null;
+  const result = await pool.query(
+    `SELECT id, category, description, contact_info, page_url, ip_address, user_agent, status, admin_notes, created_at, updated_at
+     FROM bug_reports WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+async function updateBugReportStatus(id, { status, adminNotes }) {
+  if (!pool) throw new Error('Database not available');
+  const updates = [];
+  const params = [];
+  let idx = 1;
+
+  if (status !== undefined)     { updates.push(`status = $${idx++}`);      params.push(status); }
+  if (adminNotes !== undefined) { updates.push(`admin_notes = $${idx++}`); params.push(adminNotes); }
+
+  if (updates.length === 0) throw new Error('No fields to update');
+
+  updates.push('updated_at = NOW()');
+  params.push(id);
+
+  const result = await pool.query(
+    `UPDATE bug_reports SET ${updates.join(', ')}
+     WHERE id = $${idx}
+     RETURNING id, category, description, contact_info, page_url, status, admin_notes, created_at, updated_at`,
+    params
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteBugReport(id) {
+  if (!pool) throw new Error('Database not available');
+  const result = await pool.query(
+    `DELETE FROM bug_reports WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  return result.rowCount > 0;
+}
+
+async function getBugReportCounts() {
+  if (!pool) return { new: 0, acknowledged: 0, resolved: 0, dismissed: 0, total: 0 };
+  const result = await pool.query(`
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'new') as new_count,
+      COUNT(*) FILTER (WHERE status = 'acknowledged') as acknowledged_count,
+      COUNT(*) FILTER (WHERE status = 'resolved') as resolved_count,
+      COUNT(*) FILTER (WHERE status = 'dismissed') as dismissed_count,
+      COUNT(*) as total
+    FROM bug_reports
+  `);
+  const row = result.rows[0];
+  return {
+    new: parseInt(row.new_count),
+    acknowledged: parseInt(row.acknowledged_count),
+    resolved: parseInt(row.resolved_count),
+    dismissed: parseInt(row.dismissed_count),
+    total: parseInt(row.total)
+  };
 }
 
 // Get all submissions with pagination for admin
@@ -1962,6 +2096,13 @@ module.exports = {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  // Bug report operations
+  createBugReport,
+  getAllBugReports,
+  getBugReport,
+  updateBugReportStatus,
+  deleteBugReport,
+  getBugReportCounts,
   // Database schema management
   getDatabaseSchemaStatus,
   repairDatabaseSchema,

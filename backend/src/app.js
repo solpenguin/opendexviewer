@@ -17,6 +17,7 @@ const publicApiRoutes = require('./routes/publicApi');
 const adminRoutes = require('./routes/admin');
 const announcementRoutes = require('./routes/announcements');
 const sentimentRoutes = require('./routes/sentiment');
+const bugReportRoutes = require('./routes/bugReports');
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -261,6 +262,7 @@ app.use('/api/votes', voteRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/sentiment', sentimentRoutes);
+app.use('/api/bug-reports', bugReportRoutes);
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);
