@@ -8458,6 +8458,218 @@ body.landscape .hero h1 {
   padding: 0 1.5rem;
 }
 
+/* ==========================================
+   Top Tokens Highlight Cards
+   ========================================== */
+
+.top-tokens-section {
+  margin: 0 0 2rem;
+}
+
+.top-tokens-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.top-token-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  overflow: hidden;
+}
+
+.top-token-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  pointer-events: none;
+}
+
+.top-token-calls::before {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(124, 58, 237, 0.04));
+}
+
+.top-token-sentiment::before {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(59, 130, 246, 0.04));
+}
+
+.top-token-viewed::before {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(239, 68, 68, 0.04));
+}
+
+.top-token-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.top-token-card:hover::before {
+  opacity: 1;
+}
+
+.top-token-calls:hover {
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+}
+
+.top-token-sentiment:hover {
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
+}
+
+.top-token-viewed:hover {
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);
+}
+
+.top-token-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1rem;
+}
+
+.top-token-calls .top-token-label {
+  color: var(--accent-primary);
+}
+
+.top-token-sentiment .top-token-label {
+  color: var(--green);
+}
+
+.top-token-viewed .top-token-label {
+  color: var(--yellow);
+}
+
+.top-token-body {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 48px;
+}
+
+.top-token-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+}
+
+.top-token-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.top-token-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-token-symbol {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.top-token-metric {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.top-token-metric-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.top-token-calls .top-token-metric-value {
+  color: var(--accent-primary);
+}
+
+.top-token-sentiment .top-token-metric-value {
+  color: var(--green);
+}
+
+.top-token-sentiment .top-token-metric-value.negative {
+  color: var(--red);
+}
+
+.top-token-viewed .top-token-metric-value {
+  color: var(--yellow);
+}
+
+.top-token-metric-label {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.top-token-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+}
+
+.loading-spinner-sm {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.top-token-empty {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .top-tokens-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .top-tokens-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+  }
+
+  .top-token-card {
+    padding: 1rem;
+  }
+}
+
 .community-section {
   margin: 2rem 0 3rem;
 }

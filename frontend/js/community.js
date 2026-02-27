@@ -11,6 +11,7 @@ const communityPage = {
     this.bindTabs();
     this.bindPagination();
     this.loadData();
+    this.loadTopTokens();
 
     // Call Token button
     const callBtn = document.getElementById('call-token-btn');
@@ -49,6 +50,86 @@ const communityPage = {
     const next = document.getElementById('community-next');
     if (prev) prev.addEventListener('click', () => this.goToPage(this.currentPage - 1));
     if (next) next.addEventListener('click', () => this.goToPage(this.currentPage + 1));
+  },
+
+  async loadTopTokens() {
+    const fetchers = [
+      { id: 'top-called-card', fetch: () => api.tokens.leaderboardCalls({ limit: 1, offset: 0 }), metric: 'calls' },
+      { id: 'top-sentiment-card', fetch: () => api.tokens.leaderboardSentiment({ limit: 1, offset: 0 }), metric: 'sentiment' },
+      { id: 'top-viewed-card', fetch: () => api.tokens.leaderboardWatchlist({ limit: 1, offset: 0 }), metric: 'viewed' },
+    ];
+
+    fetchers.forEach(async ({ id, fetch, metric }) => {
+      const card = document.getElementById(id);
+      if (!card) return;
+
+      try {
+        const result = await fetch();
+        const token = result.tokens?.[0];
+        if (!token) {
+          this.renderTopTokenEmpty(card);
+          return;
+        }
+        this.renderTopTokenCard(card, token, metric);
+      } catch {
+        this.renderTopTokenEmpty(card);
+      }
+    });
+  },
+
+  renderTopTokenCard(card, token, metric) {
+    const address = token.mintAddress || token.address || '';
+    if (!address) { this.renderTopTokenEmpty(card); return; }
+
+    const defaultLogo = utils.getDefaultLogo();
+    const logo = this.escapeHtml(token.logoUri || token.logoURI || defaultLogo);
+    const name = this.escapeHtml(token.name || 'Unknown');
+    const symbol = this.escapeHtml(token.symbol || '???');
+
+    let metricValue, metricLabel;
+    if (metric === 'calls') {
+      metricValue = (token.callCount || 0).toLocaleString();
+      metricLabel = 'calls';
+    } else if (metric === 'sentiment') {
+      const score = token.sentimentScore || 0;
+      metricValue = (score > 0 ? '+' : '') + score;
+      metricLabel = 'score';
+    } else {
+      metricValue = (token.watchlistCount || 0).toLocaleString();
+      metricLabel = 'watchlists';
+    }
+
+    const negativeClass = metric === 'sentiment' && (token.sentimentScore || 0) < 0 ? ' negative' : '';
+
+    card.href = `token.html?mint=${encodeURIComponent(address)}`;
+
+    const body = card.querySelector('.top-token-body');
+    if (body) {
+      body.innerHTML = `
+        <img class="top-token-logo" src="${logo}" alt="${symbol}" id="${card.id}-logo">
+        <div class="top-token-info">
+          <span class="top-token-name">${name}</span>
+          <span class="top-token-symbol">${symbol}</span>
+        </div>
+        <div class="top-token-metric">
+          <span class="top-token-metric-value${negativeClass}">${metricValue}</span>
+          <span class="top-token-metric-label">${metricLabel}</span>
+        </div>
+      `;
+
+      const logoEl = document.getElementById(`${card.id}-logo`);
+      if (logoEl) {
+        logoEl.addEventListener('error', function() { this.src = defaultLogo; }, { once: true });
+      }
+    }
+  },
+
+  renderTopTokenEmpty(card) {
+    const body = card.querySelector('.top-token-body');
+    if (body) {
+      body.innerHTML = '<span class="top-token-empty">No data yet</span>';
+    }
+    card.removeAttribute('href');
   },
 
   async loadData() {
