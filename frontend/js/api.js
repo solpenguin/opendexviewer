@@ -477,6 +477,16 @@ const api = {
     invalidateCache(mint) {
       apiCache.clearPattern(`tokens:detail:${mint}`);
       apiCache.clearPattern(`tokens:submissions:${mint}`);
+    },
+
+    // Get similar tokens (anti-spoofing check)
+    async getSimilar(mint) {
+      return apiCache.getOrFetch(
+        `tokens:similar:${mint}`,
+        () => api.request(`/api/tokens/${mint}/similar`),
+        apiCache.TTL.tokenDetail,
+        true
+      );
     }
   },
 

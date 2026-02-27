@@ -58,7 +58,8 @@ const tokenDetail = {
         this.loadPools(),
         this.loadSubmissions(),
         voting.initForPage(), // Initialize voting (loads requirements & checks dev mode)
-        sentiment.loadForToken(this.mint) // Load community sentiment
+        sentiment.loadForToken(this.mint), // Load community sentiment
+        this.loadSimilarTokens() // Load similar tokens (anti-spoofing)
       ]);
 
       // Start price refresh and freshness timer
@@ -430,6 +431,59 @@ const tokenDetail = {
         emptyEl.textContent = 'Failed to load pool data.';
         emptyEl.style.display = 'block';
       }
+    }
+  },
+
+  // Load similar tokens (anti-spoofing section)
+  async loadSimilarTokens() {
+    const sectionEl = document.getElementById('similar-tokens-section');
+    const loadingEl = document.getElementById('similar-tokens-loading');
+    const listEl = document.getElementById('similar-tokens-list');
+
+    try {
+      const similar = await api.tokens.getSimilar(this.mint);
+
+      if (loadingEl) loadingEl.style.display = 'none';
+
+      if (!similar || similar.length === 0) {
+        // No similar tokens — keep section hidden
+        return;
+      }
+
+      // Show the section and render results
+      if (sectionEl) sectionEl.style.display = 'block';
+
+      if (listEl) {
+        listEl.style.display = 'flex';
+        listEl.innerHTML = similar.map(token => {
+          const logoSrc = token.logoURI || utils.getDefaultLogo();
+          const name = this.escapeHtml(token.name || 'Unknown');
+          const symbol = this.escapeHtml(token.symbol || '???');
+          const address = this.escapeHtml(token.address);
+          const truncAddr = utils.truncateAddress(token.address, 6, 4);
+          const scoreHtml = token.similarityScore !== null
+            ? `<span class="similar-token-score" title="Similarity score">${Math.round(token.similarityScore * 100)}% match</span>`
+            : `<span class="similar-token-score external" title="Found via search">External match</span>`;
+
+          return `
+            <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
+              <img src="${logoSrc}" alt="${name}" class="similar-token-logo"
+                   onerror="this.src='${utils.getDefaultLogo()}'">
+              <div class="similar-token-info">
+                <div class="similar-token-name-row">
+                  <span class="similar-token-name">${name}</span>
+                  <span class="similar-token-symbol">${symbol}</span>
+                </div>
+                <span class="similar-token-address" title="${address}">${truncAddr}</span>
+              </div>
+              ${scoreHtml}
+            </a>
+          `;
+        }).join('');
+      }
+    } catch (error) {
+      // Non-critical section — fail silently, keep hidden
+      if (loadingEl) loadingEl.style.display = 'none';
     }
   },
 

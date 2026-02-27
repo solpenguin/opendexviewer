@@ -1036,4 +1036,122 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
   }
 }));
 
+// GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
+// Anti-spoofing: helps users identify confusing or copycat token names
+router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+  const cacheKey = `similar:${mint}`;
+
+  try {
+    const result = await cache.getOrSet(cacheKey, async () => {
+      // Resolve the current token's name and symbol
+      let tokenName = null;
+      let tokenSymbol = null;
+
+      // Check token info cache first
+      const tokenCacheKey = keys.tokenInfo(mint);
+      const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+      if (cachedMeta && cachedMeta.value) {
+        tokenName = cachedMeta.value.name;
+        tokenSymbol = cachedMeta.value.symbol;
+      }
+
+      // Fallback to local database
+      if (!tokenName) {
+        const localToken = await db.getToken(mint);
+        if (localToken) {
+          tokenName = localToken.name;
+          tokenSymbol = localToken.symbol;
+        }
+      }
+
+      // Fallback to GeckoTerminal
+      if (!tokenName) {
+        try {
+          const geckoInfo = await geckoService.getTokenInfo(mint);
+          if (geckoInfo) {
+            tokenName = geckoInfo.name;
+            tokenSymbol = geckoInfo.symbol;
+          }
+        } catch (err) {
+          // Non-critical
+        }
+      }
+
+      if (!tokenName && !tokenSymbol) {
+        return [];
+      }
+
+      // Step 1: Query local database using pg_trgm similarity
+      let results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 5);
+
+      // Step 2: If fewer than 5 results, supplement with GeckoTerminal search
+      if (results.length < 5 && tokenName) {
+        try {
+          const geckoResults = await geckoService.searchTokens(tokenName, 10);
+          const existingAddresses = new Set(results.map(r => r.address));
+          existingAddresses.add(mint);
+
+          for (const token of geckoResults) {
+            if (results.length >= 5) break;
+            const addr = token.address || token.mintAddress;
+            if (!addr || existingAddresses.has(addr)) continue;
+            existingAddresses.add(addr);
+
+            results.push({
+              address: addr,
+              name: token.name,
+              symbol: token.symbol,
+              decimals: token.decimals || 9,
+              logoURI: token.logoUri || token.logoURI || null,
+              similarityScore: null,
+              nameSimilarity: null,
+              symbolSimilarity: null,
+              source: 'external'
+            });
+          }
+        } catch (err) {
+          // GeckoTerminal search failed - return what we have
+        }
+      }
+
+      // Step 3: If still fewer than 5, search by symbol too
+      if (results.length < 5 && tokenSymbol && tokenSymbol !== tokenName) {
+        try {
+          const symbolResults = await geckoService.searchTokens(tokenSymbol, 10);
+          const existingAddresses = new Set(results.map(r => r.address));
+          existingAddresses.add(mint);
+
+          for (const token of symbolResults) {
+            if (results.length >= 5) break;
+            const addr = token.address || token.mintAddress;
+            if (!addr || existingAddresses.has(addr)) continue;
+            existingAddresses.add(addr);
+
+            results.push({
+              address: addr,
+              name: token.name,
+              symbol: token.symbol,
+              decimals: token.decimals || 9,
+              logoURI: token.logoUri || token.logoURI || null,
+              similarityScore: null,
+              nameSimilarity: null,
+              symbolSimilarity: null,
+              source: 'external'
+            });
+          }
+        } catch (err) {
+          // Non-critical
+        }
+      }
+
+      return results.slice(0, 5);
+    }, TTL.HOUR);
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch similar tokens' });
+  }
+}));
+
 module.exports = router;

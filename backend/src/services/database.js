@@ -444,6 +444,44 @@ async function searchTokens(query, limit = 10) {
   }));
 }
 
+// Find tokens with similar names or symbols using pg_trgm similarity scoring
+// Used for anti-spoofing: helps users identify confusing or copycat token names
+async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
+  if (!pool || (!name && !symbol)) return [];
+
+  const safeName = (name || '').slice(0, 100).toLowerCase();
+  const safeSymbol = (symbol || '').slice(0, 20).toLowerCase();
+
+  // Combined similarity: 40% name weight + 60% symbol weight
+  // Symbol weighted higher because symbol spoofing is more deceptive (what traders see in order books)
+  // Minimum threshold of 0.15 on either name or symbol prevents irrelevant noise
+  const result = await pool.query(
+    `SELECT
+       mint_address, name, symbol, decimals, logo_uri,
+       similarity(LOWER(name), $1) AS name_sim,
+       similarity(LOWER(symbol), $2) AS symbol_sim,
+       (similarity(LOWER(name), $1) * 0.4 + similarity(LOWER(symbol), $2) * 0.6) AS combined_score
+     FROM tokens
+     WHERE mint_address != $3
+       AND (similarity(LOWER(name), $1) > 0.15 OR similarity(LOWER(symbol), $2) > 0.15)
+     ORDER BY combined_score DESC
+     LIMIT $4`,
+    [safeName, safeSymbol, mintAddress, limit]
+  );
+
+  return result.rows.map(row => ({
+    address: row.mint_address,
+    name: row.name,
+    symbol: row.symbol,
+    decimals: row.decimals,
+    logoURI: row.logo_uri,
+    similarityScore: parseFloat(row.combined_score.toFixed(3)),
+    nameSimilarity: parseFloat(row.name_sim.toFixed(3)),
+    symbolSimilarity: parseFloat(row.symbol_sim.toFixed(3)),
+    source: 'local'
+  }));
+}
+
 // Submission operations
 // Uses transaction to atomically check for duplicates and create submission
 async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet }) {
@@ -2036,6 +2074,7 @@ module.exports = {
   getToken,
   getTokensBatch,
   searchTokens,
+  findSimilarTokens,
   createSubmission,
   getSubmission,
   getSubmissionsByToken,
