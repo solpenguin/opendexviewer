@@ -83,7 +83,7 @@ function createPool() {
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
     max: maxConnections,                    // Maximum connections in pool (100 for prod)
     min: isProduction ? 10 : 2,             // Minimum idle connections
     idleTimeoutMillis: 30000,               // Close idle connections after 30s
