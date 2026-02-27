@@ -29,5 +29,25 @@ module.exports = {
   async getSimilarTokens(mint) {
     const { data } = await client.get(`/api/tokens/${mint}/similar`);
     return data;
+  },
+
+  async leaderboardWatchlist(params = {}) {
+    const { data } = await client.get('/api/tokens/leaderboard/watchlist', { params });
+    return data;
+  },
+
+  async leaderboardSentiment(params = {}) {
+    const { data } = await client.get('/api/tokens/leaderboard/sentiment', { params });
+    return data;
+  },
+
+  async leaderboardCalls(params = {}) {
+    const { data } = await client.get('/api/tokens/leaderboard/calls', { params });
+    return data;
+  },
+
+  async getSentiment(mint) {
+    const { data } = await client.get(`/api/sentiment/${mint}`);
+    return data;
   }
 };
