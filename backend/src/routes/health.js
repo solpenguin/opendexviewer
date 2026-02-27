@@ -243,10 +243,9 @@ router.get('/stats', async (req, res) => {
         idleConnections: dbHealth.idleConnections
       },
       features: {
-        redisEnabled: !!process.env.REDIS_URL,
-        birdeyeEnabled: !!process.env.BIRDEYE_API_KEY,
-        heliusEnabled: !!process.env.HELIUS_API_KEY,
-        jupiterEnabled: jupiterService.isConfigured()
+        communitySubmissions: true,
+        watchlist: true,
+        sentimentVoting: true
       }
     });
   } catch (error) {

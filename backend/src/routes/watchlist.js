@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
-const { asyncHandler, requireDatabase, validateWalletSignature } = require('../middleware/validation');
+const { asyncHandler, requireDatabase, validateWalletSignature, validateWatchlistSignature } = require('../middleware/validation');
 const { walletLimiter, strictLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
@@ -36,7 +36,7 @@ router.get('/:wallet', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/watchlist - Add token to watchlist
-router.post('/', walletLimiter, asyncHandler(async (req, res) => {
+router.post('/', walletLimiter, validateWatchlistSignature, asyncHandler(async (req, res) => {
   const { wallet, tokenMint } = req.body;
 
   if (!isValidWallet(wallet)) {
@@ -68,7 +68,7 @@ router.post('/', walletLimiter, asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/watchlist - Remove token from watchlist
-router.delete('/', walletLimiter, asyncHandler(async (req, res) => {
+router.delete('/', walletLimiter, validateWatchlistSignature, asyncHandler(async (req, res) => {
   const { wallet, tokenMint } = req.body;
 
   if (!isValidWallet(wallet)) {

@@ -622,8 +622,8 @@ const voting = {
     const tiers = this.requirements.voteWeightTiers || [];
     const tiersHtml = tiers.map(t =>
       `<div class="tier-row">
-        <span>≥${t.minPercent}% holdings</span>
-        <span>${t.weight}x vote weight</span>
+        <span>≥${parseFloat(t.minPercent) || 0}% holdings</span>
+        <span>${parseFloat(t.weight) || 0}x vote weight</span>
       </div>`
     ).join('');
 
@@ -646,7 +646,7 @@ const voting = {
           </div>
           <div class="voting-rule">
             <strong>Minimum Balance</strong>
-            <p>At least ${this.requirements.minVoteBalancePercent}% of supply required to vote.</p>
+            <p>At least ${parseFloat(this.requirements.minVoteBalancePercent) || 0}% of supply required to vote.</p>
           </div>
           <div class="voting-rule">
             <strong>Vote Weight</strong>
@@ -655,7 +655,7 @@ const voting = {
           </div>
           <div class="voting-rule">
             <strong>Auto-Moderation</strong>
-            <p>Submissions are auto-approved at +${this.requirements.approvalThreshold} weighted score (requires ~10% of supply) after ${this.requirements.minReviewMinutes} minute(s) of review.</p>
+            <p>Submissions are auto-approved at +${parseInt(this.requirements.approvalThreshold) || 0} weighted score (requires ~10% of supply) after ${parseInt(this.requirements.minReviewMinutes) || 0} minute(s) of review.</p>
           </div>
         </div>
         <div class="voting-modal-actions">

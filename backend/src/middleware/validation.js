@@ -573,16 +573,18 @@ function validateWalletSignature(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for votes
- * Signature is OPTIONAL - if provided, it will be validated
- * Connected wallet already proves ownership, so signature is not required
+ * Signature is REQUIRED to prove wallet ownership
  */
 function validateVoteSignature(req, res, next) {
   const { submissionId, voterWallet, voteType, signature, signatureTimestamp } = req.body;
 
-  // Signature is optional - if not provided, skip validation
-  // Connected wallet already proves ownership
+  // Signature is REQUIRED to prove wallet ownership
   if (!signature || !signatureTimestamp) {
-    return next();
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
   }
 
   // Validate signature timestamp (must be within expiry window)
@@ -685,13 +687,13 @@ function validateBatchVotes(req, res, next) {
     const submissionId = parseInt(vote.submissionId);
     if (isNaN(submissionId) || submissionId < 1) {
       return res.status(400).json({
-        error: `Invalid submission ID: ${vote.submissionId}`
+        error: 'Invalid submission ID in batch'
       });
     }
 
     if (!['up', 'down'].includes(vote.voteType)) {
       return res.status(400).json({
-        error: `Invalid vote type: ${vote.voteType}`,
+        error: 'Invalid vote type in batch',
         validTypes: ['up', 'down']
       });
     }
@@ -699,7 +701,7 @@ function validateBatchVotes(req, res, next) {
     // Check for duplicate submission IDs in batch
     if (seenIds.has(submissionId)) {
       return res.status(400).json({
-        error: `Duplicate submission ID in batch: ${submissionId}`
+        error: 'Duplicate submission ID in batch'
       });
     }
     seenIds.add(submissionId);
@@ -713,16 +715,18 @@ function validateBatchVotes(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for batch votes
- * Signature is OPTIONAL - if provided, it will be validated
- * Connected wallet already proves ownership, so signature is not required
+ * Signature is REQUIRED to prove wallet ownership
  */
 function validateBatchVoteSignature(req, res, next) {
   const { votes, voterWallet, signature, signatureTimestamp } = req.body;
 
-  // Signature is optional - if not provided, skip validation
-  // Connected wallet already proves ownership
+  // Signature is REQUIRED to prove wallet ownership
   if (!signature || !signatureTimestamp) {
-    return next();
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
   }
 
   // Validate signature timestamp (must be within expiry window)
@@ -781,16 +785,18 @@ function validateBatchVoteSignature(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for submissions
- * Signature is OPTIONAL - if provided, it will be validated
- * Connected wallet already proves ownership, so signature is not required
+ * Signature is REQUIRED to prove wallet ownership
  */
 function validateSubmissionSignature(req, res, next) {
   const { tokenMint, submissionType, submitterWallet, signature, signatureTimestamp } = req.body;
 
-  // Signature is optional - if not provided, skip validation
-  // Connected wallet already proves ownership
+  // Signature is REQUIRED to prove wallet ownership
   if (!signature || !signatureTimestamp) {
-    return next();
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
   }
 
   // Validate submitter wallet format
@@ -973,16 +979,18 @@ function validateBatchSubmissions(req, res, next) {
 
 /**
  * Middleware to validate wallet signature for batch submissions
- * Signature is OPTIONAL - if provided, it will be validated
- * Connected wallet already proves ownership, so signature is not required
+ * Signature is REQUIRED to prove wallet ownership
  */
 function validateBatchSubmissionSignature(req, res, next) {
   const { tokenMint, submissions, submitterWallet, signature, signatureTimestamp } = req.body;
 
-  // Signature is optional - if not provided, skip validation
-  // Connected wallet already proves ownership
+  // Signature is REQUIRED to prove wallet ownership
   if (!signature || !signatureTimestamp) {
-    return next();
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
   }
 
   // Validate signature timestamp (must be within expiry window)
@@ -1039,6 +1047,189 @@ function validateBatchSubmissionSignature(req, res, next) {
   }
 
   // Signature is valid - proceed
+  next();
+}
+
+/**
+ * Create signature message for watchlist operations
+ * @param {string} action - 'add' or 'remove'
+ * @param {string} wallet - The wallet address
+ * @param {string} tokenMint - The token mint address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createWatchlistSignatureMessage(action, wallet, tokenMint, timestamp) {
+  return `OpenDex Watchlist: ${action} ${tokenMint} for ${wallet} at ${timestamp}`;
+}
+
+/**
+ * Create signature message for sentiment votes
+ * @param {string} sentiment - 'bullish' or 'bearish'
+ * @param {string} mint - The token mint address
+ * @param {string} wallet - The voter wallet address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createSentimentSignatureMessage(sentiment, mint, wallet, timestamp) {
+  return `OpenDex Sentiment: ${sentiment} on ${mint} for ${wallet} at ${timestamp}`;
+}
+
+/**
+ * Create signature message for API key registration
+ * @param {string} wallet - The wallet address
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {string} The message to sign
+ */
+function createApiKeySignatureMessage(wallet, timestamp) {
+  return `OpenDex API Key: register for ${wallet} at ${timestamp}`;
+}
+
+/**
+ * Middleware to validate wallet signature for watchlist operations
+ * Signature is REQUIRED to prove wallet ownership
+ */
+function validateWatchlistSignature(req, res, next) {
+  const { wallet, signature, signatureTimestamp } = req.body;
+
+  if (!signature || !signatureTimestamp) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  if (!wallet || !SOLANA_ADDRESS_REGEX.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({ error: 'Signature expired', message: 'Please sign a fresh request', code: 'SIGNATURE_EXPIRED' });
+  }
+
+  if (timestamp > now + 10000) {
+    return res.status(400).json({ error: 'Invalid timestamp', message: 'Signature timestamp is in the future', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({ error: 'Invalid signature format', code: 'INVALID_SIGNATURE_FORMAT' });
+  }
+
+  const tokenMint = req.body.tokenMint || '';
+  const action = req.method === 'DELETE' ? 'remove' : 'add';
+  const expectedMessage = createWatchlistSignatureMessage(action, wallet, tokenMint, timestamp);
+
+  const isValid = verifyWalletSignature(expectedMessage, signature, wallet);
+
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
+  }
+
+  next();
+}
+
+/**
+ * Middleware to validate wallet signature for sentiment votes
+ * Signature is REQUIRED to prove wallet ownership
+ */
+function validateSentimentSignature(req, res, next) {
+  const { voterWallet, sentiment, signature, signatureTimestamp } = req.body;
+
+  if (!signature || !signatureTimestamp) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  if (!voterWallet || !SOLANA_ADDRESS_REGEX.test(voterWallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({ error: 'Signature expired', message: 'Please sign a fresh request', code: 'SIGNATURE_EXPIRED' });
+  }
+
+  if (timestamp > now + 10000) {
+    return res.status(400).json({ error: 'Invalid timestamp', message: 'Signature timestamp is in the future', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({ error: 'Invalid signature format', code: 'INVALID_SIGNATURE_FORMAT' });
+  }
+
+  const mint = req.params.mint || '';
+  const expectedMessage = createSentimentSignatureMessage(sentiment, mint, voterWallet, timestamp);
+
+  const isValid = verifyWalletSignature(expectedMessage, signature, voterWallet);
+
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
+  }
+
+  next();
+}
+
+/**
+ * Middleware to validate wallet signature for API key registration
+ * Signature is REQUIRED to prove wallet ownership
+ */
+function validateApiKeySignature(req, res, next) {
+  const { wallet, signature, signatureTimestamp } = req.body;
+
+  if (!signature || !signatureTimestamp) {
+    return res.status(400).json({
+      error: 'Signature required',
+      message: 'Please sign the request with your wallet to prove ownership',
+      code: 'SIGNATURE_REQUIRED'
+    });
+  }
+
+  if (!wallet || !SOLANA_ADDRESS_REGEX.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const now = Date.now();
+  const timestamp = parseInt(signatureTimestamp);
+
+  if (isNaN(timestamp)) {
+    return res.status(400).json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
+    return res.status(400).json({ error: 'Signature expired', message: 'Please sign a fresh request', code: 'SIGNATURE_EXPIRED' });
+  }
+
+  if (timestamp > now + 10000) {
+    return res.status(400).json({ error: 'Invalid timestamp', message: 'Signature timestamp is in the future', code: 'INVALID_TIMESTAMP' });
+  }
+
+  if (!Array.isArray(signature) || signature.length !== 64) {
+    return res.status(400).json({ error: 'Invalid signature format', code: 'INVALID_SIGNATURE_FORMAT' });
+  }
+
+  const expectedMessage = createApiKeySignatureMessage(wallet, timestamp);
+  const isValid = verifyWalletSignature(expectedMessage, signature, wallet);
+
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
+  }
+
   next();
 }
 
@@ -1174,6 +1365,12 @@ module.exports = {
   createSubmissionSignatureMessage,
   createBatchSubmissionSignatureMessage,
   createDataDeletionSignatureMessage,
+  createWatchlistSignatureMessage,
+  createSentimentSignatureMessage,
+  createApiKeySignatureMessage,
+  validateWatchlistSignature,
+  validateSentimentSignature,
+  validateApiKeySignature,
   SIGNATURE_EXPIRY_MS,
   // Admin functions
   generateAdminSessionToken,

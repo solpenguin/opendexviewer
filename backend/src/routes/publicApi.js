@@ -9,6 +9,7 @@ const db = require('../services/database');
 const {
   validateMint,
   validateApiKey,
+  validateApiKeySignature,
   generateApiKey,
   hashApiKey,
   asyncHandler,
@@ -149,7 +150,7 @@ router.get('/community/batch',
       if (!SOLANA_ADDRESS_REGEX.test(mint)) {
         return res.status(400).json({
           success: false,
-          error: `Invalid token address: ${mint}`
+          error: 'Invalid token address in batch'
         });
       }
     }
@@ -203,6 +204,7 @@ router.get('/community/batch',
 router.post('/keys/register',
   strictLimiter,
   requireDatabase,
+  validateApiKeySignature,
   asyncHandler(async (req, res) => {
     const { wallet, name } = req.body;
 
@@ -236,7 +238,7 @@ router.post('/keys/register',
 
     // Store in database (including full key for later retrieval)
     const sanitizedName = name ? name.slice(0, 100).replace(/[<>]/g, '') : null;
-    const created = await db.createApiKey(wallet, hash, prefix, sanitizedName, key);
+    const created = await db.createApiKey(wallet, hash, prefix, sanitizedName);
 
     if (!created) {
       return res.status(500).json({

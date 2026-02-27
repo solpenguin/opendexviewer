@@ -1019,7 +1019,7 @@ const tokenDetail = {
       };
 
       linksContainer.innerHTML = Object.values(grouped).map(s => `
-        <a href="${this.escapeHtml(s.content_url)}" target="_blank" rel="noopener noreferrer" class="community-link-chip ${this.escapeHtml(s.submission_type)}">
+        <a href="${(s.content_url && (s.content_url.startsWith('https://') || s.content_url.startsWith('http://'))) ? this.escapeHtml(s.content_url) : '#'}" target="_blank" rel="noopener noreferrer" class="community-link-chip ${this.escapeHtml(s.submission_type)}">
           ${icons[s.submission_type] || ''}
           <span>${labels[s.submission_type] || this.escapeHtml(s.submission_type)}</span>
         </a>
@@ -1181,7 +1181,7 @@ const tokenDetail = {
         typeBadge.textContent = s.submission_type; // Safe: textContent escapes
 
         const link = document.createElement('a');
-        link.href = s.content_url;
+        link.href = (s.content_url && (s.content_url.startsWith('https://') || s.content_url.startsWith('http://'))) ? s.content_url : '#';
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.className = 'submission-url';

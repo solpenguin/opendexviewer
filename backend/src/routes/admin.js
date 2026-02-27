@@ -18,6 +18,21 @@ const {
 } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
 
+// Login attempt tracking for account lockout
+const loginAttempts = new Map();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+// Cleanup stale login attempt records every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of loginAttempts) {
+    if (now - data.lastAttempt > LOCKOUT_DURATION_MS) {
+      loginAttempts.delete(ip);
+    }
+  }
+}, 60 * 60 * 1000);
+
 // ==========================================
 // Authentication Endpoints
 // ==========================================
@@ -47,14 +62,32 @@ router.post('/login',
       });
     }
 
+    // Check account lockout
+    const clientIp = req.ip;
+    const attempts = loginAttempts.get(clientIp);
+    if (attempts && attempts.count >= MAX_LOGIN_ATTEMPTS && Date.now() - attempts.lastAttempt < LOCKOUT_DURATION_MS) {
+      const remainingMinutes = Math.ceil((LOCKOUT_DURATION_MS - (Date.now() - attempts.lastAttempt)) / 60000);
+      return res.status(429).json({
+        success: false,
+        error: `Too many failed attempts. Try again in ${remainingMinutes} minutes.`
+      });
+    }
+
     // Verify password (async - supports scrypt hash or legacy plaintext)
     if (!await verifyAdminPassword(password)) {
+      // Track failed attempt
+      const current = loginAttempts.get(clientIp) || { count: 0, lastAttempt: 0 };
+      loginAttempts.set(clientIp, { count: current.count + 1, lastAttempt: Date.now() });
+
       // Privacy: Don't log IP addresses
       return res.status(401).json({
         success: false,
         error: 'Invalid password'
       });
     }
+
+    // Clear login attempts on success
+    loginAttempts.delete(clientIp);
 
     // Generate session
     const sessionToken = generateAdminSessionToken();
@@ -89,8 +122,7 @@ router.post('/login',
       success: true,
       message: 'Login successful',
       data: {
-        expiresAt: expiresAt.toISOString(),
-        sessionToken // Also return token for non-cookie clients
+        expiresAt: expiresAt.toISOString()
       }
     });
   })
@@ -473,21 +505,6 @@ router.patch('/settings',
       data: {
         developmentMode: adminSettings.developmentMode
       }
-    });
-  })
-);
-
-/**
- * GET /admin/settings/development-mode
- * Public read endpoint — returns the current dev mode flag.
- * Any visitor can read this so voting.js / submit.js can show the dev-mode
- * banner and skip holder verification when the admin has enabled it.
- * Only the PATCH /admin/settings endpoint (admin-only) can change the value.
- */
-router.get('/settings/development-mode',
-  asyncHandler(async (req, res) => {
-    res.json({
-      developmentMode: adminSettings.developmentMode
     });
   })
 );

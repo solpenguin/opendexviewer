@@ -53,7 +53,7 @@ const adminApi = {
     });
     if (result.success && result.data?.sessionToken) {
       this.sessionToken = result.data.sessionToken;
-      localStorage.setItem('admin_session', result.data.sessionToken);
+      sessionStorage.setItem('admin_session', result.data.sessionToken);
     }
     return result;
   },
@@ -63,7 +63,7 @@ const adminApi = {
       method: 'POST'
     });
     this.sessionToken = null;
-    localStorage.removeItem('admin_session');
+    sessionStorage.removeItem('admin_session');
     return result;
   },
 
@@ -180,7 +180,7 @@ const adminPanel = {
   // Initialize
   async init() {
     // Check for stored session
-    const storedSession = localStorage.getItem('admin_session');
+    const storedSession = sessionStorage.getItem('admin_session');
     if (storedSession) {
       adminApi.sessionToken = storedSession;
       try {
@@ -189,7 +189,7 @@ const adminPanel = {
         this.loadDashboard();
       } catch (error) {
         // Session invalid, show login
-        localStorage.removeItem('admin_session');
+        sessionStorage.removeItem('admin_session');
         adminApi.sessionToken = null;
         this.showLogin();
       }
@@ -416,13 +416,13 @@ const adminPanel = {
 
     const rows = summary.map(s => `
       <tr>
-        <td class="perf-endpoint">${s.endpoint}</td>
-        <td class="perf-num">${s.count}${s.errors > 0 ? `<span class="perf-err"> ${s.errors}✗</span>` : ''}</td>
-        <td class="perf-num" style="color:${latColor(s.avg)}">${s.avg}</td>
-        <td class="perf-num" style="color:${latColor(s.p95)}">${s.p95}</td>
-        <td class="perf-num">${s.min}</td>
-        <td class="perf-num">${s.max}</td>
-        <td class="perf-num" style="color:${latColor(s.last)}">${s.last}</td>
+        <td class="perf-endpoint">${this.escapeHtml(String(s.endpoint))}</td>
+        <td class="perf-num">${parseInt(s.count) || 0}${s.errors > 0 ? `<span class="perf-err"> ${parseInt(s.errors) || 0}✗</span>` : ''}</td>
+        <td class="perf-num" style="color:${latColor(s.avg)}">${parseInt(s.avg) || 0}</td>
+        <td class="perf-num" style="color:${latColor(s.p95)}">${parseInt(s.p95) || 0}</td>
+        <td class="perf-num">${parseInt(s.min) || 0}</td>
+        <td class="perf-num">${parseInt(s.max) || 0}</td>
+        <td class="perf-num" style="color:${latColor(s.last)}">${parseInt(s.last) || 0}</td>
       </tr>`).join('');
 
     container.innerHTML = `
@@ -889,11 +889,11 @@ const adminPanel = {
                 <div class="issue-item ${issue.severity}">
                   <span class="issue-type">${this.escapeHtml(issue.type.replace(/_/g, ' '))}</span>
                   ${issue.constraint ? `<span class="issue-detail">Constraint: ${this.escapeHtml(issue.constraint)}</span>` : ''}
-                  ${issue.missingTypes ? `<span class="issue-detail">Missing types: ${issue.missingTypes.join(', ')}</span>` : ''}
+                  ${issue.missingTypes ? `<span class="issue-detail">Missing types: ${issue.missingTypes.map(t => this.escapeHtml(t)).join(', ')}</span>` : ''}
                   ${issue.table ? `<span class="issue-detail">Table: ${this.escapeHtml(issue.table)}</span>` : ''}
                   ${issue.column ? `<span class="issue-detail">Column: ${this.escapeHtml(issue.column)}</span>` : ''}
-                  ${issue.columns ? `<span class="issue-detail">Columns: ${issue.columns.join(', ')}</span>` : ''}
-                  <span class="issue-severity">${issue.severity}</span>
+                  ${issue.columns ? `<span class="issue-detail">Columns: ${issue.columns.map(c => this.escapeHtml(c)).join(', ')}</span>` : ''}
+                  <span class="issue-severity">${this.escapeHtml(String(issue.severity))}</span>
                 </div>
               `).join('')}
             </div>

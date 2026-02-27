@@ -83,6 +83,35 @@ const POOL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 const errorCache = new Map();
 const ERROR_CACHE_TTL = 60 * 1000;
 
+// Periodic cache cleanup for all local caches
+const MAX_POOL_ADDRESS_CACHE_SIZE = 2000;
+const MAX_ERROR_CACHE_SIZE = 500;
+
+setInterval(() => {
+  const now = Date.now();
+  // Clean pool address cache
+  for (const [key, entry] of poolAddressCache) {
+    if (now - entry.timestamp > POOL_CACHE_TTL) {
+      poolAddressCache.delete(key);
+    }
+  }
+  if (poolAddressCache.size > MAX_POOL_ADDRESS_CACHE_SIZE) {
+    const entries = [...poolAddressCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    for (const [key] of entries.slice(0, entries.length - MAX_POOL_ADDRESS_CACHE_SIZE)) {
+      poolAddressCache.delete(key);
+    }
+  }
+  // Clean error cache
+  for (const [key, entry] of errorCache) {
+    if (now - entry.timestamp > ERROR_CACHE_TTL) {
+      errorCache.delete(key);
+    }
+  }
+  if (errorCache.size > MAX_ERROR_CACHE_SIZE) {
+    errorCache.clear();
+  }
+}, 5 * 60 * 1000);
+
 /**
  * Execute a deduplicated request - if the same key is already in flight,
  * return the existing promise instead of making a new request

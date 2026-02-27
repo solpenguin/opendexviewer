@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
-const { asyncHandler, requireDatabase } = require('../middleware/validation');
+const { asyncHandler, requireDatabase, validateMint, validateSentimentSignature, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { defaultLimiter, walletLimiter } = require('../middleware/rateLimit');
 
 router.use(requireDatabase);
@@ -19,7 +19,7 @@ router.post('/bulk', defaultLimiter, asyncHandler(async (req, res) => {
 
 // GET /api/sentiment/:mint?wallet=xxx
 // Returns tally + optional user's current vote
-router.get('/:mint', defaultLimiter, asyncHandler(async (req, res) => {
+router.get('/:mint', defaultLimiter, validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { wallet } = req.query;
   const [tally, userVote] = await Promise.all([
@@ -32,12 +32,15 @@ router.get('/:mint', defaultLimiter, asyncHandler(async (req, res) => {
 // POST /api/sentiment/:mint
 // Body: { voterWallet, sentiment: 'bullish'|'bearish' }
 // Requires wallet connection; no holder check
-router.post('/:mint', walletLimiter, asyncHandler(async (req, res) => {
+router.post('/:mint', walletLimiter, validateMint, validateSentimentSignature, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { voterWallet, sentiment } = req.body;
 
   if (!voterWallet) {
     return res.status(400).json({ error: 'voterWallet required' });
+  }
+  if (!SOLANA_ADDRESS_REGEX.test(voterWallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address format' });
   }
   if (!['bullish', 'bearish'].includes(sentiment)) {
     return res.status(400).json({ error: 'sentiment must be bullish or bearish' });

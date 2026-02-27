@@ -7,6 +7,27 @@ const RAYDIUM_API = 'https://api-v3.raydium.io';
 const poolCache = new Map();
 const CACHE_DURATION = 60000; // 1 minute
 
+// Periodic cache cleanup - evict expired entries every 5 minutes
+const MAX_POOL_CACHE_SIZE = 1000;
+setInterval(() => {
+  const now = Date.now();
+  let evicted = 0;
+  for (const [key, entry] of poolCache) {
+    if (now - entry.expiry < 0 || now >= entry.expiry) {
+      poolCache.delete(key);
+      evicted++;
+    }
+  }
+  if (poolCache.size > MAX_POOL_CACHE_SIZE) {
+    const entries = [...poolCache.entries()].sort((a, b) => a[1].expiry - b[1].expiry);
+    const toRemove = entries.slice(0, entries.length - MAX_POOL_CACHE_SIZE);
+    for (const [key] of toRemove) {
+      poolCache.delete(key);
+      evicted++;
+    }
+  }
+}, 5 * 60 * 1000);
+
 /**
  * Get pool information for a token
  * @param {string} mintAddress - Token mint address

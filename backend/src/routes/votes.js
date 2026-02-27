@@ -175,9 +175,6 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
     // Privacy: Don't log error details - continue with null market cap (will use lowest threshold)
   }
 
-  // Set market cap context for auto-moderation threshold calculation
-  db.setModerationMarketCap(marketCap);
-
   // Check for existing vote
   const existingVote = await db.getVote(parsedId, voterWallet);
 
@@ -202,11 +199,11 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
 
     if (existingVote.vote_type === voteType) {
       // Same vote - remove it (toggle off)
-      await db.deleteVote(parsedId, voterWallet);
+      await db.deleteVote(parsedId, voterWallet, marketCap);
       result = { message: 'Vote removed', action: 'removed', voteWeight: 0 };
     } else {
       // Different vote - update it (with new weight based on current balance)
-      await db.updateVote(parsedId, voterWallet, voteType);
+      await db.updateVote(parsedId, voterWallet, voteType, marketCap);
       result = { message: 'Vote updated', action: 'updated', voteType, voteWeight };
     }
   } else {
@@ -310,8 +307,25 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
       // Check for existing vote
       const existingVote = await db.getVote(submissionId, voterWallet);
 
+      // Vote cooldown period (10 seconds) to prevent rapid vote flipping
+      const VOTE_COOLDOWN_MS = 10 * 1000;
+
       let result;
       if (existingVote) {
+        const lastVoteTime = new Date(existingVote.updated_at || existingVote.created_at).getTime();
+        const timeSinceLastVote = Date.now() - lastVoteTime;
+
+        if (timeSinceLastVote < VOTE_COOLDOWN_MS) {
+          const remainingSeconds = Math.ceil((VOTE_COOLDOWN_MS - timeSinceLastVote) / 1000);
+          errors.push({
+            submissionId,
+            success: false,
+            error: `Please wait ${remainingSeconds} seconds before changing your vote`,
+            code: 'VOTE_COOLDOWN'
+          });
+          continue;
+        }
+
         if (existingVote.vote_type === voteType) {
           // Same vote - remove it (toggle off)
           await db.deleteVote(submissionId, voterWallet);
@@ -505,7 +519,7 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
   for (const id of submissionIds) {
     const parsed = parseInt(id);
     if (isNaN(parsed) || parsed <= 0) {
-      return res.status(400).json({ error: `Invalid submission ID: ${id}` });
+      return res.status(400).json({ error: 'Invalid submission ID' });
     }
     parsedIds.push(parsed);
   }

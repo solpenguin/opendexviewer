@@ -79,11 +79,11 @@ function createPool() {
   // Production: Higher pool for concurrent users
   // Development: Lower pool to avoid exhausting local DB
   const isProduction = process.env.NODE_ENV === 'production';
-  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 100 : 20);
+  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 20 : 10);
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
+    ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
     max: maxConnections,                    // Maximum connections in pool (100 for prod)
     min: isProduction ? 10 : 2,             // Minimum idle connections
     idleTimeoutMillis: 30000,               // Close idle connections after 30s
@@ -103,6 +103,19 @@ if (pool) {
     console.error('Unexpected database pool error:', err.message);
     isConnected = false;
   });
+
+  // Periodically check connection recovery
+  setInterval(async () => {
+    if (!isConnected && pool) {
+      try {
+        await pool.query('SELECT 1');
+        isConnected = true;
+        console.log('[Database] Connection recovered');
+      } catch (_) {
+        // Still disconnected
+      }
+    }
+  }, 30000);
 }
 
 // Initialize database tables with retry logic
@@ -421,6 +434,7 @@ async function createSubmission({ tokenMint, submissionType, contentUrl, submitt
 }
 
 async function getSubmission(id) {
+  if (!pool) return null;
   const result = await pool.query(
     `SELECT s.*, vt.upvotes, vt.downvotes, vt.score
      FROM submissions s
@@ -432,6 +446,7 @@ async function getSubmission(id) {
 }
 
 async function getSubmissionsByToken(tokenMint, { type, status } = {}) {
+  if (!pool) return [];
   let query = `
     SELECT s.*, vt.upvotes, vt.downvotes, vt.score
     FROM submissions s
@@ -552,6 +567,7 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
 }
 
 async function getVote(submissionId, voterWallet) {
+  if (!pool) return null;
   const result = await pool.query(
     'SELECT * FROM votes WHERE submission_id = $1 AND voter_wallet = $2',
     [submissionId, voterWallet]
@@ -560,6 +576,7 @@ async function getVote(submissionId, voterWallet) {
 }
 
 async function getVotesBatch(submissionIds, voterWallet) {
+  if (!pool) return [];
   if (!submissionIds || submissionIds.length === 0) {
     return [];
   }
@@ -570,24 +587,27 @@ async function getVotesBatch(submissionIds, voterWallet) {
   return result.rows;
 }
 
-async function updateVote(submissionId, voterWallet, voteType) {
+async function updateVote(submissionId, voterWallet, voteType, marketCap = null) {
+  if (!pool) return;
   await pool.query(
     `UPDATE votes SET vote_type = $3, created_at = NOW()
      WHERE submission_id = $1 AND voter_wallet = $2`,
     [submissionId, voterWallet, voteType]
   );
-  await updateVoteTally(submissionId);
+  await updateVoteTally(submissionId, marketCap);
 }
 
-async function deleteVote(submissionId, voterWallet) {
+async function deleteVote(submissionId, voterWallet, marketCap = null) {
+  if (!pool) return;
   await pool.query(
     'DELETE FROM votes WHERE submission_id = $1 AND voter_wallet = $2',
     [submissionId, voterWallet]
   );
-  await updateVoteTally(submissionId);
+  await updateVoteTally(submissionId, marketCap);
 }
 
 async function getVoteTally(submissionId) {
+  if (!pool) return null;
   const result = await pool.query(
     'SELECT * FROM vote_tallies WHERE submission_id = $1',
     [submissionId]
@@ -595,14 +615,8 @@ async function getVoteTally(submissionId) {
   return result.rows[0];
 }
 
-// Market cap context for auto-moderation (set before vote operations)
-let _moderationMarketCap = null;
-
-function setModerationMarketCap(marketCap) {
-  _moderationMarketCap = marketCap;
-}
-
-async function updateVoteTally(submissionId) {
+async function updateVoteTally(submissionId, marketCap = null) {
+  if (!pool) return;
   // Update vote counts (now includes weighted score)
   const result = await pool.query(
     `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
@@ -627,10 +641,7 @@ async function updateVoteTally(submissionId) {
   // Auto-approve or auto-reject based on WEIGHTED score
   // Uses market cap from context for tiered thresholds
   const weightedScore = parseFloat(result.rows[0]?.weighted_score) || 0;
-  await checkAutoModeration(submissionId, weightedScore, _moderationMarketCap);
-
-  // Clear market cap context after use
-  _moderationMarketCap = null;
+  await checkAutoModeration(submissionId, weightedScore, marketCap);
 }
 
 // Auto-moderation based on weighted vote score
@@ -694,6 +705,7 @@ async function updateSubmissionStatus(submissionId, status) {
 
 // Get submissions by wallet
 async function getSubmissionsByWallet(wallet) {
+  if (!pool) return [];
   const result = await pool.query(
     `SELECT s.*, vt.upvotes, vt.downvotes, vt.score
      FROM submissions s
@@ -707,6 +719,7 @@ async function getSubmissionsByWallet(wallet) {
 
 // Get pending submissions (for moderation)
 async function getPendingSubmissions(limit = 50) {
+  if (!pool) return [];
   const result = await pool.query(
     `SELECT s.*, vt.upvotes, vt.downvotes, vt.score
      FROM submissions s
@@ -807,15 +820,15 @@ async function getWatchlistCount(walletAddress) {
 // ==========================================
 
 // Create a new API key for a wallet (one per wallet)
-async function createApiKey(ownerWallet, keyHash, keyPrefix, name = null, fullKey = null) {
+async function createApiKey(ownerWallet, keyHash, keyPrefix, name = null) {
   if (!pool) return null;
 
   const result = await pool.query(
-    `INSERT INTO api_keys (owner_wallet, key_hash, key_prefix, full_key, name)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO api_keys (owner_wallet, key_hash, key_prefix, name)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (owner_wallet) DO NOTHING
-     RETURNING id, key_prefix, full_key, owner_wallet, name, created_at, is_active`,
-    [ownerWallet, keyHash, keyPrefix, fullKey, name]
+     RETURNING id, key_prefix, owner_wallet, name, created_at, is_active`,
+    [ownerWallet, keyHash, keyPrefix, name]
   );
   return result.rows[0];
 }
@@ -825,7 +838,7 @@ async function getApiKeyByHash(keyHash) {
   if (!pool) return null;
 
   const result = await pool.query(
-    `SELECT id, key_prefix, full_key, owner_wallet, name, created_at, last_used_at, request_count, is_active
+    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
      FROM api_keys WHERE key_hash = $1`,
     [keyHash]
   );
@@ -837,7 +850,7 @@ async function getApiKeyByWallet(ownerWallet) {
   if (!pool) return null;
 
   const result = await pool.query(
-    `SELECT id, key_prefix, full_key, owner_wallet, name, created_at, last_used_at, request_count, is_active
+    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
      FROM api_keys WHERE owner_wallet = $1`,
     [ownerWallet]
   );
@@ -1341,6 +1354,9 @@ async function deleteUserData(walletAddress) {
 
     await client.query('COMMIT');
 
+    // Invalidate admin stats cache after data deletion
+    invalidateAdminStatsCache();
+
     return {
       success: true,
       deleted: counts,
@@ -1686,6 +1702,7 @@ if (process.env.DATABASE_URL) {
 // =====================================================
 
 async function getSentimentVote(tokenMint, voterWallet) {
+  if (!pool) return null;
   const result = await pool.query(
     'SELECT sentiment FROM sentiment_votes WHERE token_mint = $1 AND voter_wallet = $2',
     [tokenMint, voterWallet]
@@ -1694,6 +1711,7 @@ async function getSentimentVote(tokenMint, voterWallet) {
 }
 
 async function getSentimentTally(tokenMint) {
+  if (!pool) return { bullish: 0, bearish: 0, score: 0 };
   const result = await pool.query(
     'SELECT bullish, bearish, score FROM sentiment_tallies WHERE token_mint = $1',
     [tokenMint]
@@ -1702,6 +1720,7 @@ async function getSentimentTally(tokenMint) {
 }
 
 async function getSentimentBatch(tokenMints) {
+  if (!pool) return {};
   if (!tokenMints || tokenMints.length === 0) return {};
   const result = await pool.query(
     'SELECT token_mint, bullish, bearish, score FROM sentiment_tallies WHERE token_mint = ANY($1)',
@@ -1715,6 +1734,7 @@ async function getSentimentBatch(tokenMints) {
 }
 
 async function castSentimentVote(tokenMint, voterWallet, sentiment) {
+  if (!pool) throw new Error('Database not initialized');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1871,8 +1891,6 @@ module.exports = {
   getTokenViews,
   getTokenViewsBatch,
   getMostViewedTokens,
-  // Market cap moderation context
-  setModerationMarketCap,
   getApprovalThreshold,
   // GDPR data deletion
   deleteUserData,

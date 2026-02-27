@@ -35,7 +35,9 @@
       "Bash(__NEW_LINE_a3b0168d317209e9__ grep -n \"</header>\\\\|</body>\\\\|announcement\\\\|announcements\" \"c:/VS/OPENDEX/opendexviewer/frontend/$f.html\")",
       "Bash(__NEW_LINE_8e705657680404cb__ done)",
       "Bash(grep -v \"^ \\\\+//\")",
-      "Bash(find /c/VS/OPENDEX/opendexviewer/backend/src/services -type f -name \"*.js\" -exec wc -l {} +)"
+      "Bash(find /c/VS/OPENDEX/opendexviewer/backend/src/services -type f -name \"*.js\" -exec wc -l {} +)",
+      "Bash(ls -la /c/VS/OPENDEX/opendexviewer/backend/.env*)",
+      "Bash(ls -la /c/VS/OPENDEX/opendexviewer/telegram-bot/.env*)"
     ]
   }
 }

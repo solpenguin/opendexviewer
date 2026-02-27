@@ -231,26 +231,25 @@ app.use(express.json({ limit: '1mb' }));
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
 
-// Request logging (development)
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, res, next) => {
+// Request logging
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV !== 'production') {
     console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-    next();
-  });
-}
+  } else {
+    // Production: log errors and slow requests only (via response finish)
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (res.statusCode >= 400 || duration > 5000) {
+        console.log(`[${req.requestId}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+      }
+    });
+  }
+  next();
+});
 
 // Rate limiting for API routes
 app.use('/api/', defaultLimiter);
-
-// CORS debug endpoint - shows current CORS configuration (no auth required)
-app.get('/health/cors', (req, res) => {
-  res.json({
-    corsOrigins,
-    corsOriginEnv: process.env.CORS_ORIGIN || null,
-    nodeEnv: process.env.NODE_ENV,
-    requestOrigin: req.headers.origin || null
-  });
-});
 
 // Health check routes (no rate limiting)
 app.use('/health', healthRoutes);
@@ -303,6 +302,11 @@ app.use((err, req, res, next) => {
 
   // Log full error details server-side for debugging (with request ID for correlation)
   console.error(`[${timestamp}] [${requestId}] Error:`, err.stack || err.message);
+
+  // Prevent double-response if headers already sent
+  if (res.headersSent) {
+    return next(err);
+  }
 
   // SECURITY: Categorize errors with safe user-facing messages
   // Don't leak internal error details in production
@@ -379,8 +383,38 @@ async function gracefulShutdown(signal) {
     console.error('[Shutdown] Job queue shutdown error:', err.message);
   }
 
+  // Close database pool
+  try {
+    const dbPool = db.pool;
+    if (dbPool) {
+      await dbPool.end();
+      console.log('[Shutdown] Database pool closed');
+    }
+  } catch (err) {
+    console.error('[Shutdown] Database pool close error:', err.message);
+  }
+
+  // Destroy HTTP agents
+  try {
+    const { destroyAll } = require('./services/httpAgent');
+    destroyAll();
+    console.log('[Shutdown] HTTP agents destroyed');
+  } catch (err) {
+    console.error('[Shutdown] HTTP agent cleanup error:', err.message);
+  }
+
   process.exit(0);
 }
+
+// Process error handlers (prevent unhandled crashes)
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err.stack || err.message);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled rejection at:', promise, 'reason:', reason);
+});
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));

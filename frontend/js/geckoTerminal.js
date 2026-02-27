@@ -137,6 +137,8 @@ const directGecko = {
       // calls for the remainder of the session so there's no added latency.
       if (err instanceof TypeError || err.message === 'Failed to fetch') {
         this._available = false;
+        // Auto-recover after 60 seconds
+        setTimeout(() => { this._available = true; }, 60000);
       }
       throw err;
     }

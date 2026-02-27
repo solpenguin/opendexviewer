@@ -62,6 +62,33 @@ const cache = {
   CACHE_DURATION: 60000 // 1 minute
 };
 
+// Periodic cache cleanup - evict expired entries every 5 minutes
+const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000;
+const MAX_CACHE_SIZE = 5000;
+
+setInterval(() => {
+  const now = Date.now();
+  let evicted = 0;
+  for (const [key, entry] of cache.prices) {
+    if (now - entry.timestamp > cache.CACHE_DURATION) {
+      cache.prices.delete(key);
+      evicted++;
+    }
+  }
+  // Hard cap: if still too large, remove oldest entries
+  if (cache.prices.size > MAX_CACHE_SIZE) {
+    const entries = [...cache.prices.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
+    for (const [key] of toRemove) {
+      cache.prices.delete(key);
+      evicted++;
+    }
+  }
+  if (evicted > 0) {
+    console.log(`[Jupiter] Cache cleanup: evicted ${evicted} entries, ${cache.prices.size} remaining`);
+  }
+}, CACHE_CLEANUP_INTERVAL);
+
 /**
  * Search for tokens by symbol, name, or mint address
  * Uses Jupiter V2 search endpoint

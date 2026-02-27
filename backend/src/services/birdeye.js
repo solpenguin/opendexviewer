@@ -8,6 +8,30 @@ const BIRDEYE_API = 'https://public-api.birdeye.so';
 const historyCache = new Map();
 const CACHE_DURATION = 60000; // 1 minute
 
+// Periodic cache cleanup - evict expired entries every 5 minutes
+const MAX_HISTORY_CACHE_SIZE = 2000;
+setInterval(() => {
+  const now = Date.now();
+  let evicted = 0;
+  for (const [key, entry] of historyCache) {
+    if (now - entry.timestamp > CACHE_DURATION) {
+      historyCache.delete(key);
+      evicted++;
+    }
+  }
+  if (historyCache.size > MAX_HISTORY_CACHE_SIZE) {
+    const entries = [...historyCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toRemove = entries.slice(0, entries.length - MAX_HISTORY_CACHE_SIZE);
+    for (const [key] of toRemove) {
+      historyCache.delete(key);
+      evicted++;
+    }
+  }
+  if (evicted > 0) {
+    console.log(`[Birdeye] Cache cleanup: evicted ${evicted} entries, ${historyCache.size} remaining`);
+  }
+}, 5 * 60 * 1000);
+
 /**
  * Make a rate-limited request to Birdeye API
  * @param {Function} requestFn - Function that returns an axios promise
