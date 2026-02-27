@@ -123,6 +123,7 @@ router.post('/login',
       success: true,
       message: 'Login successful',
       data: {
+        sessionToken,
         expiresAt: expiresAt.toISOString()
       }
     });
