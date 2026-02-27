@@ -1881,6 +1881,13 @@ a:hover {
   font-weight: 400;
 }
 
+.similar-token-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .similar-token-score {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -1895,6 +1902,25 @@ a:hover {
 .similar-token-score.external {
   color: var(--text-muted);
   background: var(--bg-secondary);
+}
+
+.similar-token-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.similar-token-bubble:hover {
+  background: var(--accent-muted);
+  color: var(--accent-primary);
 }
 
 .chart-section h2,

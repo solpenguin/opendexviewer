@@ -95,7 +95,8 @@ function formatTokenMessage(token) {
     .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${mint}`)
     .url('Solscan', `https://solscan.io/token/${mint}`)
     .row()
-    .url('Trade on Jupiter', `https://jup.ag/swap/SOL-${mint}`);
+    .url('Trade on Jupiter', `https://jup.ag/swap/SOL-${mint}`)
+    .url('Bubblemaps', `https://app.bubblemaps.io/sol/token/${mint}`);
 
   if (!hasApprovedSubmissions) {
     keyboard.row().url('Submit Community Info', `${config.FRONTEND_URL}/submit.html?mint=${mint}`);

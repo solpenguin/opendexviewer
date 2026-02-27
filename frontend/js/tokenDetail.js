@@ -363,6 +363,12 @@ const tokenDetail = {
       explorerLink.href = `https://solscan.io/token/${this.mint}`;
     }
 
+    // Bubblemaps link
+    const bubblemapsLink = document.getElementById('bubblemaps-link');
+    if (bubblemapsLink) {
+      bubblemapsLink.href = `https://app.bubblemaps.io/sol/token/${this.mint}`;
+    }
+
     // Price
     this.updatePriceDisplay();
 
@@ -478,6 +484,8 @@ const tokenDetail = {
           const mcapVal = token.marketCap ? utils.formatNumber(token.marketCap) : null;
           const volVal = token.volume24h ? utils.formatNumber(token.volume24h) : null;
 
+          const bubbleUrl = `https://app.bubblemaps.io/sol/token/${encodeURIComponent(token.address)}`;
+
           return `
             <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
               <img src="${logoSrc}" alt="${name}" class="similar-token-logo"
@@ -495,7 +503,12 @@ const tokenDetail = {
                   <span class="similar-token-stat" title="${token.pairCreatedAt ? new Date(token.pairCreatedAt).toLocaleDateString() : 'Age unavailable'}"><span class="stat-label">Age</span> <span class="stat-value${ageVal ? '' : ' no-data'}">${ageVal || '--'}</span></span>
                 </div>
               </div>
-              ${scoreHtml}
+              <span class="similar-token-actions">
+                ${scoreHtml}
+                <span class="similar-token-bubble" title="View on Bubblemaps" onclick="event.preventDefault();event.stopPropagation();window.open('${bubbleUrl}','_blank')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><line x1="7" y1="7" x2="10" y2="10"/><line x1="14" y1="10" x2="17" y2="7"/><line x1="7" y1="17" x2="10" y2="14"/><line x1="14" y1="14" x2="17" y2="17"/></svg>
+                </span>
+              </span>
             </a>
           `;
         }).join('');

@@ -82,6 +82,7 @@ module.exports = (bot) => {
         if (t.similarityScore) {
           lines.push(`Similarity: ${(t.similarityScore * 100).toFixed(0)}%`);
         }
+        lines.push(`\u{1FAE7} <a href="https://app.bubblemaps.io/sol/token/${addr}">Bubblemaps</a>`);
         lines.push('');
       });
 
