@@ -6,22 +6,32 @@ const birdeyeService = require('../services/birdeye');
 const solanaService = require('../services/solana');
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validatePagination, validateSearch, asyncHandler } = require('../middleware/validation');
-const { searchLimiter } = require('../middleware/rateLimit');
+const { validateMint, validatePagination, validateSearch, asyncHandler, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
+const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
+
+// Allowed values for token list query params — prevents cache key pollution
+const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed'];
+const VALID_SORTS = ['volume', 'price', 'priceChange24h', 'marketCap'];
+const VALID_ORDERS = ['asc', 'desc'];
+const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
+const VALID_SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'all'];
 const jobQueue = require('../services/jobQueue');
 
 // GET /api/tokens - List tokens (trending, new, gainers, losers)
 // Optimized: Uses Helius batch API for metadata enrichment instead of extra GeckoTerminal calls
 router.get('/', validatePagination, asyncHandler(async (req, res) => {
   const {
-    sort = 'volume',
-    order = 'desc',
+    sort: rawSort = 'volume',
+    order: rawOrder = 'desc',
     limit = 50,
     offset = 0,
-    filter = 'trending'
+    filter: rawFilter = 'trending'
   } = req.query;
 
-  // Privacy: Don't log request parameters
+  // Validate query params against whitelists to prevent cache key pollution
+  const filter = VALID_FILTERS.includes(rawFilter) ? rawFilter : 'trending';
+  const sort = VALID_SORTS.includes(rawSort) ? rawSort : 'volume';
+  const order = VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc';
 
   const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
 
@@ -900,6 +910,14 @@ router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => 
   const { mint } = req.params;
   const { type, status = 'all' } = req.query;
 
+  // Validate type and status to prevent cache pollution
+  if (type && !VALID_SUBMISSION_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'Invalid submission type' });
+  }
+  if (!VALID_SUBMISSION_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
   try {
     // Cache key includes type and status filters
     const cacheKey = `${keys.submissions(mint)}:${type || 'all'}:${status}`;
@@ -921,7 +939,7 @@ router.get('/:mint/submissions', validateMint, asyncHandler(async (req, res) => 
 // POST /api/tokens/:mint/view - Record a page view for a token
 // Called when the token detail page loads
 // Uses job queue to batch view updates for better performance
-router.post('/:mint/view', validateMint, asyncHandler(async (req, res) => {
+router.post('/:mint/view', strictLimiter, validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
 
   try {
@@ -1160,7 +1178,31 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
         }
       }
 
-      return results.slice(0, 5);
+      const finalResults = results.slice(0, 5);
+
+      // Enrich with market data (price, mcap, volume) via single batch API call
+      if (finalResults.length > 0) {
+        try {
+          const addresses = finalResults.map(r => r.address);
+          const marketData = await geckoService.getMultiTokenInfo(addresses);
+
+          for (const token of finalResults) {
+            const data = marketData[token.address];
+            if (data) {
+              token.price = data.price || null;
+              token.marketCap = data.marketCap || null;
+              token.volume24h = data.volume24h || null;
+              if (!token.logoURI && data.logoUri) {
+                token.logoURI = data.logoUri;
+              }
+            }
+          }
+        } catch (err) {
+          // Non-critical enrichment — return results without market data
+        }
+      }
+
+      return finalResults;
     }, TTL.HOUR);
 
     res.json(result);

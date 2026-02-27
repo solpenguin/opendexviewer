@@ -96,7 +96,7 @@ function startFallbackCleanup() {
 }
 
 // Initialize job queue after a short delay (allow DB/Redis to connect)
-setTimeout(initializeJobQueue, 5000);
+setTimeout(() => initializeJobQueue().catch(err => console.error('[App] Job queue init failed:', err.message)), 5000);
 const PORT = process.env.PORT || 3000;
 
 // Trust proxy (for Render and other PaaS)
@@ -148,18 +148,19 @@ app.use((req, res, next) => {
 });
 
 // Server-Timing middleware: adds 'Server-Timing: proc;dur=X' to every response.
-// Visible in browser DevTools > Network > Timing tab for latency profiling.
-// The override restores res.end before delegating so it is not called twice.
-app.use((req, res, next) => {
-  const startMs = Date.now();
-  const origEnd = res.end;
-  res.end = function (...args) {
-    res.end = origEnd; // restore before calling to avoid recursion
-    try { res.setHeader('Server-Timing', `proc;dur=${Date.now() - startMs}`); } catch (_) {}
-    return origEnd.apply(this, args);
-  };
-  next();
-});
+// Only enabled in non-production to avoid leaking processing duration info.
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    const startMs = Date.now();
+    const origEnd = res.end;
+    res.end = function (...args) {
+      res.end = origEnd;
+      try { res.setHeader('Server-Timing', `proc;dur=${Date.now() - startMs}`); } catch (_) {}
+      return origEnd.apply(this, args);
+    };
+    next();
+  });
+}
 
 // Security headers - protects against common web vulnerabilities
 // SECURITY: Helmet sets various HTTP headers for security
@@ -267,8 +268,8 @@ app.use('/api/bug-reports', bugReportRoutes);
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);
 
-// Admin panel API - password protected
-app.use('/admin', adminRoutes);
+// Admin panel API - password protected, with rate limiting
+app.use('/admin', defaultLimiter, adminRoutes);
 
 // Root redirect
 app.get('/', (req, res) => {
@@ -288,12 +289,10 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
+// 404 handler — don't reflect req.path to prevent info leakage
 app.use((req, res) => {
   res.status(404).json({
-    error: 'Endpoint not found',
-    path: req.path,
-    method: req.method
+    error: 'Endpoint not found'
   });
 });
 
@@ -368,9 +367,26 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Graceful shutdown
+// Graceful shutdown — drains HTTP connections before cleanup
+let httpServer = null;
+
 async function gracefulShutdown(signal) {
   console.log(`${signal} received. Shutting down gracefully...`);
+
+  const isError = signal === 'uncaughtException' || signal === 'unhandledRejection';
+  const exitCode = isError ? 1 : 0;
+
+  // Stop accepting new connections and drain in-flight requests
+  if (httpServer) {
+    httpServer.close(() => console.log('[Shutdown] HTTP server closed'));
+  }
+
+  // Force exit after 10 seconds if draining takes too long
+  const forceTimer = setTimeout(() => {
+    console.error('[Shutdown] Forced exit after timeout');
+    process.exit(exitCode);
+  }, 10000);
+  forceTimer.unref();
 
   // Clear cleanup interval (fallback mode)
   if (cleanupIntervalId) {
@@ -405,7 +421,7 @@ async function gracefulShutdown(signal) {
     console.error('[Shutdown] HTTP agent cleanup error:', err.message);
   }
 
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 // Process error handlers (prevent unhandled crashes)
@@ -416,6 +432,7 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[FATAL] Unhandled rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection');
 });
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
@@ -423,7 +440,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start server
 // Privacy: Don't log which API keys are configured - reveals infrastructure details
-app.listen(PORT, () => {
+httpServer = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║          OpenDex API Server                ║

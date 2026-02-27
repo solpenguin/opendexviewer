@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validateSubmission, validateSubmissionSignature, validateBatchSubmissions, validateBatchSubmissionSignature, validateWallet, asyncHandler, requireDatabase, sanitizeString } = require('../middleware/validation');
+const { validateMint, validateSubmission, validateSubmissionSignature, validateBatchSubmissions, validateBatchSubmissionSignature, validateWallet, asyncHandler, requireDatabase, sanitizeString, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { strictLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
@@ -129,7 +129,7 @@ router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubm
         errors.push({
           type: sub.submissionType,
           success: false,
-          error: error.message || 'Failed to create submission'
+          error: process.env.NODE_ENV !== 'production' ? (error.message || 'Failed to create submission') : 'Failed to create submission'
         });
       }
     }
@@ -212,7 +212,7 @@ router.get('/wallet/:wallet', asyncHandler(async (req, res) => {
   const { wallet } = req.params;
 
   // Validate wallet
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+  if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 

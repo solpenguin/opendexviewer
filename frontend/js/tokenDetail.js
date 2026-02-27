@@ -466,7 +466,7 @@ const tokenDetail = {
       if (listEl) {
         listEl.style.display = 'flex';
         listEl.innerHTML = similar.map(token => {
-          const logoSrc = token.logoURI || utils.getDefaultLogo();
+          const logoSrc = this.escapeHtml(token.logoURI || utils.getDefaultLogo());
           const name = this.escapeHtml(token.name || 'Unknown');
           const symbol = this.escapeHtml(token.symbol || '???');
           const address = this.escapeHtml(token.address);
@@ -475,7 +475,13 @@ const tokenDetail = {
             ? `<span class="similar-token-score" title="Similarity score">${Math.round(token.similarityScore * 100)}% match</span>`
             : `<span class="similar-token-score external" title="Found via search">External match</span>`;
           const ageHtml = token.pairCreatedAt
-            ? `<span class="similar-token-age" title="${new Date(token.pairCreatedAt).toLocaleDateString()}">${utils.formatAge(token.pairCreatedAt)}</span>`
+            ? `<span class="similar-token-stat" title="${new Date(token.pairCreatedAt).toLocaleDateString()}">Age ${utils.formatAge(token.pairCreatedAt)}</span>`
+            : '';
+          const mcapHtml = token.marketCap
+            ? `<span class="similar-token-stat" title="Market Cap: $${Number(token.marketCap).toLocaleString()}">MCap ${utils.formatNumber(token.marketCap)}</span>`
+            : '';
+          const volHtml = token.volume24h
+            ? `<span class="similar-token-stat" title="24h Volume: $${Number(token.volume24h).toLocaleString()}">Vol ${utils.formatNumber(token.volume24h)}</span>`
             : '';
 
           return `
@@ -489,6 +495,8 @@ const tokenDetail = {
                 </div>
                 <div class="similar-token-meta-row">
                   <span class="similar-token-address" title="${address}">${truncAddr}</span>
+                  ${mcapHtml}
+                  ${volHtml}
                   ${ageHtml}
                 </div>
               </div>

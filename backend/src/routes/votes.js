@@ -4,7 +4,7 @@ const db = require('../services/database');
 const solanaService = require('../services/solana');
 const geckoTerminal = require('../services/geckoTerminal');
 const { cache, keys, TTL } = require('../services/cache');
-const { validateVote, validateVoteSignature, validateBatchVotes, validateBatchVoteSignature, asyncHandler, requireDatabase } = require('../middleware/validation');
+const { validateVote, validateVoteSignature, validateBatchVotes, validateBatchVoteSignature, asyncHandler, requireDatabase, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { walletLimiter } = require('../middleware/rateLimit');
 const { adminSettings } = require('./admin');
 
@@ -382,7 +382,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
       errors.push({
         submissionId,
         success: false,
-        error: error.message || 'Failed to process vote'
+        error: process.env.NODE_ENV !== 'production' ? (error.message || 'Failed to process vote') : 'Failed to process vote'
       });
     }
   }
@@ -497,7 +497,7 @@ router.get('/check', asyncHandler(async (req, res) => {
   }
 
   // Validate wallet
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+  if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 
@@ -528,7 +528,7 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Maximum 50 submissions per request' });
   }
 
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+  if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 

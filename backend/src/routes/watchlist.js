@@ -1,20 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
-const { asyncHandler, requireDatabase, validateWalletSignature, validateWatchlistSignature } = require('../middleware/validation');
+const { asyncHandler, requireDatabase, validateWalletSignature, validateWatchlistSignature, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { walletLimiter, strictLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
 router.use(requireDatabase);
 
-// Validate wallet address format (Solana base58)
+// Use shared Solana address regex for consistency
 const isValidWallet = (address) => {
-  return address && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+  return address && SOLANA_ADDRESS_REGEX.test(address);
 };
-
-// Validate token mint format
 const isValidMint = (mint) => {
-  return mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint);
+  return mint && SOLANA_ADDRESS_REGEX.test(mint);
 };
 
 // GET /api/watchlist/:wallet - Get user's watchlist
@@ -98,7 +96,7 @@ router.delete('/', walletLimiter, validateWatchlistSignature, asyncHandler(async
 }));
 
 // POST /api/watchlist/check - Check if token is in watchlist
-router.post('/check', asyncHandler(async (req, res) => {
+router.post('/check', walletLimiter, asyncHandler(async (req, res) => {
   const { wallet, tokenMint } = req.body;
 
   if (!isValidWallet(wallet)) {
@@ -119,7 +117,7 @@ router.post('/check', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/watchlist/check-batch - Check multiple tokens against watchlist
-router.post('/check-batch', asyncHandler(async (req, res) => {
+router.post('/check-batch', walletLimiter, asyncHandler(async (req, res) => {
   const { wallet, tokenMints } = req.body;
 
   if (!isValidWallet(wallet)) {

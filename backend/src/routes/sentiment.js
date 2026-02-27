@@ -13,7 +13,10 @@ router.use(requireDatabase);
 router.post('/bulk', defaultLimiter, asyncHandler(async (req, res) => {
   const { mints } = req.body;
   if (!Array.isArray(mints) || mints.length === 0) return res.json({});
-  const tallies = await db.getSentimentBatch(mints.slice(0, 100));
+  // Validate each mint against Solana address format before querying
+  const validMints = mints.slice(0, 100).filter(m => typeof m === 'string' && SOLANA_ADDRESS_REGEX.test(m));
+  if (validMints.length === 0) return res.json({});
+  const tallies = await db.getSentimentBatch(validMints);
   res.json(tallies);
 }));
 

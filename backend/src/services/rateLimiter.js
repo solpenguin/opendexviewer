@@ -104,12 +104,15 @@ const BURST_MAX_AGE_MS = 10000; // Remove burst counters older than 10 seconds
 setInterval(() => {
   const now = Date.now();
   let removed = 0;
-  for (const [key, data] of burstCounters) {
-    // If key is just a timestamp-based key, calculate age
-    const [, windowStr] = key.split(':');
+  for (const [key] of burstCounters) {
+    // Extract API name and window number from key format "apiName:windowNumber"
+    const colonIdx = key.indexOf(':');
+    const apiName = colonIdx > 0 ? key.slice(0, colonIdx) : 'default';
+    const windowStr = colonIdx > 0 ? key.slice(colonIdx + 1) : key;
     const windowTime = parseInt(windowStr);
-    // Use largest burst window (4000ms for GeckoTerminal) as base
-    const estimatedKeyTime = windowTime * 4000;
+    // Use the actual burst window for the specific API instead of hardcoding
+    const apiConfig = RATE_LIMITS[apiName] || RATE_LIMITS.default;
+    const estimatedKeyTime = windowTime * apiConfig.burstWindow;
     if (now - estimatedKeyTime > BURST_MAX_AGE_MS) {
       burstCounters.delete(key);
       removed++;
@@ -288,20 +291,20 @@ async function processQueue(apiName) {
     const item = queue.shift();
     const { requestFn, resolve, reject, timeoutId, queuedAt } = item;
 
-    // Clear the timeout since we're processing this request now
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    // Log queue wait time for monitoring
-    if (queuedAt) {
-      const waitTime = Date.now() - queuedAt;
-      if (waitTime > 5000) {
-        console.log(`[RateLimiter] ${apiName} request waited ${Math.round(waitTime / 1000)}s in queue`);
-      }
-    }
-
     try {
+      // Clear the timeout since we're processing this request now
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      // Log queue wait time for monitoring
+      if (queuedAt) {
+        const waitTime = Date.now() - queuedAt;
+        if (waitTime > 5000) {
+          console.log(`[RateLimiter] ${apiName} request waited ${Math.round(waitTime / 1000)}s in queue`);
+        }
+      }
+
       // Apply rate limiting delay directly (not through rateLimitedRequest to avoid recursion)
       const delay = getRequiredDelay(apiName);
       if (delay > 0) {

@@ -2,9 +2,32 @@
  * Input validation middleware
  */
 
-// Validate Solana address format (base58, exactly 43-44 characters for public keys)
-// Standard Solana addresses are 44 characters, but some derived addresses can be 43
-const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
+// Validate Solana address format (base58, exactly 32-44 characters)
+// Standard Solana public keys are 43-44 characters, but some program-derived addresses can be shorter
+const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+// Signature replay protection — tracks used signatures to prevent reuse within the expiry window
+const usedSignatures = new Map();
+const USED_SIG_CLEANUP_INTERVAL_MS = 60000; // Clean up every minute
+let usedSigCleanupTimer = null;
+function startSignatureCleanup() {
+  usedSigCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [sig, expiry] of usedSignatures) {
+      if (now > expiry) usedSignatures.delete(sig);
+    }
+  }, USED_SIG_CLEANUP_INTERVAL_MS);
+}
+startSignatureCleanup();
+function markSignatureUsed(signature, ttlMs) {
+  usedSignatures.set(signature, Date.now() + ttlMs);
+}
+function isSignatureUsed(signature) {
+  const expiry = usedSignatures.get(signature);
+  if (!expiry) return false;
+  if (Date.now() > expiry) { usedSignatures.delete(signature); return false; }
+  return true;
+}
 
 // Validate URL format
 function isValidUrl(string) {
@@ -99,7 +122,11 @@ function sanitizeString(str, maxLength = 255) {
   return str
     .trim()
     .slice(0, maxLength)
-    .replace(/[<>]/g, ''); // Basic XSS prevention
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
 }
 
 // Validate mint address parameter
@@ -628,6 +655,16 @@ function validateVoteSignature(req, res, next) {
     });
   }
 
+  // Replay protection: reject previously used signatures
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({
+      error: 'Signature already used',
+      message: 'Each signature can only be used once',
+      code: 'SIGNATURE_REPLAY'
+    });
+  }
+
   // Recreate the expected message
   const expectedMessage = createVoteSignatureMessage(voteType, parseInt(submissionId), timestamp);
 
@@ -641,6 +678,9 @@ function validateVoteSignature(req, res, next) {
       code: 'INVALID_SIGNATURE'
     });
   }
+
+  // Mark signature as used (TTL = expiry window)
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
 
   // Signature is valid - proceed
   next();
@@ -766,6 +806,12 @@ function validateBatchVoteSignature(req, res, next) {
     });
   }
 
+  // Replay protection
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
   // Recreate the expected message
   const expectedMessage = createBatchVoteSignatureMessage(votes, voterWallet, timestamp);
 
@@ -780,7 +826,7 @@ function validateBatchVoteSignature(req, res, next) {
     });
   }
 
-  // Signature is valid - proceed
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -837,6 +883,12 @@ function validateSubmissionSignature(req, res, next) {
     });
   }
 
+  // Replay protection
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
   // Recreate the expected message
   const expectedMessage = createSubmissionSignatureMessage(submissionType, tokenMint, timestamp);
 
@@ -851,7 +903,7 @@ function validateSubmissionSignature(req, res, next) {
     });
   }
 
-  // Signature is valid - proceed
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1022,6 +1074,12 @@ function validateBatchSubmissionSignature(req, res, next) {
     });
   }
 
+  // Replay protection
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
   // Extract submission types for signature verification
   const submissionTypes = submissions.map(s => s.submissionType);
 
@@ -1039,7 +1097,7 @@ function validateBatchSubmissionSignature(req, res, next) {
     });
   }
 
-  // Signature is valid - proceed
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1116,12 +1174,19 @@ function validateWatchlistSignature(req, res, next) {
   const action = req.method === 'DELETE' ? 'remove' : 'add';
   const expectedMessage = createWatchlistSignatureMessage(action, wallet, tokenMint, timestamp);
 
+  // Replay protection
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
   const isValid = verifyWalletSignature(expectedMessage, signature, wallet);
 
   if (!isValid) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1163,12 +1228,19 @@ function validateSentimentSignature(req, res, next) {
   const mint = req.params.mint || '';
   const expectedMessage = createSentimentSignatureMessage(sentiment, mint, voterWallet, timestamp);
 
+  // Replay protection
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
   const isValid = verifyWalletSignature(expectedMessage, signature, voterWallet);
 
   if (!isValid) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1207,6 +1279,12 @@ function validateApiKeySignature(req, res, next) {
     return res.status(400).json({ error: 'Invalid signature format', code: 'INVALID_SIGNATURE_FORMAT' });
   }
 
+  // Replay protection
+  const sigKey = signature.join(',');
+  if (isSignatureUsed(sigKey)) {
+    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
+  }
+
   const expectedMessage = createApiKeySignatureMessage(wallet, timestamp);
   const isValid = verifyWalletSignature(expectedMessage, signature, wallet);
 
@@ -1214,6 +1292,7 @@ function validateApiKeySignature(req, res, next) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
+  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1262,19 +1341,11 @@ async function verifyAdminPassword(password) {
     });
   }
 
-  // Legacy plaintext path — warn loudly and use constant-time comparison
+  // Legacy plaintext path — warn loudly and use fixed-size hash comparison to prevent length leaking
   console.warn('[Security] ADMIN_PASSWORD is stored in plaintext. Run node scripts/hash-password.js to upgrade to a hashed format.');
-  const passwordBuffer = Buffer.from(password || '');
-  const adminBuffer = Buffer.from(adminPassword);
-
-  const maxLength = Math.max(passwordBuffer.length, adminBuffer.length);
-  const paddedPassword = Buffer.alloc(maxLength);
-  const paddedAdmin = Buffer.alloc(maxLength);
-  passwordBuffer.copy(paddedPassword);
-  adminBuffer.copy(paddedAdmin);
-
-  const match = crypto.timingSafeEqual(paddedPassword, paddedAdmin);
-  return match && passwordBuffer.length === adminBuffer.length;
+  const passwordHash = crypto.createHash('sha256').update(password || '').digest();
+  const adminHash = crypto.createHash('sha256').update(adminPassword).digest();
+  return crypto.timingSafeEqual(passwordHash, adminHash);
 }
 
 // Middleware to validate admin session

@@ -17,8 +17,8 @@ router.get('/', async (req, res) => {
   });
 });
 
-// GET /health/detailed - Detailed health check with dependencies
-router.get('/detailed', async (req, res) => {
+// GET /health/detailed - Detailed health check with dependencies (admin-only)
+router.get('/detailed', require('../middleware/validation').validateAdminSession, async (req, res) => {
   const health = {
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -223,7 +223,7 @@ router.get('/live', (req, res) => {
   res.json({ alive: true });
 });
 
-// GET /api/stats - Public API statistics
+// GET /api/stats - Public API statistics (stripped of internal pool details)
 router.get('/stats', async (req, res) => {
   try {
     const dbHealth = await db.checkHealth();
@@ -233,14 +233,10 @@ router.get('/stats', async (req, res) => {
       timestamp: new Date().toISOString(),
       cache: {
         type: cacheStats.type,
-        entries: cacheStats.size,
-        hitRate: cacheStats.hitRate,
         connected: cacheStats.connected
       },
       database: {
-        connected: dbHealth.healthy,
-        poolSize: dbHealth.poolSize,
-        idleConnections: dbHealth.idleConnections
+        connected: dbHealth.healthy
       },
       features: {
         communitySubmissions: true,

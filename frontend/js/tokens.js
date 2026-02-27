@@ -247,6 +247,8 @@ const tokenList = {
 
   // Start auto-refresh (configurable via config.cache.tokenListRefresh)
   startAutoRefresh() {
+    // Clear any existing intervals to prevent duplicates
+    if (this.autoRefreshInterval) clearInterval(this.autoRefreshInterval);
     this.autoRefreshInterval = setInterval(() => {
       if (!this.isSearchMode && !this.isLoading && document.visibilityState === 'visible') {
         this.loadTokens(true); // silent refresh (uses stale-while-revalidate cache)
@@ -936,6 +938,7 @@ const tokenList = {
 
   // Start freshness display timer (updates every second)
   startFreshnessTimer() {
+    if (this.freshnessInterval) clearInterval(this.freshnessInterval);
     this.freshnessInterval = setInterval(() => {
       this.updateFreshnessDisplay();
     }, 1000);

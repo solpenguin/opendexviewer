@@ -60,62 +60,66 @@ const HELIUS_DAS_URL = HELIUS_API_KEY ? 'https://mainnet.helius-rpc.com' : null;
 async function rpcCall(method, params = [], retryCount = 0) {
   const MAX_RETRIES = 2;
 
-  // Use circuit breaker for RPC calls
-  return circuitBreakers.solanaRpc.execute(async () => {
-    const rpcUrl = getCurrentRpcUrl();
+  try {
+    // Use circuit breaker for each individual RPC attempt
+    return await circuitBreakers.solanaRpc.execute(async () => {
+      const rpcUrl = getCurrentRpcUrl();
 
-    try {
-      const response = await axios.post(rpcUrl, {
-        jsonrpc: '2.0',
-        id: 1,
-        method,
-        params
-      }, {
-        timeout: 15000, // 15 second timeout (reduced from 30s for faster failover)
-        headers: HELIUS_HEADERS,
-        httpsAgent
-      });
+      try {
+        const response = await axios.post(rpcUrl, {
+          jsonrpc: '2.0',
+          id: 1,
+          method,
+          params
+        }, {
+          timeout: 15000, // 15 second timeout (reduced from 30s for faster failover)
+          headers: HELIUS_HEADERS,
+          httpsAgent
+        });
 
-      // Defensive check for malformed responses
-      if (!response || !response.data) {
-        throw new Error('Empty or malformed RPC response');
-      }
-
-      if (response.data.error) {
-        const errorMsg = response.data.error.message || response.data.error.code || 'Unknown RPC error';
-        throw new Error(errorMsg);
-      }
-
-      return response.data.result;
-    } catch (error) {
-      // Handle connection errors with failover
-      const isConnectionError =
-        error.code === 'ECONNABORTED' ||
-        error.code === 'ETIMEDOUT' ||
-        error.code === 'ECONNRESET' ||
-        error.code === 'ECONNREFUSED' ||
-        !error.response;
-
-      if (isConnectionError && retryCount < MAX_RETRIES) {
-        // Try failover to next endpoint
-        if (failoverToNextRpc()) {
-          console.log(`[Solana] Retrying ${method} with failover endpoint (attempt ${retryCount + 1})`);
-          return rpcCall(method, params, retryCount + 1);
+        // Defensive check for malformed responses
+        if (!response || !response.data) {
+          throw new Error('Empty or malformed RPC response');
         }
-      }
 
-      // Log error for debugging
-      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-        console.error(`[Solana] RPC timeout (${method}): Request timed out`);
-      } else if (error.response) {
-        console.error(`[Solana] RPC error (${method}): HTTP ${error.response.status}`);
-      } else if (error.request) {
-        console.error(`[Solana] RPC error (${method}): No response received`);
-      }
+        if (response.data.error) {
+          const errorMsg = response.data.error.message || response.data.error.code || 'Unknown RPC error';
+          throw new Error(errorMsg);
+        }
 
-      throw error;
+        return response.data.result;
+      } catch (error) {
+        // Log error for debugging
+        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+          console.error(`[Solana] RPC timeout (${method}): Request timed out`);
+        } else if (error.response) {
+          console.error(`[Solana] RPC error (${method}): HTTP ${error.response.status}`);
+        } else if (error.request) {
+          console.error(`[Solana] RPC error (${method}): No response received`);
+        }
+
+        throw error;
+      }
+    });
+  } catch (error) {
+    // Handle connection errors with failover OUTSIDE circuit breaker
+    // to prevent double-counting failures on retry
+    const isConnectionError =
+      error.code === 'ECONNABORTED' ||
+      error.code === 'ETIMEDOUT' ||
+      error.code === 'ECONNRESET' ||
+      error.code === 'ECONNREFUSED' ||
+      !error.response;
+
+    if (isConnectionError && retryCount < MAX_RETRIES) {
+      if (failoverToNextRpc()) {
+        console.log(`[Solana] Retrying ${method} with failover endpoint (attempt ${retryCount + 1})`);
+        return rpcCall(method, params, retryCount + 1);
+      }
     }
-  });
+
+    throw error;
+  }
 }
 
 // Get account info

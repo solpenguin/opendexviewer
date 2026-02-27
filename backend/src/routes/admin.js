@@ -23,8 +23,9 @@ const { cache, keys } = require('../services/cache');
 const loginAttempts = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_LOGIN_ATTEMPT_ENTRIES = 10000; // Prevent unbounded growth under distributed attack
 
-// Cleanup stale login attempt records every hour
+// Cleanup stale login attempt records every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, data] of loginAttempts) {
@@ -32,7 +33,13 @@ setInterval(() => {
       loginAttempts.delete(ip);
     }
   }
-}, 60 * 60 * 1000);
+  // Hard cap: if still over limit, evict oldest entries
+  if (loginAttempts.size > MAX_LOGIN_ATTEMPT_ENTRIES) {
+    const entries = [...loginAttempts.entries()].sort((a, b) => a[1].lastAttempt - b[1].lastAttempt);
+    const toRemove = entries.slice(0, loginAttempts.size - MAX_LOGIN_ATTEMPT_ENTRIES);
+    for (const [ip] of toRemove) loginAttempts.delete(ip);
+  }
+}, 5 * 60 * 1000);
 
 // ==========================================
 // Authentication Endpoints
@@ -111,19 +118,20 @@ router.post('/login',
 
     // Privacy: Don't log admin login details
 
-    // Set secure cookie
+    // Set secure cookie — use 'none' + secure for cross-origin deployment (frontend/backend on different origins)
     res.cookie('admin_session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: ADMIN_SESSION_DURATION_MS
     });
 
+    // H2: Don't leak session token in response body — httpOnly cookie is the primary auth mechanism.
+    // The X-Admin-Session header is returned for non-browser clients that can't use cookies.
     res.json({
       success: true,
       message: 'Login successful',
       data: {
-        sessionToken,
         expiresAt: expiresAt.toISOString()
       }
     });
@@ -317,9 +325,19 @@ router.delete('/submissions/:id',
       });
     }
 
-    // Delete vote tally first, then submission (votes cascade via foreign key)
-    await db.pool.query('DELETE FROM vote_tallies WHERE submission_id = $1', [submissionId]);
-    await db.pool.query('DELETE FROM submissions WHERE id = $1', [submissionId]);
+    // Delete vote tally and submission atomically in a transaction
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM vote_tallies WHERE submission_id = $1', [submissionId]);
+      await client.query('DELETE FROM submissions WHERE id = $1', [submissionId]);
+      await client.query('COMMIT');
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      throw txError;
+    } finally {
+      client.release();
+    }
 
     // Invalidate submission cache for this token
     if (submission.token_mint) {

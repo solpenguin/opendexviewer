@@ -418,7 +418,9 @@ async function searchTokens(query, limit = 10) {
 
   // Truncate query to prevent DoS attacks with very long search strings
   const safeQuery = query.slice(0, MAX_SEARCH_QUERY_LENGTH);
-  const searchPattern = `%${safeQuery.toLowerCase()}%`;
+  // Escape LIKE metacharacters to prevent wildcard injection
+  const escapedQuery = safeQuery.replace(/[%_\\]/g, '\\$&');
+  const searchPattern = `%${escapedQuery.toLowerCase()}%`;
 
   const result = await pool.query(
     `SELECT mint_address, name, symbol, decimals, logo_uri, created_at
@@ -491,6 +493,7 @@ async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
 // Submission operations
 // Uses transaction to atomically check for duplicates and create submission
 async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet }) {
+  if (!pool) throw new Error('Database not available');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -789,6 +792,7 @@ async function checkAutoModeration(submissionId, weightedScore, marketCap = null
 
 // Update submission status manually
 async function updateSubmissionStatus(submissionId, status) {
+  if (!pool) return null;
   const result = await pool.query(
     `UPDATE submissions SET status = $2 WHERE id = $1 RETURNING *`,
     [submissionId, status]
@@ -831,6 +835,7 @@ async function getPendingSubmissions(limit = 50) {
 
 // Add token to user's watchlist
 async function addToWatchlist(walletAddress, tokenMint) {
+  if (!pool) return null;
   const result = await pool.query(
     `INSERT INTO watchlist (wallet_address, token_mint)
      VALUES ($1, $2)
@@ -843,6 +848,7 @@ async function addToWatchlist(walletAddress, tokenMint) {
 
 // Remove token from user's watchlist
 async function removeFromWatchlist(walletAddress, tokenMint) {
+  if (!pool) return null;
   const result = await pool.query(
     `DELETE FROM watchlist
      WHERE wallet_address = $1 AND token_mint = $2
@@ -1481,6 +1487,8 @@ async function deleteUserData(walletAddress) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Set a transaction-level timeout for this long-running GDPR deletion
+    await client.query('SET LOCAL statement_timeout = 120000'); // 2 minutes
 
     // Count data before deletion for reporting
     const counts = {

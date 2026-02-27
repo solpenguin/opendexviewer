@@ -916,15 +916,17 @@ const submitPage = {
 
     document.body.appendChild(modal);
 
+    const closeModal = () => {
+      modal.remove();
+      document.removeEventListener('keydown', handleEscape);
+    };
+
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.remove();
+      if (e.target === modal) closeModal();
     });
 
     const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        modal.remove();
-        document.removeEventListener('keydown', handleEscape);
-      }
+      if (e.key === 'Escape') closeModal();
     };
     document.addEventListener('keydown', handleEscape);
   },
@@ -980,15 +982,17 @@ const submitPage = {
 
     document.body.appendChild(modal);
 
+    const closeModal = () => {
+      modal.remove();
+      document.removeEventListener('keydown', handleEscape);
+    };
+
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.remove();
+      if (e.target === modal) closeModal();
     });
 
     const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        modal.remove();
-        document.removeEventListener('keydown', handleEscape);
-      }
+      if (e.key === 'Escape') closeModal();
     };
     document.addEventListener('keydown', handleEscape);
   },
@@ -1055,7 +1059,14 @@ const submitPage = {
 
         const contentLink = document.createElement('a');
         contentLink.className = 'content-url';
-        contentLink.href = s.content_url;
+        // H10: Validate protocol to prevent javascript: XSS
+        const url = s.content_url || '';
+        if (/^https?:\/\//i.test(url)) {
+          contentLink.href = url;
+        } else {
+          contentLink.href = '#';
+          contentLink.title = 'Invalid URL';
+        }
         contentLink.target = '_blank';
         contentLink.rel = 'noopener noreferrer';
         contentLink.textContent = this.truncateUrl(s.content_url);

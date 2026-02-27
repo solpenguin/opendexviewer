@@ -173,6 +173,7 @@ const VIEW_BUFFER_MAX_SIZE = parseInt(process.env.VIEW_BUFFER_MAX_SIZE) || 50000
 const VIEW_FLUSH_INTERVAL_MS = parseInt(process.env.VIEW_FLUSH_INTERVAL_MS) || 5000;
 let viewFlushScheduled = false;
 let viewFlushTimer = null;
+let isFlushing = false; // Mutex to prevent concurrent flushes
 
 // Import db lazily to avoid circular dependency
 let db = null;
@@ -210,35 +211,39 @@ async function incrementViewCount(tokenMint) {
 }
 
 async function flushViewCounts() {
-  if (viewCountBuffer.size === 0) return;
+  if (viewCountBuffer.size === 0 || isFlushing) return;
+  isFlushing = true;
 
-  // Copy buffer (don't clear yet - only clear after successful write)
-  const updates = new Map(viewCountBuffer);
-
-  // Convert to array for processing
-  const viewUpdates = [];
-  for (const [tokenMint, count] of updates) {
-    viewUpdates.push({ tokenMint, count });
-  }
-
-  // Try job queue first if available
-  if (isInitialized) {
-    try {
-      const job = await addAnalyticsJob('batch-view-counts', { updates: viewUpdates });
-      if (job) {
-        // Job added successfully - clear buffer
-        viewCountBuffer.clear();
-        console.log(`[JobQueue] Queued ${viewUpdates.length} view count updates`);
-        return;
-      }
-    } catch (err) {
-      console.warn('[JobQueue] Failed to queue view counts, falling back to direct DB:', err.message);
+  try {
+    // Snapshot the buffer and clear only the entries we're flushing
+    const viewUpdates = [];
+    const flushedKeys = [];
+    for (const [tokenMint, count] of viewCountBuffer) {
+      viewUpdates.push({ tokenMint, count });
+      flushedKeys.push(tokenMint);
     }
-  }
 
-  // Fallback: Write directly to database
-  await flushViewCountsDirect(viewUpdates);
-  viewCountBuffer.clear();
+    // Try job queue first if available
+    if (isInitialized) {
+      try {
+        const job = await addAnalyticsJob('batch-view-counts', { updates: viewUpdates });
+        if (job) {
+          // Job added successfully - clear only flushed entries
+          for (const key of flushedKeys) viewCountBuffer.delete(key);
+          console.log(`[JobQueue] Queued ${viewUpdates.length} view count updates`);
+          return;
+        }
+      } catch (err) {
+        console.warn('[JobQueue] Failed to queue view counts, falling back to direct DB:', err.message);
+      }
+    }
+
+    // Fallback: Write directly to database — only clear successfully written entries
+    const successfulMints = await flushViewCountsDirect(viewUpdates);
+    for (const mint of successfulMints) viewCountBuffer.delete(mint);
+  } finally {
+    isFlushing = false;
+  }
 }
 
 /**
@@ -248,13 +253,13 @@ async function flushViewCounts() {
 async function flushViewCountsDirect(viewUpdates) {
   const database = getDb();
   if (!database.isReady()) {
-    console.warn('[JobQueue] Database not ready, view counts will be lost');
-    return;
+    console.warn('[JobQueue] Database not ready, view counts will be retained in buffer');
+    return [];
   }
 
   console.log(`[JobQueue] Writing ${viewUpdates.length} view counts directly to DB...`);
 
-  let successCount = 0;
+  const successfulMints = [];
   let errorCount = 0;
 
   // Process in smaller batches to avoid overwhelming DB
@@ -263,7 +268,6 @@ async function flushViewCountsDirect(viewUpdates) {
     const batch = viewUpdates.slice(i, i + BATCH_SIZE);
 
     try {
-      // Use a single query with unnest for efficiency
       const mints = batch.map(u => u.tokenMint);
       const counts = batch.map(u => u.count);
 
@@ -275,14 +279,15 @@ async function flushViewCountsDirect(viewUpdates) {
           last_viewed_at = NOW()
       `, [mints, counts]);
 
-      successCount += batch.length;
+      successfulMints.push(...mints);
     } catch (err) {
       console.error('[JobQueue] Direct view count batch failed:', err.message);
       errorCount += batch.length;
     }
   }
 
-  console.log(`[JobQueue] Direct DB write complete: ${successCount} success, ${errorCount} errors`);
+  console.log(`[JobQueue] Direct DB write complete: ${successfulMints.length} success, ${errorCount} errors`);
+  return successfulMints;
 }
 
 /**
