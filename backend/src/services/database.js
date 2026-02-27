@@ -198,7 +198,6 @@ async function initializeDatabase() {
         id SERIAL PRIMARY KEY,
         key_hash VARCHAR(64) UNIQUE NOT NULL,
         key_prefix VARCHAR(8) NOT NULL,
-        full_key VARCHAR(100),
         owner_wallet VARCHAR(44) NOT NULL,
         name VARCHAR(100),
         created_at TIMESTAMP DEFAULT NOW(),
@@ -208,12 +207,8 @@ async function initializeDatabase() {
         UNIQUE(owner_wallet)
       );
 
-      -- Add full_key column if it doesn't exist (migration for existing databases)
-      DO $$ BEGIN
-        ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS full_key VARCHAR(100);
-      EXCEPTION WHEN duplicate_column THEN
-        NULL;
-      END $$;
+      -- Drop full_key column if it exists (security: never store plaintext API keys)
+      ALTER TABLE api_keys DROP COLUMN IF EXISTS full_key;
 
       -- Submission indexes
       CREATE INDEX IF NOT EXISTS idx_submissions_token ON submissions(token_mint);
@@ -285,6 +280,42 @@ async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_token_views_mint ON token_views(token_mint);
       CREATE INDEX IF NOT EXISTS idx_token_views_count ON token_views(view_count DESC);
+
+      -- Announcements table for admin-broadcast site-wide messages
+      CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        message TEXT NOT NULL,
+        type VARCHAR(20) DEFAULT 'info' CHECK (type IN ('info', 'warning', 'success', 'error')),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        expires_at TIMESTAMP WITH TIME ZONE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_announcements_active
+        ON announcements (created_at DESC)
+        WHERE is_active = TRUE;
+
+      -- Sentiment votes table
+      CREATE TABLE IF NOT EXISTS sentiment_votes (
+        id SERIAL PRIMARY KEY,
+        token_mint VARCHAR(44) NOT NULL,
+        voter_wallet VARCHAR(44) NOT NULL,
+        sentiment VARCHAR(10) NOT NULL CHECK (sentiment IN ('bullish', 'bearish')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(token_mint, voter_wallet)
+      );
+
+      CREATE TABLE IF NOT EXISTS sentiment_tallies (
+        token_mint VARCHAR(44) PRIMARY KEY,
+        bullish INTEGER DEFAULT 0,
+        bearish INTEGER DEFAULT 0,
+        score INTEGER DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sentiment_votes_mint ON sentiment_votes(token_mint);
     `);
 
     isConnected = true;
@@ -1154,7 +1185,7 @@ async function getAllApiKeys({ limit = 50, offset = 0 } = {}) {
   if (!pool) return { keys: [], total: 0 };
 
   const result = await pool.query(
-    `SELECT id, key_prefix, full_key, owner_wallet, name, created_at, last_used_at, request_count, is_active
+    `SELECT id, key_prefix, owner_wallet, name, created_at, last_used_at, request_count, is_active
      FROM api_keys
      ORDER BY created_at DESC
      LIMIT $1 OFFSET $2`,
