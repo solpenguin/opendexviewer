@@ -1,6 +1,7 @@
 const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
 const { sendTokenMessage } = require('../../utils/sendToken');
+const { enrichWithPrice } = require('../../utils/enrichToken');
 
 // Match a message that is ONLY a Solana address (32-44 base58 chars)
 const SOLANA_CA_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -14,7 +15,9 @@ module.exports = (bot) => {
     const statusMsg = await ctx.reply('Looking up token...');
 
     try {
-      const token = await tokensApi.getToken(mint);
+      let token = await tokensApi.getToken(mint);
+      // Ensure fresh market data (price, marketCap) if stale or missing
+      token = await enrichWithPrice(token);
       const message = formatTokenMessage(token);
       await sendTokenMessage(ctx, statusMsg, message);
     } catch (error) {

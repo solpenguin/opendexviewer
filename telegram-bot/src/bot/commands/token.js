@@ -2,6 +2,7 @@ const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
 const { sendTokenMessage } = require('../../utils/sendToken');
 const { isValidSolanaAddress } = require('../../utils/solana');
+const { enrichWithPrice } = require('../../utils/enrichToken');
 
 module.exports = (bot) => {
   bot.command('token', async (ctx) => {
@@ -13,7 +14,9 @@ module.exports = (bot) => {
     const statusMsg = await ctx.reply('Looking up token...');
 
     try {
-      const token = await tokensApi.getToken(mint);
+      let token = await tokensApi.getToken(mint);
+      // Ensure fresh market data (price, marketCap) if stale or missing
+      token = await enrichWithPrice(token);
       const message = formatTokenMessage(token);
       await sendTokenMessage(ctx, statusMsg, message);
     } catch (error) {

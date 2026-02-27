@@ -9,21 +9,29 @@ async function checkAlerts(bot) {
   const distinctMints = alertStore.getDistinctMints();
   if (distinctMints.length === 0) return;
 
-  // Batch fetch token data (up to 50 per request)
+  // Fetch fresh price data for each alerted token individually.
+  // The price endpoint (GET /api/tokens/:mint/price) always hits GeckoTerminal
+  // and returns reliable marketCap data, unlike the batch endpoint which may
+  // return Helius-only metadata with marketCap: 0 after cache expires.
   const tokenData = {};
-  for (let i = 0; i < distinctMints.length; i += 50) {
-    const chunk = distinctMints.slice(i, i + 50);
-    try {
-      const results = await tokensApi.batchGetTokens(chunk);
-      if (Array.isArray(results)) {
-        for (const token of results) {
-          const addr = token.mintAddress || token.address;
-          if (addr) tokenData[addr] = token;
-        }
+  const CONCURRENCY = 5;
+
+  for (let i = 0; i < distinctMints.length; i += CONCURRENCY) {
+    const chunk = distinctMints.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      chunk.map(async (mint) => {
+        const priceData = await tokensApi.getPrice(mint);
+        return { mint, data: priceData };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.data) {
+        const { mint, data } = result.value;
+        tokenData[mint] = data;
+      } else if (result.status === 'rejected') {
+        console.error('[Alerts] Failed to fetch price:', result.reason?.message);
       }
-    } catch (error) {
-      console.error('[Alerts] Failed to fetch batch chunk:', error.message);
-      // Continue with remaining chunks instead of aborting the entire cycle
     }
   }
 
@@ -31,10 +39,13 @@ async function checkAlerts(bot) {
   const alerts = alertStore.getAllActive();
 
   for (const alert of alerts) {
-    const token = tokenData[alert.mint];
-    if (!token || !token.marketCap) continue;
+    const priceData = tokenData[alert.mint];
+    const currentMcap = priceData?.marketCap || priceData?.fdv || 0;
+    if (!currentMcap) {
+      console.warn(`[Alerts] No market cap data for ${alert.mint}, skipping alert #${alert.id}`);
+      continue;
+    }
 
-    const currentMcap = token.marketCap;
     let triggered = false;
 
     switch (alert.condition) {
@@ -56,6 +67,7 @@ async function checkAlerts(bot) {
     }
 
     if (triggered) {
+      console.log(`[Alerts] Alert #${alert.id} triggered: ${alert.condition} ${alert.target_value} (current mcap: ${currentMcap})`);
       const sent = await notifications.sendAlertNotification(bot, alert, currentMcap);
       if (sent) {
         alertStore.trigger(alert.id);

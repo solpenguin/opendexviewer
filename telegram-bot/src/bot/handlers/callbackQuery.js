@@ -1,6 +1,7 @@
 const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
 const { downloadImage } = require('../../utils/sendToken');
+const { enrichWithPrice } = require('../../utils/enrichToken');
 
 module.exports = (bot) => {
   bot.callbackQuery(/^lookup:(.+)$/, async (ctx) => {
@@ -9,7 +10,8 @@ module.exports = (bot) => {
     await ctx.answerCallbackQuery({ text: 'Loading token...' });
 
     try {
-      const token = await tokensApi.getToken(mint);
+      let token = await tokensApi.getToken(mint);
+      token = await enrichWithPrice(token);
       const message = formatTokenMessage(token);
 
       if (message.bannerUrl) {

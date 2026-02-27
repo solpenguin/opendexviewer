@@ -2,6 +2,7 @@ const alertStore = require('../../alerts/store');
 const tokensApi = require('../../api/tokens');
 const { isValidSolanaAddress } = require('../../utils/solana');
 const { formatNumber } = require('../../utils/format');
+const { enrichWithPrice } = require('../../utils/enrichToken');
 const config = require('../../config');
 
 module.exports = (bot) => {
@@ -46,7 +47,9 @@ module.exports = (bot) => {
     const statusMsg = await ctx.reply('Verifying token...');
 
     try {
-      const token = await tokensApi.getToken(mint);
+      let token = await tokensApi.getToken(mint);
+      // Ensure fresh market data for accurate mcap_at_creation
+      token = await enrichWithPrice(token);
       const currentMcap = token.marketCap || 0;
 
       if (currentMcap === 0) {
