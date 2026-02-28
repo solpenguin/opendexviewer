@@ -5,6 +5,7 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const db = require('../services/database');
 const {
@@ -62,8 +63,8 @@ router.post('/',
       description: cleanDescription,
       contactInfo: cleanContact,
       pageUrl: cleanPageUrl,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
+      ipAddress: crypto.createHash('sha256').update(req.ip || '').digest('hex').slice(0, 16),
+      userAgent: (req.get('User-Agent') || '').slice(0, 100)
     });
 
     res.status(201).json({

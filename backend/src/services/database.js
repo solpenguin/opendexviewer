@@ -83,9 +83,11 @@ function createPool() {
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
+    // Render's managed PostgreSQL uses self-signed certificates, requiring rejectUnauthorized: false.
+    // This is acceptable for Render's internal network but disables TLS certificate verification.
     ssl: isProduction ? { rejectUnauthorized: false } : false,
     max: maxConnections,                    // Maximum connections in pool
-    min: isProduction ? 10 : 2,             // Minimum idle connections
+    min: parseInt(process.env.DB_POOL_MIN) || (isProduction ? 2 : 2), // Keep low to avoid exhausting Render's connection limit
     idleTimeoutMillis: 60000,               // Close idle connections after 60s
     connectionTimeoutMillis: 10000,         // Timeout for new connections
     statement_timeout: 30000,               // Kill queries running > 30s
@@ -131,6 +133,7 @@ async function initializeDatabase() {
   let client;
   try {
     client = await pool.connect();
+    await client.query('BEGIN');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS tokens (
@@ -158,8 +161,12 @@ async function initializeDatabase() {
         content_url TEXT NOT NULL,
         submitter_wallet VARCHAR(44),
         status VARCHAR(20) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT NOW()
+        category VARCHAR(10),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
+
+      -- Add category column for existing databases
+      ALTER TABLE submissions ADD COLUMN IF NOT EXISTS category VARCHAR(10);
 
       CREATE TABLE IF NOT EXISTS votes (
         id SERIAL PRIMARY KEY,
@@ -169,7 +176,8 @@ async function initializeDatabase() {
         vote_weight DECIMAL(5,2) DEFAULT 1.0,
         voter_balance DECIMAL(30,10) DEFAULT 0,
         voter_percentage DECIMAL(12,6) DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         UNIQUE(submission_id, voter_wallet)
       );
 
@@ -187,6 +195,7 @@ async function initializeDatabase() {
         ALTER TABLE votes ADD COLUMN IF NOT EXISTS vote_weight DECIMAL(5,2) DEFAULT 1.0;
         ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_balance DECIMAL(30,10) DEFAULT 0;
         ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_percentage DECIMAL(12,6) DEFAULT 0;
+        ALTER TABLE votes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
         ALTER TABLE vote_tallies ADD COLUMN IF NOT EXISTS weighted_score DECIMAL(10,2) DEFAULT 0;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
@@ -362,12 +371,16 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at DESC);
     `);
 
+    await client.query('COMMIT');
     isConnected = true;
     connectionAttempts = 0;
     console.log('Database initialized successfully');
     return true;
 
   } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch (_) { /* ignore rollback errors */ }
+    }
     console.error(`Database connection failed (attempt ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS}):`, error.message);
     isConnected = false;
 
@@ -521,7 +534,7 @@ async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
 
 // Submission operations
 // Uses transaction to atomically check for duplicates and create submission
-async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet }) {
+async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet, category }) {
   if (!pool) throw new Error('Database not available');
   const client = await pool.connect();
   try {
@@ -530,10 +543,10 @@ async function createSubmission({ tokenMint, submissionType, contentUrl, submitt
     // Insert with ON CONFLICT to handle race conditions atomically
     // The unique index idx_submissions_unique_content enforces uniqueness at DB level
     const result = await client.query(
-      `INSERT INTO submissions (token_mint, submission_type, content_url, submitter_wallet)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO submissions (token_mint, submission_type, content_url, submitter_wallet, category)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [tokenMint, submissionType, contentUrl, submitterWallet]
+      [tokenMint, submissionType, contentUrl, submitterWallet, category || null]
     );
 
     // Initialize vote tally
@@ -714,21 +727,81 @@ async function getVotesBatch(submissionIds, voterWallet) {
 
 async function updateVote(submissionId, voterWallet, voteType, marketCap = null) {
   if (!pool) return;
-  await pool.query(
-    `UPDATE votes SET vote_type = $3, updated_at = NOW()
-     WHERE submission_id = $1 AND voter_wallet = $2`,
-    [submissionId, voterWallet, voteType]
-  );
-  await updateVoteTally(submissionId, marketCap);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE votes SET vote_type = $3, updated_at = NOW()
+       WHERE submission_id = $1 AND voter_wallet = $2`,
+      [submissionId, voterWallet, voteType]
+    );
+    await client.query(
+      `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
+       SELECT
+         $1,
+         COUNT(*) FILTER (WHERE vote_type = 'up'),
+         COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
+         NOW()
+       FROM votes WHERE submission_id = $1
+       ON CONFLICT (submission_id) DO UPDATE SET
+         upvotes = EXCLUDED.upvotes,
+         downvotes = EXCLUDED.downvotes,
+         score = EXCLUDED.score,
+         weighted_score = EXCLUDED.weighted_score,
+         updated_at = NOW()
+       RETURNING score, weighted_score`,
+      [submissionId]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  const weightedScore = (await getVoteTally(submissionId))?.weighted_score || 0;
+  await checkAutoModeration(submissionId, parseFloat(weightedScore), marketCap);
 }
 
 async function deleteVote(submissionId, voterWallet, marketCap = null) {
   if (!pool) return;
-  await pool.query(
-    'DELETE FROM votes WHERE submission_id = $1 AND voter_wallet = $2',
-    [submissionId, voterWallet]
-  );
-  await updateVoteTally(submissionId, marketCap);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'DELETE FROM votes WHERE submission_id = $1 AND voter_wallet = $2',
+      [submissionId, voterWallet]
+    );
+    await client.query(
+      `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
+       SELECT
+         $1,
+         COUNT(*) FILTER (WHERE vote_type = 'up'),
+         COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
+         NOW()
+       FROM votes WHERE submission_id = $1
+       ON CONFLICT (submission_id) DO UPDATE SET
+         upvotes = EXCLUDED.upvotes,
+         downvotes = EXCLUDED.downvotes,
+         score = EXCLUDED.score,
+         weighted_score = EXCLUDED.weighted_score,
+         updated_at = NOW()
+       RETURNING score, weighted_score`,
+      [submissionId]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  const weightedScore = (await getVoteTally(submissionId))?.weighted_score || 0;
+  await checkAutoModeration(submissionId, parseFloat(weightedScore), marketCap);
 }
 
 async function getVoteTally(submissionId) {
@@ -862,6 +935,26 @@ async function getPendingSubmissions(limit = 50) {
 // Watchlist operations
 // ==========================================
 
+// Atomic watchlist add with limit enforcement (prevents TOCTOU race condition)
+async function addToWatchlistAtomic(walletAddress, tokenMint, maxItems = 100) {
+  if (!pool) return { limitReached: true };
+  const result = await pool.query(
+    `INSERT INTO watchlist (wallet_address, token_mint)
+     SELECT $1, $2
+     WHERE (SELECT COUNT(*) FROM watchlist WHERE wallet_address = $1) < $3
+     ON CONFLICT (wallet_address, token_mint) DO NOTHING
+     RETURNING *`,
+    [walletAddress, tokenMint, maxItems]
+  );
+  if (result.rows.length === 0) {
+    // Either already exists or limit reached — check which
+    const exists = await isInWatchlist(walletAddress, tokenMint);
+    if (exists) return { wallet_address: walletAddress, token_mint: tokenMint, exists: true };
+    return { limitReached: true };
+  }
+  return result.rows[0];
+}
+
 // Add token to user's watchlist
 async function addToWatchlist(walletAddress, tokenMint) {
   if (!pool) return null;
@@ -889,6 +982,7 @@ async function removeFromWatchlist(walletAddress, tokenMint) {
 
 // Get user's watchlist
 async function getWatchlist(walletAddress) {
+  if (!pool) return [];
   const result = await pool.query(
     `SELECT w.token_mint, w.added_at, t.name, t.symbol, t.logo_uri
      FROM watchlist w
@@ -908,6 +1002,7 @@ async function getWatchlist(walletAddress) {
 
 // Check if token is in user's watchlist
 async function isInWatchlist(walletAddress, tokenMint) {
+  if (!pool) return false;
   const result = await pool.query(
     `SELECT 1 FROM watchlist
      WHERE wallet_address = $1 AND token_mint = $2`,
@@ -918,6 +1013,7 @@ async function isInWatchlist(walletAddress, tokenMint) {
 
 // Check multiple tokens against watchlist (for batch operations)
 async function checkWatchlistBatch(walletAddress, tokenMints) {
+  if (!pool) return {};
   if (!tokenMints || tokenMints.length === 0) return {};
 
   const result = await pool.query(
@@ -936,6 +1032,7 @@ async function checkWatchlistBatch(walletAddress, tokenMints) {
 
 // Get watchlist count for a user
 async function getWatchlistCount(walletAddress) {
+  if (!pool) return 0;
   const result = await pool.query(
     `SELECT COUNT(*) as count FROM watchlist WHERE wallet_address = $1`,
     [walletAddress]
@@ -1507,6 +1604,21 @@ async function getMostViewedTokens(limit = 10) {
     [limit]
   );
   return result.rows;
+}
+
+// Get distinct token mints that have approved submissions with a given category
+async function getTokensByCategory(category, limit = 50) {
+  if (!pool) return [];
+
+  const result = await pool.query(
+    `SELECT DISTINCT s.token_mint
+     FROM submissions s
+     WHERE s.status = 'approved' AND s.category = $1
+     ORDER BY s.token_mint
+     LIMIT $2`,
+    [category, limit]
+  );
+  return result.rows.map(r => r.token_mint);
 }
 
 // ==========================================
@@ -2319,7 +2431,7 @@ async function safeQuery(queryFn) {
 }
 
 module.exports = {
-  pool,
+  get pool() { return pool; },
   initializeDatabase,
   getInitializationPromise,
   isReady,
@@ -2346,6 +2458,7 @@ module.exports = {
   calculateVoteWeight,
   // Watchlist operations
   addToWatchlist,
+  addToWatchlistAtomic,
   removeFromWatchlist,
   getWatchlist,
   isInWatchlist,
@@ -2375,6 +2488,7 @@ module.exports = {
   getTokenViews,
   getTokenViewsBatch,
   getMostViewedTokens,
+  getTokensByCategory,
   getApprovalThreshold,
   // Community leaderboards
   getMostWatchlistedTokens,

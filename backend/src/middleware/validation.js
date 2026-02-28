@@ -9,6 +9,7 @@ const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 // Signature replay protection — tracks used signatures to prevent reuse within the expiry window
 const usedSignatures = new Map();
 const USED_SIG_CLEANUP_INTERVAL_MS = 60000; // Clean up every minute
+const MAX_USED_SIGNATURES = 50000; // Prevent unbounded memory growth under attack
 let usedSigCleanupTimer = null;
 function startSignatureCleanup() {
   usedSigCleanupTimer = setInterval(() => {
@@ -16,9 +17,24 @@ function startSignatureCleanup() {
     for (const [sig, expiry] of usedSignatures) {
       if (now > expiry) usedSignatures.delete(sig);
     }
+    // Hard cap: evict oldest entries if still over limit
+    if (usedSignatures.size > MAX_USED_SIGNATURES) {
+      const entries = [...usedSignatures.entries()].sort((a, b) => a[1] - b[1]);
+      const toRemove = entries.slice(0, usedSignatures.size - MAX_USED_SIGNATURES);
+      for (const [sig] of toRemove) usedSignatures.delete(sig);
+    }
   }, USED_SIG_CLEANUP_INTERVAL_MS);
+  if (usedSigCleanupTimer.unref) usedSigCleanupTimer.unref();
 }
 startSignatureCleanup();
+
+// Cleanup function for graceful shutdown
+function stopSignatureCleanup() {
+  if (usedSigCleanupTimer) {
+    clearInterval(usedSigCleanupTimer);
+    usedSigCleanupTimer = null;
+  }
+}
 function markSignatureUsed(signature, ttlMs) {
   usedSignatures.set(signature, Date.now() + ttlMs);
 }
@@ -116,7 +132,7 @@ function validateUrlDomain(urlString, submissionType) {
   }
 }
 
-// Sanitize string input
+// Sanitize string input (HTML entity encoding for output safety)
 function sanitizeString(str, maxLength = 255) {
   if (typeof str !== 'string') return '';
   return str
@@ -127,6 +143,16 @@ function sanitizeString(str, maxLength = 255) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;');
+}
+
+// Sanitize search query input — strips control chars but preserves &, <, etc.
+// so database searches work correctly (search queries are parameterized, not rendered as HTML)
+function sanitizeSearchString(str, maxLength = 100) {
+  if (typeof str !== 'string') return '';
+  return str
+    .trim()
+    .slice(0, maxLength)
+    .replace(/[\x00-\x1F\x7F]/g, ''); // Strip control characters only
 }
 
 // Validate mint address parameter
@@ -300,8 +326,8 @@ function validateSearch(req, res, next) {
     return res.status(400).json({ error: 'Search query too long' });
   }
 
-  // Sanitize
-  req.query.q = sanitizeString(q, 100);
+  // Sanitize search query (don't HTML-encode — parameterized queries handle SQL safety)
+  req.query.q = sanitizeSearchString(q, 100);
 
   next();
 }
@@ -581,8 +607,8 @@ function validateWalletSignature(req, res, next) {
     });
   }
 
-  // Validate signature format (should be array of numbers)
-  if (!Array.isArray(signature) || signature.length !== 64) {
+  // Validate signature format (must be array of 64 byte values 0-255)
+  if (!Array.isArray(signature) || signature.length !== 64 || !signature.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
     return res.status(400).json({
       error: 'Invalid signature format',
       code: 'INVALID_SIGNATURE_FORMAT'
@@ -647,8 +673,8 @@ function validateVoteSignature(req, res, next) {
     });
   }
 
-  // Validate signature format (should be array of numbers)
-  if (!Array.isArray(signature) || signature.length !== 64) {
+  // Validate signature format (must be array of 64 byte values 0-255)
+  if (!Array.isArray(signature) || signature.length !== 64 || !signature.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
     return res.status(400).json({
       error: 'Invalid signature format',
       code: 'INVALID_SIGNATURE_FORMAT'
@@ -798,8 +824,8 @@ function validateBatchVoteSignature(req, res, next) {
     });
   }
 
-  // Validate signature format (should be array of numbers)
-  if (!Array.isArray(signature) || signature.length !== 64) {
+  // Validate signature format (must be array of 64 byte values 0-255)
+  if (!Array.isArray(signature) || signature.length !== 64 || !signature.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
     return res.status(400).json({
       error: 'Invalid signature format',
       code: 'INVALID_SIGNATURE_FORMAT'
@@ -875,8 +901,8 @@ function validateSubmissionSignature(req, res, next) {
     });
   }
 
-  // Validate signature format (should be array of numbers)
-  if (!Array.isArray(signature) || signature.length !== 64) {
+  // Validate signature format (must be array of 64 byte values 0-255)
+  if (!Array.isArray(signature) || signature.length !== 64 || !signature.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
     return res.status(400).json({
       error: 'Invalid signature format',
       code: 'INVALID_SIGNATURE_FORMAT'
@@ -912,8 +938,9 @@ function validateSubmissionSignature(req, res, next) {
  * Used before signature verification
  */
 function validateBatchSubmissions(req, res, next) {
-  const { tokenMint, submissions, submitterWallet } = req.body;
+  const { tokenMint, submissions, submitterWallet, category } = req.body;
   const validTypes = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
+  const validCategories = ['tech', 'meme'];
 
   // Validate required fields
   if (!tokenMint || !submissions || !submitterWallet) {
@@ -921,6 +948,16 @@ function validateBatchSubmissions(req, res, next) {
       error: 'Missing required fields',
       required: ['tokenMint', 'submissions', 'submitterWallet']
     });
+  }
+
+  // Validate optional category
+  if (category != null && category !== '') {
+    if (typeof category !== 'string' || !validCategories.includes(category)) {
+      return res.status(400).json({
+        error: 'Invalid category. Must be one of: tech, meme',
+        validCategories
+      });
+    }
   }
 
   // Validate submissions is an array
@@ -1066,8 +1103,8 @@ function validateBatchSubmissionSignature(req, res, next) {
     });
   }
 
-  // Validate signature format (should be array of numbers)
-  if (!Array.isArray(signature) || signature.length !== 64) {
+  // Validate signature format (must be array of 64 byte values 0-255)
+  if (!Array.isArray(signature) || signature.length !== 64 || !signature.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
     return res.status(400).json({
       error: 'Invalid signature format',
       code: 'INVALID_SIGNATURE_FORMAT'
@@ -1498,6 +1535,8 @@ module.exports = {
   verifyAdminPassword,
   validateAdminSession,
   ADMIN_SESSION_DURATION_MS,
+  // Cleanup
+  stopSignatureCleanup,
   // Constants
   SOLANA_ADDRESS_REGEX,
   BLOCKED_DOMAINS,

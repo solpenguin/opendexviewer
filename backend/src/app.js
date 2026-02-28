@@ -227,12 +227,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Parse JSON bodies
-app.use(express.json({ limit: '1mb' }));
+// Parse JSON bodies (100KB is sufficient for all API payloads)
+app.use(express.json({ limit: '100kb' }));
 
-// Cookie parser for admin sessions
+// Cookie parser for admin sessions (signed cookies for tamper detection)
 const cookieParser = require('cookie-parser');
-app.use(cookieParser());
+app.use(cookieParser(process.env.COOKIE_SECRET || crypto.randomBytes(32).toString('hex')));
 
 // Request logging
 app.use((req, res, next) => {
@@ -269,6 +269,17 @@ app.use('/api/bug-reports', bugReportRoutes);
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);
+
+// CSRF protection for admin endpoints — verify Origin header on state-changing requests
+app.use('/admin', (req, res, next) => {
+  if (['POST', 'PATCH', 'DELETE'].includes(req.method) && process.env.NODE_ENV === 'production') {
+    const origin = req.headers.origin;
+    if (origin && !corsOrigins.includes(origin.replace(/\/$/, ''))) {
+      return res.status(403).json({ error: 'Origin not allowed', code: 'CSRF_REJECTED' });
+    }
+  }
+  next();
+});
 
 // Admin panel API - password protected, with rate limiting
 app.use('/admin', defaultLimiter, adminRoutes);
@@ -395,6 +406,12 @@ async function gracefulShutdown(signal) {
     clearInterval(cleanupIntervalId);
     cleanupIntervalId = null;
   }
+
+  // Clear signature replay protection timer
+  try {
+    const { stopSignatureCleanup } = require('./middleware/validation');
+    stopSignatureCleanup();
+  } catch (_) {}
 
   // Shutdown job queue (handles view count flushing internally)
   try {

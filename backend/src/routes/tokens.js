@@ -10,7 +10,7 @@ const { validateMint, validatePagination, validateSearch, asyncHandler, SOLANA_A
 const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
 
 // Allowed values for token list query params — prevents cache key pollution
-const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed'];
+const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'tech', 'meme'];
 const VALID_SORTS = ['volume', 'price', 'priceChange24h', 'marketCap'];
 const VALID_ORDERS = ['asc', 'desc'];
 const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
@@ -194,6 +194,116 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       return res.json(tokens);
     }
 
+    // Handle category filters (tech / meme) - tokens tagged by community submissions
+    if (filter === 'tech' || filter === 'meme') {
+      const mints = await db.getTokensByCategory(filter, parseInt(limit));
+
+      if (!mints || mints.length === 0) {
+        return res.json([]);
+      }
+
+      // Batch fetch from local database
+      const localTokens = await db.getTokensBatch(mints);
+      const localTokenMap = {};
+      if (localTokens) {
+        localTokens.forEach(t => {
+          if (t && t.mint_address) localTokenMap[t.mint_address] = t;
+        });
+      }
+
+      // Batch fetch metadata from Helius for tokens not in local DB
+      const missingMints = mints.filter(m => !localTokenMap[m]?.name);
+      let heliusMetadata = {};
+      if (missingMints.length > 0 && solanaService.isHeliusConfigured()) {
+        try {
+          heliusMetadata = await solanaService.getTokenMetadataBatch(missingMints);
+        } catch (err) {
+          // Helius batch failed, continue without it
+        }
+      }
+
+      // Check cache for remaining tokens (parallel lookups)
+      const stillMissing = missingMints.filter(m => !heliusMetadata[m]?.name);
+      const cacheResults = {};
+      if (stillMissing.length > 0) {
+        const cacheLookups = await Promise.all(
+          stillMissing.map(async (mint) => {
+            const tokenCacheKey = keys.tokenInfo(mint);
+            const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+            return [mint, cachedMeta?.value];
+          })
+        );
+        for (const [mint, value] of cacheLookups) {
+          if (value?.name) cacheResults[mint] = value;
+        }
+      }
+
+      // Build token list from available data
+      tokens = mints.map(mint => {
+        const local = localTokenMap[mint];
+        const helius = heliusMetadata[mint];
+        const cached = cacheResults[mint];
+
+        if (local?.name) {
+          return {
+            mintAddress: mint, address: mint,
+            name: local.name, symbol: local.symbol || '???',
+            price: local.price || 0, priceChange24h: local.price_change_24h || 0,
+            volume24h: local.volume_24h || 0, marketCap: local.market_cap || 0,
+            logoUri: local.logo_uri || null, logoURI: local.logo_uri || null,
+            views: 0
+          };
+        }
+        if (helius?.name) {
+          return {
+            mintAddress: mint, address: mint,
+            name: helius.name, symbol: helius.symbol || '???',
+            price: 0, priceChange24h: 0, volume24h: 0, marketCap: 0,
+            logoUri: helius.logoUri || null, logoURI: helius.logoUri || null,
+            views: 0
+          };
+        }
+        if (cached?.name) {
+          return {
+            mintAddress: mint, address: mint,
+            name: cached.name, symbol: cached.symbol || '???',
+            price: cached.price || 0, priceChange24h: cached.priceChange24h || 0,
+            volume24h: cached.volume24h || 0, marketCap: cached.marketCap || 0,
+            logoUri: cached.logoUri || null, logoURI: cached.logoURI || null,
+            views: 0
+          };
+        }
+        return {
+          mintAddress: mint, address: mint,
+          name: `${mint.slice(0, 4)}...${mint.slice(-4)}`, symbol: '???',
+          price: 0, priceChange24h: 0, volume24h: 0, marketCap: 0,
+          logoUri: null, logoURI: null, views: 0
+        };
+      });
+
+      // Enrich with view counts
+      try {
+        const addresses = tokens.map(t => t.address);
+        const viewCounts = await db.getTokenViewsBatch(addresses);
+        tokens.forEach(t => { t.views = viewCounts[t.address] || 0; });
+      } catch { /* non-critical */ }
+
+      // Enrich with sentiment scores
+      try {
+        const addresses = tokens.map(t => t.address);
+        const sentimentScores = await db.getSentimentBatch(addresses);
+        for (const token of tokens) {
+          const s = sentimentScores[token.address];
+          token.sentimentScore = s ? s.score : 0;
+          token.sentimentBullish = s ? s.bullish : 0;
+          token.sentimentBearish = s ? s.bearish : 0;
+        }
+      } catch { /* non-critical */ }
+
+      await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
+      return res.json(tokens);
+    }
+
     // Use GeckoTerminal (free, no API key needed)
     // Optimization: Skip GeckoTerminal enrichment - use Helius batch API instead
     const useHeliusEnrichment = solanaService.isHeliusConfigured();
@@ -318,7 +428,7 @@ const MAX_BATCH_SIZE = 50; // Limit batch requests to prevent abuse
 
 // POST /api/tokens/batch - Get multiple tokens in one request (optimized for watchlist)
 // This endpoint reduces N individual requests to 1 batch request
-router.post('/batch', asyncHandler(async (req, res) => {
+router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
   const { mints } = req.body;
 
   // Validate input
@@ -1011,7 +1121,7 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
       if (!data || !data.data || data.data.length === 0) {
         data = await jupiterService.getPriceHistory(mint, {
           interval: normalizedInterval,
-          limit: parseInt(limit)
+          limit: Math.min(Math.max(1, parseInt(limit) || 100), 500)
         });
       }
 
@@ -1031,13 +1141,20 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { interval = '1h' } = req.query;
 
-  const cacheKey = `ohlcv:${mint}:${interval}`;
+  // Validate interval to prevent cache key pollution
+  const validIntervals = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
+  const normalizedInterval = interval.toLowerCase();
+  if (!validIntervals.includes(normalizedInterval)) {
+    return res.status(400).json({ error: 'Invalid interval', validIntervals });
+  }
+
+  const cacheKey = `ohlcv:${mint}:${normalizedInterval}`;
 
   try {
     // Use getOrSet for caching with stampede prevention
     // OHLCV data cached for 2 minutes to reduce GeckoTerminal API load
     const ohlcvData = await cache.getOrSet(cacheKey, async () => {
-      return geckoService.getOHLCV(mint, { interval });
+      return geckoService.getOHLCV(mint, { interval: normalizedInterval });
     }, TTL.OHLCV);
 
     res.json(ohlcvData);

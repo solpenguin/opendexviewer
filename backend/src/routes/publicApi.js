@@ -166,6 +166,12 @@ router.get('/community/:mint/all',
     const { mint } = req.params;
     const { type } = req.query;
 
+    // Validate type parameter to prevent cache pollution
+    const VALID_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
+    if (type && !VALID_TYPES.includes(type)) {
+      return res.status(400).json({ error: 'Invalid submission type', validTypes: VALID_TYPES });
+    }
+
     // Get approved submissions
     const submissions = await db.getSubmissionsByToken(mint, {
       status: 'approved',

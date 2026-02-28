@@ -140,7 +140,7 @@ services:
     name: opendex-redis
     region: oregon
     plan: free
-    maxmemoryPolicy: noeviction
+    maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
 # =====================================================

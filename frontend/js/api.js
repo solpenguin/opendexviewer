@@ -223,7 +223,18 @@ const api = {
 
         clearTimeout(timeoutId);
 
-        const data = await response.json();
+        // Parse JSON safely — non-JSON responses (HTML error pages) won't crash
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          if (!response.ok) {
+            const error = new Error(`HTTP ${response.status}`);
+            error.status = response.status;
+            throw error;
+          }
+          throw new Error('Invalid JSON response from server');
+        }
 
         if (!response.ok) {
           // Check for Retry-After header on 429/503 errors

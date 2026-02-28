@@ -38,7 +38,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.database = {
       status: 'error',
-      error: error.message
+      error: 'Database check failed'
     };
     health.status = 'degraded';
   }
@@ -53,7 +53,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.solana_rpc = {
       status: 'error',
-      error: error.message
+      error: 'Solana RPC check failed'
     };
     health.status = 'degraded';
   }
@@ -68,7 +68,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.cache = {
       status: 'error',
-      error: error.message
+      error: 'Cache check failed'
     };
     // Cache errors don't degrade the service - we can fall back to memory
   }
@@ -87,7 +87,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.jupiter_api = {
       status: 'error',
-      error: error.message
+      error: 'Jupiter API check failed'
     };
   }
 
@@ -114,7 +114,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.circuit_breakers = {
       status: 'error',
-      error: error.message
+      error: 'Circuit breaker check failed'
     };
   }
 
@@ -135,7 +135,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.request_queues = {
       status: 'error',
-      error: error.message
+      error: 'Queue metrics check failed'
     };
   }
 
@@ -175,7 +175,7 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   } catch (error) {
     health.checks.job_queue = {
       status: 'error',
-      error: error.message
+      error: 'Job queue check failed'
     };
   }
 

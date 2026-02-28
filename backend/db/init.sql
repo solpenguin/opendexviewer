@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     content_url TEXT NOT NULL,
     submitter_wallet VARCHAR(44),
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    category VARCHAR(10) CHECK (category IN ('tech', 'meme')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -47,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
 CREATE INDEX IF NOT EXISTS idx_submissions_type ON submissions(submission_type);
 CREATE INDEX IF NOT EXISTS idx_submissions_wallet ON submissions(submitter_wallet);
 CREATE INDEX IF NOT EXISTS idx_submissions_created ON submissions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_submissions_status_category ON submissions(status, category);
 
 -- =====================================================
 -- VOTES TABLE
@@ -136,31 +138,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to auto-moderate submissions based on score
-CREATE OR REPLACE FUNCTION auto_moderate_submission()
-RETURNS TRIGGER AS $$
-DECLARE
-    auto_approve_threshold INTEGER := 5;
-    auto_reject_threshold INTEGER := -5;
-BEGIN
-    -- Auto-approve if score reaches threshold
-    IF NEW.score >= auto_approve_threshold THEN
-        UPDATE submissions SET status = 'approved' WHERE id = NEW.submission_id AND status = 'pending';
-    -- Auto-reject if score drops below threshold
-    ELSIF NEW.score <= auto_reject_threshold THEN
-        UPDATE submissions SET status = 'rejected' WHERE id = NEW.submission_id AND status = 'pending';
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger for auto-moderation
+-- Auto-moderation is handled by the application layer (database.js checkAutoModeration)
+-- which uses market-cap-tiered thresholds, weighted scores, and minimum review periods.
+-- The database trigger was removed to avoid conflicting with the more sophisticated app logic.
 DROP TRIGGER IF EXISTS auto_moderate_on_tally_update ON vote_tallies;
-CREATE TRIGGER auto_moderate_on_tally_update
-    AFTER INSERT OR UPDATE ON vote_tallies
-    FOR EACH ROW
-    EXECUTE FUNCTION auto_moderate_submission();
+DROP FUNCTION IF EXISTS auto_moderate_submission();
 
 -- =====================================================
 -- TOKEN VIEWS TABLE

@@ -126,12 +126,14 @@ router.post('/login',
       maxAge: ADMIN_SESSION_DURATION_MS
     });
 
-    // H2: Don't leak session token in response body — httpOnly cookie is the primary auth mechanism.
-    // The X-Admin-Session header is returned for non-browser clients that can't use cookies.
+    // Return session token in response body so the frontend can store it
+    // for the X-Admin-Session header fallback (needed when cookies fail cross-origin).
+    // The httpOnly cookie is the primary auth mechanism.
     res.json({
       success: true,
       message: 'Login successful',
       data: {
+        sessionToken,
         expiresAt: expiresAt.toISOString()
       }
     });
@@ -529,6 +531,12 @@ router.patch('/settings',
     const { developmentMode } = req.body;
 
     if (typeof developmentMode === 'boolean') {
+      if (developmentMode && process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          success: false,
+          error: 'Development mode cannot be enabled in production'
+        });
+      }
       adminSettings.developmentMode = developmentMode;
     }
 

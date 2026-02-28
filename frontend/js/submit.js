@@ -782,11 +782,16 @@ const submitPage = {
     `;
 
     try {
+      // Read selected category (optional)
+      const categoryEl = document.querySelector('input[name="category"]:checked');
+      const category = categoryEl && categoryEl.value !== 'none' ? categoryEl.value : null;
+
       // Submit all items in a single batch request (no signature needed - wallet already connected)
       const batchData = {
         tokenMint,
         submissions,
-        submitterWallet: wallet.address
+        submitterWallet: wallet.address,
+        ...(category && { category })
       };
 
       const response = await api.submissions.createBatch(batchData);
@@ -861,6 +866,10 @@ const submitPage = {
     const bannerPreview = document.getElementById('banner-preview-mini');
     if (bannerPreview) bannerPreview.style.display = 'none';
 
+    // Reset category selector
+    const noneCategory = document.querySelector('input[name="category"][value="none"]');
+    if (noneCategory) noneCategory.checked = true;
+
     this.resetTokenPreview();
     this.updateFilledCount();
     this.updateLivePreview();
@@ -904,7 +913,7 @@ const submitPage = {
         </div>
         <p class="success-note">The community will vote on your submission${results.length > 1 ? 's' : ''}. Once they reach +5 votes, they will be automatically approved.</p>
         <div class="modal-actions">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+          <button class="btn btn-secondary" data-action="close-modal">
             Submit More
           </button>
           <a href="token.html?mint=${safeTokenMint}" class="btn btn-primary">
@@ -920,6 +929,8 @@ const submitPage = {
       modal.remove();
       document.removeEventListener('keydown', handleEscape);
     };
+
+    modal.querySelectorAll('[data-action="close-modal"]').forEach(btn => btn.addEventListener('click', closeModal));
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeModal();
@@ -937,7 +948,7 @@ const submitPage = {
     modal.className = 'modal-overlay';
     modal.innerHTML = `
       <div class="modal-content imgur-help-modal">
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+        <button class="modal-close" data-action="close-modal">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -973,7 +984,7 @@ const submitPage = {
           <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
             Open Imgur
           </a>
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+          <button class="btn btn-secondary" data-action="close-modal">
             Got it
           </button>
         </div>
@@ -986,6 +997,8 @@ const submitPage = {
       modal.remove();
       document.removeEventListener('keydown', handleEscape);
     };
+
+    modal.querySelectorAll('[data-action="close-modal"]').forEach(btn => btn.addEventListener('click', closeModal));
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeModal();
@@ -1133,11 +1146,13 @@ const submitPage = {
             <path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>
           </svg>
           <p>Connect your wallet to see your submissions</p>
-          <button type="button" id="connect-wallet-submissions" class="btn btn-secondary" onclick="wallet.connect()">
+          <button type="button" id="connect-wallet-submissions" class="btn btn-secondary" data-action="connect-wallet">
             Connect Wallet
           </button>
         </div>
       `;
+      const connectBtn = container.querySelector('[data-action="connect-wallet"]');
+      if (connectBtn) connectBtn.addEventListener('click', () => wallet.connect());
     }
   },
 
@@ -1336,14 +1351,15 @@ const submitPage = {
           ${errorList}
         </div>
         <div class="modal-actions">
-          <button class="btn btn-secondary" onclick="this.closest('.submission-modal-overlay').remove()">Close</button>
-          <button class="btn btn-primary" onclick="this.closest('.submission-modal-overlay').remove()">Try Again</button>
+          <button class="btn btn-secondary" data-action="close-modal">Close</button>
+          <button class="btn btn-primary" data-action="close-modal">Try Again</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(modal);
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.querySelectorAll('[data-action="close-modal"]').forEach(btn => btn.addEventListener('click', () => modal.remove()));
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   }
 };
 

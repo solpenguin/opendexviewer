@@ -284,6 +284,26 @@ const adminPanel = {
     // Database management buttons
     document.getElementById('check-database-btn')?.addEventListener('click', () => this.checkDatabaseStatus());
     document.getElementById('repair-database-btn')?.addEventListener('click', () => this.repairDatabase());
+
+    // Event delegation for dynamically rendered table action buttons
+    document.getElementById('submissions-table')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const id = parseInt(btn.dataset.id, 10);
+      if (!id) return;
+      if (btn.dataset.action === 'approve') this.approveSubmission(id);
+      else if (btn.dataset.action === 'reject') this.rejectSubmission(id);
+      else if (btn.dataset.action === 'delete-submission') this.deleteSubmission(id);
+    });
+
+    document.getElementById('apikeys-table')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const id = parseInt(btn.dataset.id, 10);
+      if (!id) return;
+      if (btn.dataset.action === 'revoke-key') this.revokeApiKey(id);
+      else if (btn.dataset.action === 'delete-key') this.deleteApiKey(id);
+    });
   },
 
   bindPagination(type) {
@@ -552,10 +572,10 @@ const adminPanel = {
           <td>
             <div class="table-actions">
               ${sub.status === 'pending' ? `
-                <button class="action-btn approve" onclick="adminPanel.approveSubmission(${parseInt(sub.id, 10) || 0})">Approve</button>
-                <button class="action-btn reject" onclick="adminPanel.rejectSubmission(${parseInt(sub.id, 10) || 0})">Reject</button>
+                <button class="action-btn approve" data-action="approve" data-id="${parseInt(sub.id, 10) || 0}">Approve</button>
+                <button class="action-btn reject" data-action="reject" data-id="${parseInt(sub.id, 10) || 0}">Reject</button>
               ` : ''}
-              <button class="action-btn delete" onclick="adminPanel.deleteSubmission(${parseInt(sub.id, 10) || 0})">Delete</button>
+              <button class="action-btn delete" data-action="delete-submission" data-id="${parseInt(sub.id, 10) || 0}">Delete</button>
             </div>
           </td>
         </tr>
@@ -617,9 +637,9 @@ const adminPanel = {
           <td>
             <div class="table-actions">
               ${key.is_active ? `
-                <button class="action-btn revoke" onclick="adminPanel.revokeApiKey(${parseInt(key.id, 10) || 0})">Revoke</button>
+                <button class="action-btn revoke" data-action="revoke-key" data-id="${parseInt(key.id, 10) || 0}">Revoke</button>
               ` : ''}
-              <button class="action-btn delete" onclick="adminPanel.deleteApiKey(${parseInt(key.id, 10) || 0})">Delete</button>
+              <button class="action-btn delete" data-action="delete-key" data-id="${parseInt(key.id, 10) || 0}">Delete</button>
             </div>
           </td>
         </tr>

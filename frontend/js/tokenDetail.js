@@ -389,10 +389,14 @@ const tokenDetail = {
     // Price high/low — populated from OHLCV in updateHeaderHighLow() once chart data loads
 
     // Stats
-    document.getElementById('stat-mcap').textContent = utils.formatNumber(token.marketCap);
-    document.getElementById('stat-volume').textContent = utils.formatNumber(token.volume24h);
-    document.getElementById('stat-liquidity').textContent = utils.formatNumber(token.liquidity);
-    document.getElementById('stat-holders').textContent = token.holders?.toLocaleString() || 'N/A';
+    const mcapEl = document.getElementById('stat-mcap');
+    if (mcapEl) mcapEl.textContent = utils.formatNumber(token.marketCap);
+    const volumeEl = document.getElementById('stat-volume');
+    if (volumeEl) volumeEl.textContent = utils.formatNumber(token.volume24h);
+    const liqEl = document.getElementById('stat-liquidity');
+    if (liqEl) liqEl.textContent = utils.formatNumber(token.liquidity);
+    const holdersEl = document.getElementById('stat-holders');
+    if (holdersEl) holdersEl.textContent = token.holders?.toLocaleString() || 'N/A';
 
     const supplyEl = document.getElementById('stat-supply');
     if (supplyEl) supplyEl.textContent = token.supply ? utils.formatNumber(token.supply, '') : '--';
@@ -702,11 +706,16 @@ const tokenDetail = {
 
     const formatFn = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
 
-    document.getElementById('chart-open').textContent = formatFn(open);
-    document.getElementById('chart-high').textContent = formatFn(high);
-    document.getElementById('chart-low').textContent = formatFn(low);
-    document.getElementById('chart-close').textContent = formatFn(close);
-    document.getElementById('chart-volume').textContent = utils.formatNumber(totalVolume);
+    const chartOpen = document.getElementById('chart-open');
+    if (chartOpen) chartOpen.textContent = formatFn(open);
+    const chartHigh = document.getElementById('chart-high');
+    if (chartHigh) chartHigh.textContent = formatFn(high);
+    const chartLow = document.getElementById('chart-low');
+    if (chartLow) chartLow.textContent = formatFn(low);
+    const chartClose = document.getElementById('chart-close');
+    if (chartClose) chartClose.textContent = formatFn(close);
+    const chartVol = document.getElementById('chart-volume');
+    if (chartVol) chartVol.textContent = utils.formatNumber(totalVolume);
   },
 
   // Update the token header 24h high/low from the last 24 hourly OHLCV candles
@@ -1116,12 +1125,12 @@ const tokenDetail = {
 
     // If neither banner nor links, hide the entire section
     if (!hasBanner && !hasLinks) {
-      communitySection.style.display = 'none';
+      if (communitySection) communitySection.style.display = 'none';
       return;
     }
 
     // Show the community section
-    communitySection.style.display = 'block';
+    if (communitySection) communitySection.style.display = 'block';
 
     // Handle banner display
     if (hasBanner) {
@@ -1200,6 +1209,31 @@ const tokenDetail = {
     }
   },
 
+  // Update the category badge next to the token name
+  updateCategoryBadge() {
+    const nameRow = document.querySelector('.token-name-row');
+    if (!nameRow) return;
+
+    // Remove existing badge if present
+    const existing = nameRow.querySelector('.category-badge');
+    if (existing) existing.remove();
+
+    // Find the most recent approved submission that has a category
+    const categorized = this.submissions
+      .filter(s => s.status === 'approved' && s.category)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (categorized.length === 0) return;
+
+    const category = categorized[0].category;
+    if (category !== 'tech' && category !== 'meme') return;
+
+    const badge = document.createElement('span');
+    badge.className = `category-badge ${category}`;
+    badge.textContent = category.charAt(0).toUpperCase() + category.slice(1);
+    nameRow.appendChild(badge);
+  },
+
   // Legacy methods for backward compatibility
   updateBanner() {
     this.updateCommunitySection();
@@ -1234,6 +1268,7 @@ const tokenDetail = {
 
       // Update the combined community section (uses only approved for display)
       this.updateCommunitySection();
+      this.updateCategoryBadge();
       this.renderSubmissions('banner');
     } catch (error) {
       console.error('Failed to load submissions:', error);

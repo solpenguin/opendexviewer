@@ -422,7 +422,7 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const parsedId = parseInt(id);
 
-  if (isNaN(parsedId)) {
+  if (isNaN(parsedId) || parsedId < 1 || parsedId > 2147483647) {
     return res.status(400).json({ error: 'Invalid submission ID' });
   }
 

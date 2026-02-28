@@ -45,16 +45,14 @@ router.post('/', walletLimiter, validateWatchlistSignature, asyncHandler(async (
     return res.status(400).json({ error: 'Invalid token mint address' });
   }
 
-  // Check watchlist limit (max 100 tokens per wallet)
-  const currentCount = await db.getWatchlistCount(wallet);
-  if (currentCount >= 100) {
+  // Atomic watchlist insert with limit check (prevents TOCTOU race condition)
+  const result = await db.addToWatchlistAtomic(wallet, tokenMint, 100);
+  if (result.limitReached) {
     return res.status(400).json({
       error: 'Watchlist limit reached (max 100 tokens)',
       code: 'WATCHLIST_LIMIT'
     });
   }
-
-  const result = await db.addToWatchlist(wallet, tokenMint);
 
   res.json({
     success: true,

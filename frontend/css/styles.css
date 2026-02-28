@@ -1426,6 +1426,27 @@ a:hover {
   color: var(--text-secondary);
 }
 
+.category-badge {
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.category-badge.tech {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.category-badge.meme {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
 .token-address-row {
   display: flex;
   align-items: center;
@@ -3508,6 +3529,55 @@ a:hover {
 .submission-count-indicator #filled-count {
   font-weight: 700;
   color: var(--accent-primary);
+}
+
+/* Category Selector */
+.category-selector {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.category-option {
+  cursor: pointer;
+}
+
+.category-option input[type="radio"] {
+  display: none;
+}
+
+.category-pill {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.category-pill:hover {
+  border-color: var(--text-muted);
+}
+
+.category-option input[type="radio"]:checked + .category-pill {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.category-option input[type="radio"]:checked + .category-pill.tech {
+  border-color: #818cf8;
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.category-option input[type="radio"]:checked + .category-pill.meme {
+  border-color: #fbbf24;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
 }
 
 /* Wallet Section Enhanced */

@@ -52,7 +52,7 @@ const tokenList = {
     const page = utils.getUrlParam('page');
     const search = utils.getUrlParam('q');
 
-    if (filter && ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'watchlist'].includes(filter)) {
+    if (filter && ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'watchlist', 'tech', 'meme'].includes(filter)) {
       this.currentFilter = filter;
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.filter === filter);
@@ -243,6 +243,16 @@ const tokenList = {
         this.hideSearchDropdown();
       }
     });
+
+    // Event delegation for dynamically rendered data-action buttons
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('[data-action]');
+      if (!target) return;
+      const action = target.dataset.action;
+      if (action === 'connect-wallet' && typeof wallet !== 'undefined') wallet.connect();
+      else if (action === 'browse-trending') document.querySelector('[data-filter=trending]')?.click();
+      else if (action === 'clear-search') this.clearSearch();
+    });
   },
 
   // Start auto-refresh (configurable via config.cache.tokenListRefresh)
@@ -427,7 +437,7 @@ const tokenList = {
               </span>
               <span class="empty-title">Connect Wallet</span>
               <span class="empty-text">Connect your wallet to view your watchlist</span>
-              <button class="btn btn-primary" onclick="wallet.connect()">Connect Wallet</button>
+              <button class="btn btn-primary" data-action="connect-wallet">Connect Wallet</button>
             </div>
           </td>
         </tr>
@@ -444,7 +454,7 @@ const tokenList = {
               </span>
               <span class="empty-title">Your watchlist is empty</span>
               <span class="empty-text">Click the star icon on any token to add it to your watchlist</span>
-              <button class="btn btn-secondary" onclick="document.querySelector('[data-filter=trending]').click()">Browse Tokens</button>
+              <button class="btn btn-secondary" data-action="browse-trending">Browse Tokens</button>
             </div>
           </td>
         </tr>
@@ -698,7 +708,7 @@ const tokenList = {
             <div class="empty-state">
               <span class="empty-icon">🔍</span>
               <span>No tokens found</span>
-              ${this.isSearchMode ? '<button class="btn btn-secondary btn-sm" onclick="tokenList.clearSearch()">Clear Search</button>' : ''}
+              ${this.isSearchMode ? '<button class="btn btn-secondary btn-sm" data-action="clear-search">Clear Search</button>' : ''}
             </div>
           </td>
         </tr>

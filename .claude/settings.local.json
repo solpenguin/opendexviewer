@@ -50,7 +50,10 @@
       "Bash(grep -n \"navigator.clipboard\\\\|URL.createObjectURL\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
       "Bash(wc -l /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
       "Bash(xargs basename -a)",
-      "Bash(ls /c/VS/OPENDEX/opendexviewer/frontend/*.html)"
+      "Bash(ls /c/VS/OPENDEX/opendexviewer/frontend/*.html)",
+      "Bash(find \"c:\\\\VS\\\\OPENDEX\\\\opendexviewer\\\\backend\\\\db\" -type f -name \"*.sql\" -exec grep -l \"status.*category\\\\|category.*status\" {} ;)",
+      "Bash(openssl dgst -sha384 -binary)",
+      "Bash(openssl base64 -A)"
     ]
   }
 }

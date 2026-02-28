@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validateSubmission, validateSubmissionSignature, validateBatchSubmissions, validateBatchSubmissionSignature, validateWallet, asyncHandler, requireDatabase, sanitizeString, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
-const { strictLimiter } = require('../middleware/rateLimit');
+const { validateMint, validateSubmission, validateSubmissionSignature, validateBatchSubmissions, validateBatchSubmissionSignature, validateWallet, validateAdminSession, asyncHandler, requireDatabase, sanitizeString, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
+const { strictLimiter, defaultLimiter } = require('../middleware/rateLimit');
 
 // All routes in this file require database access
 router.use(requireDatabase);
@@ -26,6 +26,7 @@ function sanitizeSubmissionOutput(submission) {
     content_url: submission.content_url,
     // Privacy: Don't expose submitter_wallet in public responses
     status: submission.status,
+    category: submission.category || null,
     created_at: submission.created_at,
     // Vote data
     upvotes: submission.upvotes || 0,
@@ -98,7 +99,7 @@ router.post('/', strictLimiter, validateSubmission, validateSubmissionSignature,
 // POST /api/submissions/batch - Create multiple submissions with a single signature
 // This reduces the number of wallet signature requests from N to 1
 router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubmissionSignature, asyncHandler(async (req, res) => {
-  const { tokenMint, submissions, submitterWallet } = req.body;
+  const { tokenMint, submissions, submitterWallet, category } = req.body;
 
   const results = [];
   const errors = [];
@@ -110,7 +111,8 @@ router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubm
         tokenMint,
         submissionType: sub.submissionType,
         contentUrl: sub.contentUrl,
-        submitterWallet: submitterWallet || null
+        submitterWallet: submitterWallet || null,
+        category: category || null
       });
 
       results.push({
@@ -208,7 +210,7 @@ router.get('/token/:mint', validateMint, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/submissions/wallet/:wallet - Get submissions by wallet
-router.get('/wallet/:wallet', asyncHandler(async (req, res) => {
+router.get('/wallet/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
   const { wallet } = req.params;
 
   // Validate wallet
@@ -220,8 +222,8 @@ router.get('/wallet/:wallet', asyncHandler(async (req, res) => {
   res.json(sanitizeSubmissionsArray(submissions));
 }));
 
-// GET /api/submissions/pending - Get pending submissions (for moderation UI)
-router.get('/status/pending', asyncHandler(async (req, res) => {
+// GET /api/submissions/pending - Get pending submissions (admin only)
+router.get('/status/pending', validateAdminSession, asyncHandler(async (req, res) => {
   let { limit = 50 } = req.query;
 
   // Validate and clamp limit
