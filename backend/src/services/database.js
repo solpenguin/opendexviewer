@@ -339,6 +339,10 @@ async function initializeDatabase() {
       -- Market cap at time of call
       ALTER TABLE token_calls ADD COLUMN IF NOT EXISTS mcap_at_call DECIMAL;
 
+      -- One call record per wallet per token (re-calls update timestamp, preserve original mcap)
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_token_calls_wallet_mint
+        ON token_calls(caller_wallet, token_mint);
+
       -- Bug reports table for user-submitted bug reports
       CREATE TABLE IF NOT EXISTS bug_reports (
         id SERIAL PRIMARY KEY,
@@ -1605,6 +1609,8 @@ async function callToken(tokenMint, callerWallet) {
     const insertResult = await client.query(
       `INSERT INTO token_calls (token_mint, caller_wallet, mcap_at_call)
        VALUES ($1, $2, (SELECT market_cap FROM tokens WHERE mint_address = $1))
+       ON CONFLICT (caller_wallet, token_mint) DO UPDATE
+         SET created_at = NOW()
        RETURNING mcap_at_call`,
       [tokenMint, callerWallet]
     );

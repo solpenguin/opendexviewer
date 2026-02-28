@@ -888,21 +888,122 @@ const communityPage = {
       ctx.fillText(truncMint, WIDTH - 30 - mintWidth, HEIGHT - 28);
     }
 
-    // Export
+    // Show preview modal instead of direct download
+    this._showExportModal(canvas, callData);
+  },
+
+  async _showExportModal(canvas, callData) {
+    // Remove any existing export modal
+    const existing = document.querySelector('.export-modal');
+    if (existing) existing.remove();
+
+    // Generate blob once for copy + download
+    let blob;
     try {
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `opendex-call-${callData.symbol || 'token'}-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Call graphic exported!');
+      blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     } catch {
-      toast.error('Failed to export graphic');
+      toast.error('Failed to generate image');
+      return;
     }
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const symbol = callData.symbol || 'token';
+    const mcapStr = callData.mcapAtCall ? this._formatMcapCanvas(callData.mcapAtCall) : '';
+
+    // Modal container
+    const modal = document.createElement('div');
+    modal.className = 'call-modal export-modal';
+
+    // Overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'call-modal-overlay';
+    overlay.addEventListener('click', () => modal.remove());
+
+    // Content
+    const content = document.createElement('div');
+    content.className = 'call-modal-content';
+    content.style.maxWidth = '560px';
+
+    content.innerHTML = `
+      <div class="call-modal-header">
+        <h3>Export Call</h3>
+        <button class="call-modal-close" id="export-modal-close">&times;</button>
+      </div>
+      <div class="export-modal-preview">
+        <img src="${dataUrl}" alt="Call graphic for ${this.escapeHtml(symbol)}">
+      </div>
+      <div class="export-modal-actions">
+        <button class="btn btn-secondary" id="export-copy-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy Image
+        </button>
+        <button class="btn btn-secondary" id="export-share-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+          Share to X
+        </button>
+        <button class="btn btn-accent" id="export-download-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download
+        </button>
+      </div>
+    `;
+
+    modal.appendChild(overlay);
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+
+    // Close button
+    document.getElementById('export-modal-close').addEventListener('click', () => modal.remove());
+
+    // Copy Image
+    document.getElementById('export-copy-btn').addEventListener('click', async () => {
+      try {
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          toast.error("Your browser doesn't support image copy");
+          return;
+        }
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        toast.success('Image copied to clipboard!');
+      } catch {
+        toast.error('Failed to copy image');
+      }
+    });
+
+    // Share to X
+    document.getElementById('export-share-btn').addEventListener('click', () => {
+      const mcapPart = mcapStr ? ` at ${mcapStr} mcap` : '';
+      const text = `I called $${symbol}${mcapPart} on @OpenDEXSol \u{1F525}\n\nopendex.online`;
+      const intentUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
+      window.open(intentUrl, '_blank', 'noopener,noreferrer');
+    });
+
+    // Download
+    document.getElementById('export-download-btn').addEventListener('click', () => {
+      try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `opendex-call-${symbol}-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success('Image downloaded!');
+      } catch {
+        toast.error('Failed to download image');
+      }
+    });
   },
 
   _loadImage(src) {

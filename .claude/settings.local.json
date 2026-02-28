@@ -45,7 +45,9 @@
       "Bash(find /c/VS/OPENDEX/opendexviewer/frontend -name \"*.html\" -exec grep -l \"modal\\\\|form\\\\|input\" {} ;)",
       "WebFetch(domain:apiguide.geckoterminal.com)",
       "Bash(wc -l /c/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)",
-      "Bash(xargs grep -l \"callToken\\\\|/api/calls\")"
+      "Bash(xargs grep -l \"callToken\\\\|/api/calls\")",
+      "Bash(grep -n \"copyToClipboard\\\\|shareCall\\\\|shareGraphic\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(grep -n \"navigator.clipboard\\\\|URL.createObjectURL\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
     ]
   }
 }
