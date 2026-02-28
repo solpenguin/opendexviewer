@@ -922,7 +922,7 @@ const communityPage = {
     // Content
     const content = document.createElement('div');
     content.className = 'call-modal-content';
-    content.style.maxWidth = '728px';
+    content.style.maxWidth = '1456px';
 
     content.innerHTML = `
       <div class="call-modal-header">
