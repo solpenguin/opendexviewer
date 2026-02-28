@@ -1683,14 +1683,14 @@ a:hover {
 /* Explicit column placement: chart spans full left column, sidebar items stack right */
 .chart-section {
   grid-column: 1;
-  grid-row: 1 / 4;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
 }
 
 .stats-section  { grid-column: 2; grid-row: 1; }
-.pools-section  { grid-column: 2; grid-row: 2; }
-.trade-section  { grid-column: 2; grid-row: 3; align-self: start; }
+.pools-section  { grid-column: 1; grid-row: 2; }
+.trade-section  { grid-column: 2; grid-row: 2; align-self: start; }
 
 /* Card Base */
 .chart-section,
@@ -1932,7 +1932,7 @@ a:hover {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 /* Chart Section */
@@ -1940,7 +1940,7 @@ a:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .chart-title-row {
@@ -2045,8 +2045,9 @@ a:hover {
 
 .chart-container {
   position: relative;
-  flex: 1;
-  min-height: 320px;
+  flex: none;
+  height: 280px;
+  min-height: 260px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -2104,9 +2105,9 @@ a:hover {
 
 .chart-stats {
   display: flex;
-  gap: 2rem;
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--border-color);
   flex-wrap: wrap;
 }
@@ -2139,7 +2140,7 @@ a:hover {
 
 .stat-card {
   background: var(--bg-tertiary);
-  padding: 1.25rem;
+  padding: 1rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   transition: all var(--transition-fast);
@@ -2232,9 +2233,10 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.625rem;
-  padding: 1rem;
+  padding: 1.125rem;
   border-radius: var(--radius-lg);
   font-weight: 600;
+  font-size: 0.9375rem;
   color: white;
   transition: all var(--transition-fast);
 }
@@ -4835,7 +4837,8 @@ a:hover {
 
   .chart-container {
     flex: none;
-    min-height: 300px;
+    height: auto;
+    min-height: 260px;
   }
 
   .pool-card {
@@ -5040,7 +5043,7 @@ a:hover {
   }
 
   .chart-container {
-    height: 280px;
+    height: 260px;
   }
 
   .type-selector {
@@ -7656,7 +7659,7 @@ select {
 
   /* Chart container */
   .chart-container {
-    height: 250px;
+    height: 220px;
   }
 
   .chart-stats {
@@ -7672,7 +7675,7 @@ select {
 
 @media (max-width: 480px) {
   .chart-container {
-    height: 230px;
+    height: 200px;
   }
 
   .token-price-large {

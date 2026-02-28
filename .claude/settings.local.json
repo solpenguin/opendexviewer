@@ -47,7 +47,10 @@
       "Bash(wc -l /c/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)",
       "Bash(xargs grep -l \"callToken\\\\|/api/calls\")",
       "Bash(grep -n \"copyToClipboard\\\\|shareCall\\\\|shareGraphic\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
-      "Bash(grep -n \"navigator.clipboard\\\\|URL.createObjectURL\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
+      "Bash(grep -n \"navigator.clipboard\\\\|URL.createObjectURL\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(wc -l /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(xargs basename -a)",
+      "Bash(ls /c/VS/OPENDEX/opendexviewer/frontend/*.html)"
     ]
   }
 }
