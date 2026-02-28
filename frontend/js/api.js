@@ -483,7 +483,7 @@ const api = {
     async getSimilar(mint) {
       const cacheKey = `tokens:similar:${mint}`;
       const cached = apiCache.get(cacheKey);
-      if (cached && !cached.pending) return cached;
+      if (cached && cached.data && !cached.data.pending) return cached.data;
 
       const result = await api.request(`/api/tokens/${mint}/similar`);
       // Only cache final results, not pending responses

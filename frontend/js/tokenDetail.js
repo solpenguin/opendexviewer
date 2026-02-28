@@ -466,87 +466,43 @@ const tokenDetail = {
     try {
       let similar = await api.tokens.getSimilar(this.mint);
 
-      // Worker may still be computing — retry up to 3 times
+      // Worker may still be computing — poll until resolved
       if (similar && similar.pending) {
+        // Initial fast retries (3 x 2s)
         for (let attempt = 0; attempt < 3; attempt++) {
-          await new Promise(r => setTimeout(r, 2500));
+          await new Promise(r => setTimeout(r, 2000));
           similar = await api.tokens.getSimilar(this.mint);
           if (!similar || !similar.pending) break;
         }
-      }
 
-      if (loadingEl) loadingEl.style.display = 'none';
-
-      // Normalize: pending response has results array, direct response is array
-      const results = Array.isArray(similar) ? similar : (similar && similar.results) || [];
-      if (results.length === 0) {
-        // No similar tokens — show empty state
-        if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
-        if (listEl) {
-          listEl.style.display = 'flex';
-          listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
+        // Still pending — continue polling in background (3s intervals, up to 30s more)
+        if (similar && similar.pending) {
+          const mint = this.mint;
+          const poll = async () => {
+            for (let i = 0; i < 10; i++) {
+              await new Promise(r => setTimeout(r, 3000));
+              // Stop if user navigated away
+              if (this.mint !== mint) return;
+              const result = await api.tokens.getSimilar(mint);
+              if (result && !result.pending) {
+                this.renderSimilarTokens(result, sectionEl, loadingEl, listEl, disclaimerEl);
+                return;
+              }
+            }
+            // Truly timed out — show empty state
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
+            if (listEl) {
+              listEl.style.display = 'flex';
+              listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
+            }
+          };
+          poll().catch(() => {});
+          return; // Loading spinner stays visible while background poll continues
         }
-        return;
       }
-      const similar_final = results;
 
-      // Show results
-      if (disclaimerEl) disclaimerEl.style.display = '';
-
-      if (listEl) {
-        listEl.style.display = 'flex';
-        const defaultLogo = utils.getDefaultLogo();
-        listEl.innerHTML = similar_final.map(token => {
-          const logoSrc = this.escapeHtml(token.logoURI || defaultLogo);
-          const name = this.escapeHtml(token.name || 'Unknown');
-          const symbol = this.escapeHtml(token.symbol || '???');
-          const address = this.escapeHtml(token.address);
-          const truncAddr = utils.truncateAddress(token.address, 6, 4);
-          const scoreHtml = token.similarityScore !== null
-            ? `<span class="similar-token-score" title="Similarity score">${Math.round(token.similarityScore * 100)}% match</span>`
-            : `<span class="similar-token-score external" title="Found via search">External match</span>`;
-          const ageVal = token.pairCreatedAt ? utils.formatAge(token.pairCreatedAt) : null;
-          const mcapVal = token.marketCap ? utils.formatNumber(token.marketCap) : null;
-          const volVal = token.volume24h ? utils.formatNumber(token.volume24h) : null;
-
-          return `
-            <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
-              <img src="${logoSrc}" alt="${name}" class="similar-token-logo">
-              <div class="similar-token-info">
-                <div class="similar-token-name-row">
-                  <span class="similar-token-name">${name}</span>
-                  <span class="similar-token-symbol">${symbol}</span>
-                </div>
-                <div class="similar-token-meta-row">
-                  <span class="similar-token-address" title="${address}">${truncAddr}</span>
-                  <span class="similar-token-divider"></span>
-                  <span class="similar-token-stat" title="${token.marketCap ? 'Market Cap: $' + Number(token.marketCap).toLocaleString() : 'Market Cap unavailable'}"><span class="stat-label">MCap</span> <span class="stat-value${mcapVal ? '' : ' no-data'}">${mcapVal || '--'}</span></span>
-                  <span class="similar-token-stat" title="${token.volume24h ? '24h Volume: $' + Number(token.volume24h).toLocaleString() : '24h Volume unavailable'}"><span class="stat-label">Vol</span> <span class="stat-value${volVal ? '' : ' no-data'}">${volVal || '--'}</span></span>
-                  <span class="similar-token-stat" title="${token.pairCreatedAt ? new Date(token.pairCreatedAt).toLocaleDateString() : 'Age unavailable'}"><span class="stat-label">Age</span> <span class="stat-value${ageVal ? '' : ' no-data'}">${ageVal || '--'}</span></span>
-                </div>
-              </div>
-              <span class="similar-token-actions">
-                ${scoreHtml}
-                <span class="similar-token-bubble" title="View on Bubblemaps" data-bubble-addr="${encodeURIComponent(token.address)}">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><line x1="7" y1="7" x2="10" y2="10"/><line x1="14" y1="10" x2="17" y2="7"/><line x1="7" y1="17" x2="10" y2="14"/><line x1="14" y1="14" x2="17" y2="17"/></svg>
-                </span>
-              </span>
-            </a>
-          `;
-        }).join('');
-
-        // Attach event listeners via delegation instead of inline handlers
-        listEl.querySelectorAll('.similar-token-logo').forEach(img => {
-          img.onerror = function() { this.onerror = null; this.src = defaultLogo; };
-        });
-        listEl.querySelectorAll('.similar-token-bubble[data-bubble-addr]').forEach(el => {
-          el.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(`https://app.bubblemaps.io/sol/token/${el.dataset.bubbleAddr}`, '_blank');
-          });
-        });
-      }
+      this.renderSimilarTokens(similar, sectionEl, loadingEl, listEl, disclaimerEl);
     } catch (error) {
       // Non-critical section — show empty state
       if (loadingEl) loadingEl.style.display = 'none';
@@ -555,6 +511,78 @@ const tokenDetail = {
         listEl.style.display = 'flex';
         listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
       }
+    }
+  },
+
+  // Render similar tokens results into the DOM
+  renderSimilarTokens(similar, sectionEl, loadingEl, listEl, disclaimerEl) {
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    const results = Array.isArray(similar) ? similar : (similar && similar.results) || [];
+    if (results.length === 0) {
+      if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
+      if (listEl) {
+        listEl.style.display = 'flex';
+        listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
+      }
+      return;
+    }
+
+    if (sectionEl) sectionEl.classList.remove('similar-tokens-empty');
+    if (disclaimerEl) disclaimerEl.style.display = '';
+
+    if (listEl) {
+      listEl.style.display = 'flex';
+      const defaultLogo = utils.getDefaultLogo();
+      listEl.innerHTML = results.map(token => {
+        const logoSrc = this.escapeHtml(token.logoURI || defaultLogo);
+        const name = this.escapeHtml(token.name || 'Unknown');
+        const symbol = this.escapeHtml(token.symbol || '???');
+        const address = this.escapeHtml(token.address);
+        const truncAddr = utils.truncateAddress(token.address, 6, 4);
+        const scoreHtml = token.similarityScore !== null
+          ? `<span class="similar-token-score" title="Similarity score">${Math.round(token.similarityScore * 100)}% match</span>`
+          : `<span class="similar-token-score external" title="Found via search">External match</span>`;
+        const ageVal = token.pairCreatedAt ? utils.formatAge(token.pairCreatedAt) : null;
+        const mcapVal = token.marketCap ? utils.formatNumber(token.marketCap) : null;
+        const volVal = token.volume24h ? utils.formatNumber(token.volume24h) : null;
+
+        return `
+          <a href="token.html?mint=${encodeURIComponent(token.address)}" class="similar-token-card">
+            <img src="${logoSrc}" alt="${name}" class="similar-token-logo">
+            <div class="similar-token-info">
+              <div class="similar-token-name-row">
+                <span class="similar-token-name">${name}</span>
+                <span class="similar-token-symbol">${symbol}</span>
+              </div>
+              <div class="similar-token-meta-row">
+                <span class="similar-token-address" title="${address}">${truncAddr}</span>
+                <span class="similar-token-divider"></span>
+                <span class="similar-token-stat" title="${token.marketCap ? 'Market Cap: $' + Number(token.marketCap).toLocaleString() : 'Market Cap unavailable'}"><span class="stat-label">MCap</span> <span class="stat-value${mcapVal ? '' : ' no-data'}">${mcapVal || '--'}</span></span>
+                <span class="similar-token-stat" title="${token.volume24h ? '24h Volume: $' + Number(token.volume24h).toLocaleString() : '24h Volume unavailable'}"><span class="stat-label">Vol</span> <span class="stat-value${volVal ? '' : ' no-data'}">${volVal || '--'}</span></span>
+                <span class="similar-token-stat" title="${token.pairCreatedAt ? new Date(token.pairCreatedAt).toLocaleDateString() : 'Age unavailable'}"><span class="stat-label">Age</span> <span class="stat-value${ageVal ? '' : ' no-data'}">${ageVal || '--'}</span></span>
+              </div>
+            </div>
+            <span class="similar-token-actions">
+              ${scoreHtml}
+              <span class="similar-token-bubble" title="View on Bubblemaps" data-bubble-addr="${encodeURIComponent(token.address)}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><line x1="7" y1="7" x2="10" y2="10"/><line x1="14" y1="10" x2="17" y2="7"/><line x1="7" y1="17" x2="10" y2="14"/><line x1="14" y1="14" x2="17" y2="17"/></svg>
+              </span>
+            </span>
+          </a>
+        `;
+      }).join('');
+
+      listEl.querySelectorAll('.similar-token-logo').forEach(img => {
+        img.onerror = function() { this.onerror = null; this.src = defaultLogo; };
+      });
+      listEl.querySelectorAll('.similar-token-bubble[data-bubble-addr]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open(`https://app.bubblemaps.io/sol/token/${el.dataset.bubbleAddr}`, '_blank');
+        });
+      });
     }
   },
 
