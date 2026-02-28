@@ -41,7 +41,36 @@ router.post('/:mint', walletLimiter, validateMint, validateCallSignature, asyncH
     });
   }
 
-  res.json({ success: true, message: 'Token called successfully' });
+  res.json({ success: true, message: 'Token called successfully', mcapAtCall: result.mcapAtCall ?? null });
+}));
+
+// GET /api/calls/wallet/:wallet
+// Get a wallet's full call history with current token data
+router.get('/wallet/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
+  const { wallet } = req.params;
+  if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 50), 100);
+  const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+  const { calls: rows, total } = await db.getCallsByWallet(wallet, limit, offset);
+
+  const calls = rows.map(r => ({
+    id: r.id,
+    tokenMint: r.token_mint,
+    name: r.name || `${r.token_mint.slice(0, 4)}...${r.token_mint.slice(-4)}`,
+    symbol: r.symbol || '???',
+    logoUri: r.logo_uri || null,
+    mcapAtCall: r.mcap_at_call ? parseFloat(r.mcap_at_call) : null,
+    currentMcap: r.market_cap ? parseFloat(r.market_cap) : null,
+    currentPrice: r.price ? parseFloat(r.price) : null,
+    volume24h: r.volume_24h ? parseFloat(r.volume_24h) : null,
+    calledAt: r.created_at
+  }));
+
+  res.json({ calls, total });
 }));
 
 module.exports = router;

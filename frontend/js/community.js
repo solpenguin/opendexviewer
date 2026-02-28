@@ -1,4 +1,4 @@
-/* global api, apiCache, utils, wallet */
+/* global api, apiCache, utils, wallet, toast */
 
 const communityPage = {
   currentTab: 'watchlist',
@@ -6,6 +6,8 @@ const communityPage = {
   pageSize: 25,
   totalItems: 0,
   tokens: [],
+  yourCalls: [],
+  yourCallsLoaded: false,
 
   init() {
     this.bindTabs();
@@ -18,6 +20,22 @@ const communityPage = {
     if (callBtn) {
       callBtn.addEventListener('click', () => this.showCallModal());
     }
+
+    // Wallet events for "Your Calls" section
+    window.addEventListener('walletConnected', () => {
+      this.yourCallsLoaded = false;
+      if (this.currentTab === 'calls') this.loadYourCalls();
+    });
+    window.addEventListener('walletDisconnected', () => {
+      this.yourCalls = [];
+      this.yourCallsLoaded = false;
+      this.hideYourCalls();
+    });
+    window.addEventListener('walletReady', (e) => {
+      if (e.detail?.connected && this.currentTab === 'calls') {
+        this.loadYourCalls();
+      }
+    }, { once: true });
   },
 
   bindTabs() {
@@ -41,6 +59,13 @@ const communityPage = {
         }
 
         this.loadData();
+
+        // Show/hide Your Calls based on tab
+        if (newTab === 'calls' && wallet.connected && wallet.address) {
+          this.loadYourCalls();
+        } else {
+          this.hideYourCalls();
+        }
       });
     });
   },
@@ -521,6 +546,400 @@ const communityPage = {
     }
   },
 
+  // ==========================================
+  // Your Calls Section
+  // ==========================================
+
+  async loadYourCalls() {
+    if (!wallet.connected || !wallet.address) return;
+
+    // If already loaded, just ensure the container is visible
+    if (this.yourCallsLoaded) {
+      const existing = document.getElementById('your-calls-section');
+      if (existing) {
+        existing.style.display = 'block';
+        return;
+      }
+    }
+
+    let container = document.getElementById('your-calls-section');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'your-calls-section';
+      container.className = 'your-calls-section';
+      const tableContainer = document.querySelector('.community-table-container');
+      if (tableContainer) {
+        tableContainer.parentNode.insertBefore(container, tableContainer);
+      }
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div class="your-calls-header">
+        <h3 class="your-calls-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          Your Calls
+        </h3>
+      </div>
+      <div class="your-calls-loading">
+        <div class="loading-spinner"></div>
+        <span>Loading your calls...</span>
+      </div>
+    `;
+
+    try {
+      const result = await api.calls.getWalletCalls(wallet.address);
+      this.yourCalls = result.calls || [];
+      this.yourCallsLoaded = true;
+      this.renderYourCalls(container);
+    } catch {
+      container.innerHTML = `
+        <div class="your-calls-header">
+          <h3 class="your-calls-title">Your Calls</h3>
+        </div>
+        <p class="your-calls-empty">Failed to load your calls.</p>
+      `;
+    }
+  },
+
+  hideYourCalls() {
+    const container = document.getElementById('your-calls-section');
+    if (container) container.style.display = 'none';
+  },
+
+  renderYourCalls(container) {
+    if (!this.yourCalls || this.yourCalls.length === 0) {
+      container.innerHTML = `
+        <div class="your-calls-header">
+          <h3 class="your-calls-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            Your Calls
+          </h3>
+        </div>
+        <p class="your-calls-empty">You haven't called any tokens yet. Use the "Call a Token" button above!</p>
+      `;
+      return;
+    }
+
+    const defaultLogo = utils.getDefaultLogo();
+
+    const cardsHtml = this.yourCalls.map(call => {
+      const safeName = this.escapeHtml(call.name);
+      const safeSymbol = this.escapeHtml(call.symbol);
+      const safeMint = this.escapeHtml(call.tokenMint);
+      const safeLogo = this.escapeHtml(call.logoUri || defaultLogo);
+
+      const mcapAtCall = call.mcapAtCall;
+      const currentMcap = call.currentMcap;
+
+      let pctClass = '';
+      let pctText = '--';
+      if (mcapAtCall && mcapAtCall > 0 && currentMcap != null) {
+        const pctChange = ((currentMcap - mcapAtCall) / mcapAtCall) * 100;
+        pctClass = pctChange >= 0 ? 'positive' : 'negative';
+        const sign = pctChange >= 0 ? '+' : '';
+        pctText = `${sign}${pctChange.toFixed(2)}%`;
+      }
+
+      const calledDate = new Date(call.calledAt);
+      const dateStr = calledDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      return `
+        <div class="your-call-card" data-call-id="${call.id}" data-mint="${safeMint}">
+          <div class="your-call-token" style="cursor:pointer;" data-navigate="${safeMint}">
+            <img class="your-call-logo" src="${safeLogo}" alt="${safeSymbol}" loading="lazy">
+            <div class="your-call-info">
+              <span class="your-call-name">${safeName}</span>
+              <span class="your-call-symbol">${safeSymbol}</span>
+            </div>
+          </div>
+          <div class="your-call-stats">
+            <div class="your-call-stat">
+              <span class="your-call-stat-label">Mcap at Call</span>
+              <span class="your-call-stat-value">${mcapAtCall ? utils.formatNumber(mcapAtCall, '$') : 'N/A'}</span>
+            </div>
+            <div class="your-call-stat">
+              <span class="your-call-stat-label">Current Mcap</span>
+              <span class="your-call-stat-value">${currentMcap != null ? utils.formatNumber(currentMcap, '$') : 'N/A'}</span>
+            </div>
+            <div class="your-call-stat">
+              <span class="your-call-stat-label">Change</span>
+              <span class="your-call-stat-value ${pctClass}">${pctText}</span>
+            </div>
+            <div class="your-call-stat">
+              <span class="your-call-stat-label">Called</span>
+              <span class="your-call-stat-value" title="${dateStr}">${utils.formatTimeAgo(call.calledAt)}</span>
+            </div>
+          </div>
+          <button class="your-call-export-btn btn btn-secondary" title="Export call graphic">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="your-calls-header">
+        <h3 class="your-calls-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          Your Calls
+        </h3>
+        <span class="your-calls-count">${this.yourCalls.length} call${this.yourCalls.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="your-calls-grid">${cardsHtml}</div>
+    `;
+
+    // Logo fallbacks
+    container.querySelectorAll('.your-call-logo').forEach(img => {
+      img.onerror = function() { this.onerror = null; this.src = defaultLogo; };
+    });
+
+    // Navigate to token detail on click
+    container.querySelectorAll('[data-navigate]').forEach(el => {
+      el.addEventListener('click', () => {
+        const mint = el.dataset.navigate;
+        if (mint) window.location.href = `token.html?mint=${encodeURIComponent(mint)}`;
+      });
+    });
+
+    // Export buttons
+    container.querySelectorAll('.your-call-export-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = btn.closest('.your-call-card');
+        const callId = parseInt(card.dataset.callId);
+        const callData = this.yourCalls.find(c => c.id === callId);
+        if (callData) this.exportCallGraphic(callData);
+      });
+    });
+  },
+
+  // ==========================================
+  // Canvas Export
+  // ==========================================
+
+  async exportCallGraphic(callData) {
+    const WIDTH = 800;
+    const HEIGHT = 500;
+    const canvas = document.createElement('canvas');
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    const ctx = canvas.getContext('2d');
+
+    const BG_BASE = '#07080a';
+    const BG_SECONDARY = '#12141a';
+    const BG_TERTIARY = '#181b23';
+    const ACCENT = '#6366f1';
+    const TEXT_PRIMARY = '#f0f2f5';
+    const TEXT_SECONDARY = '#9ca3b4';
+    const TEXT_MUTED = '#5d6577';
+    const GREEN = '#10b981';
+    const RED = '#ef4444';
+
+    // Background gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+    bgGrad.addColorStop(0, BG_BASE);
+    bgGrad.addColorStop(1, BG_SECONDARY);
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    // Border
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, WIDTH - 2, HEIGHT - 2);
+
+    // Accent line at top
+    ctx.fillStyle = ACCENT;
+    ctx.fillRect(0, 0, WIDTH, 4);
+
+    // Load OpenDEX logo
+    try {
+      const logo = await this._loadImage('OpenDEX_Logo.png');
+      ctx.drawImage(logo, 30, 24, 36, 36);
+    } catch {
+      // Continue without logo
+    }
+
+    // "OpenDEX" text
+    ctx.font = '700 22px Inter, sans-serif';
+    ctx.fillStyle = TEXT_PRIMARY;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OpenDEX', 76, 42);
+
+    // "TOKEN CALL" badge
+    const odxWidth = ctx.measureText('OpenDEX').width;
+    ctx.font = '500 13px Inter, sans-serif';
+    ctx.fillStyle = ACCENT;
+    ctx.fillText('TOKEN CALL', 76 + odxWidth + 16, 42);
+
+    // Divider
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(30, 76);
+    ctx.lineTo(WIDTH - 30, 76);
+    ctx.stroke();
+
+    // Token name & symbol
+    const name = callData.name || 'Unknown';
+    const symbol = callData.symbol || '???';
+
+    ctx.font = '700 32px Inter, sans-serif';
+    ctx.fillStyle = TEXT_PRIMARY;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(name, 30, 120);
+
+    const nameWidth = ctx.measureText(name).width;
+    ctx.font = '500 20px Inter, sans-serif';
+    ctx.fillStyle = TEXT_SECONDARY;
+    ctx.fillText(`$${symbol}`, 30 + nameWidth + 14, 120);
+
+    // Call date
+    const calledDate = new Date(callData.calledAt);
+    const dateStr = calledDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    ctx.font = '400 15px Inter, sans-serif';
+    ctx.fillStyle = TEXT_MUTED;
+    ctx.fillText(`Called on ${dateStr}`, 30, 155);
+
+    // Stats cards
+    const cardY = 185;
+    const cardH = 140;
+    const cardGap = 20;
+    const cardW = (WIDTH - 60 - cardGap * 2) / 3;
+
+    const mcapAtCall = callData.mcapAtCall;
+    const currentMcap = callData.currentMcap;
+
+    let pctChange = null;
+    let pctText = 'N/A';
+    let pctColor = TEXT_SECONDARY;
+    if (mcapAtCall && mcapAtCall > 0 && currentMcap != null) {
+      pctChange = ((currentMcap - mcapAtCall) / mcapAtCall) * 100;
+      const sign = pctChange >= 0 ? '+' : '';
+      pctText = `${sign}${pctChange.toFixed(2)}%`;
+      pctColor = pctChange >= 0 ? GREEN : RED;
+    }
+
+    const stats = [
+      { label: 'MCAP AT CALL', value: mcapAtCall ? this._formatMcapCanvas(mcapAtCall) : 'N/A', color: TEXT_PRIMARY },
+      { label: 'CURRENT MCAP', value: currentMcap != null ? this._formatMcapCanvas(currentMcap) : 'N/A', color: TEXT_PRIMARY },
+      { label: 'CHANGE', value: pctText, color: pctColor }
+    ];
+
+    stats.forEach((stat, i) => {
+      const x = 30 + i * (cardW + cardGap);
+
+      // Card background
+      ctx.fillStyle = BG_TERTIARY;
+      this._roundRect(ctx, x, cardY, cardW, cardH, 12);
+      ctx.fill();
+
+      // Card border
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
+      this._roundRect(ctx, x, cardY, cardW, cardH, 12);
+      ctx.stroke();
+
+      // Label
+      ctx.font = '600 12px Inter, sans-serif';
+      ctx.fillStyle = TEXT_MUTED;
+      ctx.textBaseline = 'top';
+      ctx.fillText(stat.label, x + 20, cardY + 22);
+
+      // Value
+      ctx.font = '700 28px Inter, sans-serif';
+      ctx.fillStyle = stat.color;
+      ctx.fillText(stat.value, x + 20, cardY + 55);
+    });
+
+    // Large watermark percentage
+    if (pctChange !== null) {
+      ctx.font = '800 56px Inter, sans-serif';
+      ctx.fillStyle = pctColor;
+      ctx.globalAlpha = 0.15;
+      const bigText = pctChange >= 0 ? `+${pctChange.toFixed(1)}%` : `${pctChange.toFixed(1)}%`;
+      const bigWidth = ctx.measureText(bigText).width;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(bigText, WIDTH - 30 - bigWidth, 370);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Footer
+    ctx.font = '400 13px Inter, sans-serif';
+    ctx.fillStyle = TEXT_MUTED;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('opendex.online', 30, HEIGHT - 28);
+
+    // Truncated mint
+    if (callData.tokenMint) {
+      const truncMint = `${callData.tokenMint.slice(0, 6)}...${callData.tokenMint.slice(-6)}`;
+      const mintWidth = ctx.measureText(truncMint).width;
+      ctx.fillText(truncMint, WIDTH - 30 - mintWidth, HEIGHT - 28);
+    }
+
+    // Export
+    try {
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `opendex-call-${callData.symbol || 'token'}-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Call graphic exported!');
+    } catch {
+      toast.error('Failed to export graphic');
+    }
+  },
+
+  _loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  },
+
+  _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  },
+
+  _formatMcapCanvas(num) {
+    if (!num && num !== 0) return 'N/A';
+    const n = Number(num);
+    if (isNaN(n)) return 'N/A';
+    if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+    if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+    if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+    if (n >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+    return `$${n.toFixed(2)}`;
+  },
+
   confirmCall(token, modal) {
     const content = modal.querySelector('.call-modal-content');
     if (!content) return;
@@ -592,6 +1011,8 @@ const communityPage = {
         apiCache.clearPattern('tokens:leaderboard:calls');
         if (this.currentTab === 'calls') {
           this.loadData();
+          this.yourCallsLoaded = false;
+          this.loadYourCalls();
         }
 
         // Auto-close after 3 seconds

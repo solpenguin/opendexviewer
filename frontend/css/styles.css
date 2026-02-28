@@ -8670,6 +8670,195 @@ body.landscape .hero h1 {
   }
 }
 
+/* ==========================================
+   Your Calls Section (Community Page)
+   ========================================== */
+
+.your-calls-section {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.your-calls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.your-calls-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.your-calls-title svg {
+  color: var(--accent-primary);
+}
+
+.your-calls-count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+}
+
+.your-calls-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.your-calls-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.your-calls-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.your-call-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+}
+
+.your-call-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.your-call-token {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.your-call-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-elevated);
+}
+
+.your-call-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.your-call-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.your-call-symbol {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.your-call-stats {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex: 1;
+}
+
+.your-call-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.your-call-stat-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.your-call-stat-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.your-call-stat-value.positive {
+  color: var(--green);
+}
+
+.your-call-stat-value.negative {
+  color: var(--red);
+}
+
+.your-call-export-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.75rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .your-call-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .your-call-token {
+    min-width: auto;
+  }
+
+  .your-call-stats {
+    flex-wrap: wrap;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .your-call-stat {
+    min-width: 80px;
+  }
+
+  .your-call-export-btn {
+    margin-left: 0;
+    align-self: flex-end;
+  }
+}
+
 .community-section {
   margin: 2rem 0 3rem;
 }

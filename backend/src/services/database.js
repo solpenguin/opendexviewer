@@ -336,6 +336,9 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_token_calls_mint_created ON token_calls(token_mint, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_token_calls_created ON token_calls(created_at DESC);
 
+      -- Market cap at time of call
+      ALTER TABLE token_calls ADD COLUMN IF NOT EXISTS mcap_at_call DECIMAL;
+
       -- Bug reports table for user-submitted bug reports
       CREATE TABLE IF NOT EXISTS bug_reports (
         id SERIAL PRIMARY KEY,
@@ -1599,13 +1602,17 @@ async function callToken(tokenMint, callerWallet) {
       };
     }
 
-    await client.query(
-      'INSERT INTO token_calls (token_mint, caller_wallet) VALUES ($1, $2)',
+    const insertResult = await client.query(
+      `INSERT INTO token_calls (token_mint, caller_wallet, mcap_at_call)
+       VALUES ($1, $2, (SELECT market_cap FROM tokens WHERE mint_address = $1))
+       RETURNING mcap_at_call`,
       [tokenMint, callerWallet]
     );
 
     await client.query('COMMIT');
-    return { success: true };
+    const mcapRaw = insertResult.rows[0]?.mcap_at_call;
+    const mcapAtCall = mcapRaw != null ? parseFloat(mcapRaw) : null;
+    return { success: true, mcapAtCall: !isNaN(mcapAtCall) ? mcapAtCall : null };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -1664,6 +1671,34 @@ async function getMostCalledTokens(limit = 25, offset = 0) {
 
   return {
     tokens: dataResult.rows,
+    total: parseInt(countResult.rows[0]?.total || 0)
+  };
+}
+
+// Get a wallet's full call history with current token data
+async function getCallsByWallet(callerWallet, limit = 50, offset = 0) {
+  if (!pool) return { calls: [], total: 0 };
+
+  const [dataResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT tc.id, tc.token_mint, tc.mcap_at_call, tc.created_at,
+              t.name, t.symbol, t.logo_uri,
+              t.price, t.market_cap, t.volume_24h
+       FROM token_calls tc
+       LEFT JOIN tokens t ON tc.token_mint = t.mint_address
+       WHERE tc.caller_wallet = $1
+       ORDER BY tc.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [callerWallet, limit, offset]
+    ),
+    pool.query(
+      'SELECT COUNT(*) AS total FROM token_calls WHERE caller_wallet = $1',
+      [callerWallet]
+    )
+  ]);
+
+  return {
+    calls: dataResult.rows,
     total: parseInt(countResult.rows[0]?.total || 0)
   };
 }
@@ -2335,6 +2370,7 @@ module.exports = {
   callToken,
   getCallCooldown,
   getMostCalledTokens,
+  getCallsByWallet,
   // GDPR data deletion
   deleteUserData,
   // Sentiment voting

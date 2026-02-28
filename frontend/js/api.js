@@ -661,6 +661,11 @@ const api = {
 
     async getCooldown(wallet) {
       return api.request(`/api/calls/cooldown/${encodeURIComponent(wallet)}`);
+    },
+
+    async getWalletCalls(wallet, params = {}) {
+      const query = new URLSearchParams(params).toString();
+      return api.request(`/api/calls/wallet/${encodeURIComponent(wallet)}${query ? `?${query}` : ''}`);
     }
   },
 
