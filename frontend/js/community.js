@@ -730,8 +730,8 @@ const communityPage = {
   // ==========================================
 
   async exportCallGraphic(callData) {
-    const WIDTH = 800;
-    const HEIGHT = 500;
+    const WIDTH = 1600;
+    const HEIGHT = 1000;
     const canvas = document.createElement('canvas');
     canvas.width = WIDTH;
     canvas.height = HEIGHT;
@@ -756,67 +756,67 @@ const communityPage = {
 
     // Border
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, WIDTH - 2, HEIGHT - 2);
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, WIDTH - 4, HEIGHT - 4);
 
     // Accent line at top
     ctx.fillStyle = ACCENT;
-    ctx.fillRect(0, 0, WIDTH, 4);
+    ctx.fillRect(0, 0, WIDTH, 8);
 
     // Load OpenDEX logo
     try {
       const logo = await this._loadImage('OpenDEX_Logo.png');
-      ctx.drawImage(logo, 30, 24, 36, 36);
+      ctx.drawImage(logo, 60, 48, 72, 72);
     } catch {
       // Continue without logo
     }
 
     // "OpenDEX" text
-    ctx.font = '700 22px Inter, sans-serif';
+    ctx.font = '700 44px Inter, sans-serif';
     ctx.fillStyle = TEXT_PRIMARY;
     ctx.textBaseline = 'middle';
-    ctx.fillText('OpenDEX', 76, 42);
+    ctx.fillText('OpenDEX', 152, 84);
 
     // "TOKEN CALL" badge
     const odxWidth = ctx.measureText('OpenDEX').width;
-    ctx.font = '500 13px Inter, sans-serif';
+    ctx.font = '500 26px Inter, sans-serif';
     ctx.fillStyle = ACCENT;
-    ctx.fillText('TOKEN CALL', 76 + odxWidth + 16, 42);
+    ctx.fillText('TOKEN CALL', 152 + odxWidth + 32, 84);
 
     // Divider
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(30, 76);
-    ctx.lineTo(WIDTH - 30, 76);
+    ctx.moveTo(60, 152);
+    ctx.lineTo(WIDTH - 60, 152);
     ctx.stroke();
 
     // Token name & symbol
     const name = callData.name || 'Unknown';
     const symbol = callData.symbol || '???';
 
-    ctx.font = '700 32px Inter, sans-serif';
+    ctx.font = '700 64px Inter, sans-serif';
     ctx.fillStyle = TEXT_PRIMARY;
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(name, 30, 120);
+    ctx.fillText(name, 60, 240);
 
     const nameWidth = ctx.measureText(name).width;
-    ctx.font = '500 20px Inter, sans-serif';
+    ctx.font = '500 40px Inter, sans-serif';
     ctx.fillStyle = TEXT_SECONDARY;
-    ctx.fillText(`$${symbol}`, 30 + nameWidth + 14, 120);
+    ctx.fillText(`$${symbol}`, 60 + nameWidth + 28, 240);
 
     // Call date
     const calledDate = new Date(callData.calledAt);
     const dateStr = calledDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    ctx.font = '400 15px Inter, sans-serif';
+    ctx.font = '400 30px Inter, sans-serif';
     ctx.fillStyle = TEXT_MUTED;
-    ctx.fillText(`Called on ${dateStr}`, 30, 155);
+    ctx.fillText(`Called on ${dateStr}`, 60, 310);
 
     // Stats cards
-    const cardY = 185;
-    const cardH = 140;
-    const cardGap = 20;
-    const cardW = (WIDTH - 60 - cardGap * 2) / 3;
+    const cardY = 370;
+    const cardH = 280;
+    const cardGap = 40;
+    const cardW = (WIDTH - 120 - cardGap * 2) / 3;
 
     const mcapAtCall = callData.mcapAtCall;
     const currentMcap = callData.currentMcap;
@@ -838,54 +838,54 @@ const communityPage = {
     ];
 
     stats.forEach((stat, i) => {
-      const x = 30 + i * (cardW + cardGap);
+      const x = 60 + i * (cardW + cardGap);
 
       // Card background
       ctx.fillStyle = BG_TERTIARY;
-      this._roundRect(ctx, x, cardY, cardW, cardH, 12);
+      this._roundRect(ctx, x, cardY, cardW, cardH, 24);
       ctx.fill();
 
       // Card border
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      ctx.lineWidth = 1;
-      this._roundRect(ctx, x, cardY, cardW, cardH, 12);
+      ctx.lineWidth = 2;
+      this._roundRect(ctx, x, cardY, cardW, cardH, 24);
       ctx.stroke();
 
       // Label
-      ctx.font = '600 12px Inter, sans-serif';
+      ctx.font = '600 24px Inter, sans-serif';
       ctx.fillStyle = TEXT_MUTED;
       ctx.textBaseline = 'top';
-      ctx.fillText(stat.label, x + 20, cardY + 22);
+      ctx.fillText(stat.label, x + 40, cardY + 44);
 
       // Value
-      ctx.font = '700 28px Inter, sans-serif';
+      ctx.font = '700 56px Inter, sans-serif';
       ctx.fillStyle = stat.color;
-      ctx.fillText(stat.value, x + 20, cardY + 55);
+      ctx.fillText(stat.value, x + 40, cardY + 110);
     });
 
     // Large watermark percentage
     if (pctChange !== null) {
-      ctx.font = '800 56px Inter, sans-serif';
+      ctx.font = '800 112px Inter, sans-serif';
       ctx.fillStyle = pctColor;
       ctx.globalAlpha = 0.15;
       const bigText = pctChange >= 0 ? `+${pctChange.toFixed(1)}%` : `${pctChange.toFixed(1)}%`;
       const bigWidth = ctx.measureText(bigText).width;
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText(bigText, WIDTH - 30 - bigWidth, 370);
+      ctx.fillText(bigText, WIDTH - 60 - bigWidth, 740);
       ctx.globalAlpha = 1.0;
     }
 
     // Footer
-    ctx.font = '400 13px Inter, sans-serif';
+    ctx.font = '400 26px Inter, sans-serif';
     ctx.fillStyle = TEXT_MUTED;
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('opendex.online', 30, HEIGHT - 28);
+    ctx.fillText('opendex.online', 60, HEIGHT - 56);
 
     // Truncated mint
     if (callData.tokenMint) {
       const truncMint = `${callData.tokenMint.slice(0, 6)}...${callData.tokenMint.slice(-6)}`;
       const mintWidth = ctx.measureText(truncMint).width;
-      ctx.fillText(truncMint, WIDTH - 30 - mintWidth, HEIGHT - 28);
+      ctx.fillText(truncMint, WIDTH - 60 - mintWidth, HEIGHT - 56);
     }
 
     // Show preview modal instead of direct download
