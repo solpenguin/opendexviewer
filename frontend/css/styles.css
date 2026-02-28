@@ -1744,6 +1744,37 @@ a:hover {
   opacity: 0.7;
 }
 
+.similar-tokens-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.similar-tokens-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.similar-tokens-refresh-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
+}
+
+.similar-tokens-refresh-btn.spinning svg {
+  animation: spin 0.8s linear infinite;
+}
+
 .similar-tokens-note {
   display: flex;
   align-items: center;

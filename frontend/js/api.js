@@ -493,6 +493,11 @@ const api = {
       return result;
     },
 
+    // Clear cached similar tokens so next getSimilar() fetches fresh
+    clearSimilarCache(mint) {
+      apiCache.clearPattern(`tokens:similar:${mint}`);
+    },
+
     // Community leaderboards
     async leaderboardWatchlist(params = {}) {
       const query = new URLSearchParams(params).toString();

@@ -200,6 +200,20 @@ const tokenDetail = {
       bindHandler(tab, 'click', handler);
     });
 
+    // Similar tokens refresh button
+    const similarRefreshBtn = document.getElementById('similar-tokens-refresh');
+    const similarRefreshHandler = () => {
+      if (this._similarRefreshing) return;
+      this._similarRefreshing = true;
+      similarRefreshBtn.classList.add('spinning');
+      api.tokens.clearSimilarCache(this.mint);
+      this.loadSimilarTokens().finally(() => {
+        this._similarRefreshing = false;
+        similarRefreshBtn.classList.remove('spinning');
+      });
+    };
+    bindHandler(similarRefreshBtn, 'click', similarRefreshHandler);
+
     // Submit link with token pre-filled (use encodeURIComponent for safety)
     const submitLink = document.getElementById('submit-link');
     if (submitLink) {
