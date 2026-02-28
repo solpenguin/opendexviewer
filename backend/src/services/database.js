@@ -1606,13 +1606,20 @@ async function callToken(tokenMint, callerWallet) {
       };
     }
 
+    // Fetch market cap separately to avoid PostgreSQL parameter type ambiguity
+    const mcapResult = await client.query(
+      `SELECT market_cap FROM tokens WHERE mint_address = $1`,
+      [tokenMint]
+    );
+    const mcap = mcapResult.rows[0]?.market_cap ?? null;
+
     const insertResult = await client.query(
       `INSERT INTO token_calls (token_mint, caller_wallet, mcap_at_call)
-       VALUES ($1, $2, (SELECT market_cap FROM tokens WHERE mint_address = $1::text))
+       VALUES ($1, $2, $3)
        ON CONFLICT (caller_wallet, token_mint) DO UPDATE
          SET created_at = NOW()
        RETURNING mcap_at_call`,
-      [tokenMint, callerWallet]
+      [tokenMint, callerWallet, mcap]
     );
 
     await client.query('COMMIT');
