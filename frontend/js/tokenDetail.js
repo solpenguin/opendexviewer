@@ -455,14 +455,21 @@ const tokenDetail = {
     const sectionEl = document.getElementById('similar-tokens-section');
     const loadingEl = document.getElementById('similar-tokens-loading');
     const listEl = document.getElementById('similar-tokens-list');
+    const disclaimerEl = sectionEl ? sectionEl.querySelector('.similar-tokens-disclaimer') : null;
+
+    // Show the section immediately with loading state
+    if (sectionEl) sectionEl.style.display = 'block';
+    if (loadingEl) loadingEl.style.display = 'flex';
+    if (listEl) listEl.style.display = 'none';
+    if (disclaimerEl) disclaimerEl.style.display = 'none';
 
     try {
       let similar = await api.tokens.getSimilar(this.mint);
 
-      // Worker may still be computing — retry up to 2 times
+      // Worker may still be computing — retry up to 3 times
       if (similar && similar.pending) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          await new Promise(r => setTimeout(r, 3000));
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await new Promise(r => setTimeout(r, 2500));
           similar = await api.tokens.getSimilar(this.mint);
           if (!similar || !similar.pending) break;
         }
@@ -473,13 +480,18 @@ const tokenDetail = {
       // Normalize: pending response has results array, direct response is array
       const results = Array.isArray(similar) ? similar : (similar && similar.results) || [];
       if (results.length === 0) {
-        // No similar tokens — keep section hidden
+        // No similar tokens — show empty state
+        if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
+        if (listEl) {
+          listEl.style.display = 'flex';
+          listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
+        }
         return;
       }
       const similar_final = results;
 
-      // Show the section and render results
-      if (sectionEl) sectionEl.style.display = 'block';
+      // Show results
+      if (disclaimerEl) disclaimerEl.style.display = '';
 
       if (listEl) {
         listEl.style.display = 'flex';
@@ -536,8 +548,13 @@ const tokenDetail = {
         });
       }
     } catch (error) {
-      // Non-critical section — fail silently, keep hidden
+      // Non-critical section — show empty state
       if (loadingEl) loadingEl.style.display = 'none';
+      if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
+      if (listEl) {
+        listEl.style.display = 'flex';
+        listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
+      }
     }
   },
 
