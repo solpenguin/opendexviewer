@@ -1688,9 +1688,10 @@ a:hover {
   flex-direction: column;
 }
 
-.stats-section  { grid-column: 2; grid-row: 1; }
-.pools-section  { grid-column: 1; grid-row: 2; }
-.trade-section  { grid-column: 2; grid-row: 2; align-self: start; }
+.stats-section            { grid-column: 2; grid-row: 1; }
+.similar-tokens-section   { grid-column: 1; grid-row: 2; }
+.trade-section            { grid-column: 2; grid-row: 2; align-self: start; }
+.sentiment-section        { grid-column: 2; grid-row: 3; align-self: start; }
 
 /* Card Base */
 .chart-section,
@@ -1707,14 +1708,19 @@ a:hover {
   padding: 1.5rem;
 }
 
-/* Sentiment section sits full-width between grid and submissions */
+/* Sentiment section sits in the grid sidebar below Trade */
 .sentiment-section {
+  margin-bottom: 0;
+}
+
+/* Pools section sits full-width outside the grid */
+.pools-section {
   margin-bottom: 2rem;
 }
 
-/* Similar Tokens Section (Anti-Spoofing) */
+/* Similar Tokens Section (Anti-Spoofing) - inside grid */
 .similar-tokens-section {
-  margin-bottom: 2rem;
+  margin-bottom: 0;
 }
 
 .similar-tokens-header {
@@ -4828,8 +4834,9 @@ a:hover {
 
   .chart-section,
   .stats-section,
-  .pools-section,
-  .trade-section {
+  .similar-tokens-section,
+  .trade-section,
+  .sentiment-section {
     grid-column: auto;
     grid-row: auto;
     align-self: auto;
@@ -5250,8 +5257,9 @@ select {
 
   .chart-section,
   .stats-section,
-  .pools-section,
-  .trade-section {
+  .similar-tokens-section,
+  .trade-section,
+  .sentiment-section {
     grid-column: auto;
     grid-row: auto;
     align-self: auto;

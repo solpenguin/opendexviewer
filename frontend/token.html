@@ -305,15 +305,33 @@
           </div>
         </section>
 
-        <!-- Pools Section -->
-        <section class="pools-section">
-          <h2>Liquidity Pools</h2>
-          <div id="pools-loading" class="pools-loading">
-            <div class="loading-spinner"></div>
-            <span>Loading pools...</span>
+        <!-- Similar Tokens (Anti-Spoofing) -->
+        <section class="similar-tokens-section" id="similar-tokens-section" style="display:none;">
+          <div class="similar-tokens-header">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              Similar Tokens
+            </h2>
+            <span class="similar-tokens-note" title="Tokens with similar names or symbols. Always verify the contract address before trading.">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              Why am I seeing this?
+            </span>
           </div>
-          <div id="pools-list" class="pools-list" style="display: none;"></div>
-          <p id="pools-empty" class="pools-empty" style="display: none;">No liquidity pools found for this token.</p>
+          <p class="similar-tokens-disclaimer">
+            These tokens have similar names or tickers. Always verify the contract address to avoid spoofed tokens.
+          </p>
+          <div id="similar-tokens-loading" class="similar-tokens-loading">
+            <div class="loading-spinner"></div>
+            <span>Checking for similar tokens...</span>
+          </div>
+          <div id="similar-tokens-list" class="similar-tokens-list" style="display:none;"></div>
         </section>
 
         <!-- Trade Section -->
@@ -329,58 +347,40 @@
           </div>
         </section>
 
+        <!-- Community Sentiment -->
+        <section class="sentiment-section" id="sentiment-section" style="display:none;">
+          <div class="sentiment-header-row">
+            <span class="sentiment-section-title">Community Sentiment</span>
+            <span class="sentiment-percent" id="sentiment-percent">No votes yet</span>
+          </div>
+          <div class="sentiment-bar-wrap">
+            <div class="sentiment-bar-fill" id="sentiment-bar-fill" style="width:50%;"></div>
+          </div>
+          <div class="sentiment-footer-row">
+            <div class="sentiment-actions">
+              <button class="sentiment-btn bullish" id="sentiment-bullish-btn">
+                🐂 Bullish <span class="sentiment-btn-count" id="sentiment-bullish-count">0</span>
+              </button>
+              <button class="sentiment-btn bearish" id="sentiment-bearish-btn">
+                🐻 Bearish <span class="sentiment-btn-count" id="sentiment-bearish-count">0</span>
+              </button>
+            </div>
+            <span class="sentiment-counts" id="sentiment-counts"></span>
+            <p class="sentiment-hint" id="sentiment-hint"><a href="#" id="sentiment-connect-link">Connect wallet</a> to vote</p>
+          </div>
+        </section>
+
       </div>
 
-      <!-- Community Sentiment -->
-      <section class="sentiment-section" id="sentiment-section" style="display:none;">
-        <div class="sentiment-header-row">
-          <span class="sentiment-section-title">Community Sentiment</span>
-          <span class="sentiment-percent" id="sentiment-percent">No votes yet</span>
-        </div>
-        <div class="sentiment-bar-wrap">
-          <div class="sentiment-bar-fill" id="sentiment-bar-fill" style="width:50%;"></div>
-        </div>
-        <div class="sentiment-footer-row">
-          <div class="sentiment-actions">
-            <button class="sentiment-btn bullish" id="sentiment-bullish-btn">
-              🐂 Bullish <span class="sentiment-btn-count" id="sentiment-bullish-count">0</span>
-            </button>
-            <button class="sentiment-btn bearish" id="sentiment-bearish-btn">
-              🐻 Bearish <span class="sentiment-btn-count" id="sentiment-bearish-count">0</span>
-            </button>
-          </div>
-          <span class="sentiment-counts" id="sentiment-counts"></span>
-          <p class="sentiment-hint" id="sentiment-hint"><a href="#" id="sentiment-connect-link">Connect wallet</a> to vote</p>
-        </div>
-      </section>
-
-      <!-- Similar Tokens (Anti-Spoofing) -->
-      <section class="similar-tokens-section" id="similar-tokens-section" style="display:none;">
-        <div class="similar-tokens-header">
-          <h2>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            Similar Tokens
-          </h2>
-          <span class="similar-tokens-note" title="Tokens with similar names or symbols. Always verify the contract address before trading.">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-            Why am I seeing this?
-          </span>
-        </div>
-        <p class="similar-tokens-disclaimer">
-          These tokens have similar names or tickers. Always verify the contract address to avoid spoofed tokens.
-        </p>
-        <div id="similar-tokens-loading" class="similar-tokens-loading">
+      <!-- Pools Section -->
+      <section class="pools-section">
+        <h2>Liquidity Pools</h2>
+        <div id="pools-loading" class="pools-loading">
           <div class="loading-spinner"></div>
-          <span>Checking for similar tokens...</span>
+          <span>Loading pools...</span>
         </div>
-        <div id="similar-tokens-list" class="similar-tokens-list" style="display:none;"></div>
+        <div id="pools-list" class="pools-list" style="display: none;"></div>
+        <p id="pools-empty" class="pools-empty" style="display: none;">No liquidity pools found for this token.</p>
       </section>
 
       <!-- All Submissions Section -->
