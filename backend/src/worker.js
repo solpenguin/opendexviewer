@@ -16,8 +16,13 @@
 require('dotenv').config();
 const { Worker } = require('bullmq');
 
-// Import database for job processing
+// Import services for job processing
 const db = require('./services/database');
+const geckoService = require('./services/geckoTerminal');
+const { cache, TTL, keys } = require('./services/cache');
+
+// Allowed DEXes for similar-tokens anti-spoofing filter
+const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
 
 // Redis connection config
 const REDIS_URL = process.env.REDIS_URL;
@@ -152,6 +157,247 @@ const jobProcessors = {
 
     console.log('[Worker] Stats aggregation complete');
     return { stats };
+  },
+
+  // ==========================================
+  // Search Jobs
+  // ==========================================
+
+  /**
+   * Compute similar tokens for anti-spoofing
+   * Heavy work: DB similarity query + multiple GeckoTerminal API calls
+   */
+  'compute-similar-tokens': async (job) => {
+    const { mint } = job.data;
+    console.log(`[Worker] Computing similar tokens for ${mint}...`);
+
+    if (!db.isReady()) {
+      throw new Error('Database not ready');
+    }
+
+    // Resolve the current token's name and symbol
+    let tokenName = null;
+    let tokenSymbol = null;
+
+    // Check token info cache first
+    const tokenCacheKey = keys.tokenInfo(mint);
+    const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+    if (cachedMeta && cachedMeta.value) {
+      tokenName = cachedMeta.value.name;
+      tokenSymbol = cachedMeta.value.symbol;
+    }
+
+    // Fallback to local database
+    if (!tokenName) {
+      const localToken = await db.getToken(mint);
+      if (localToken) {
+        tokenName = localToken.name;
+        tokenSymbol = localToken.symbol;
+      }
+    }
+
+    // Fallback to GeckoTerminal
+    if (!tokenName) {
+      try {
+        const geckoInfo = await geckoService.getTokenInfo(mint);
+        if (geckoInfo) {
+          tokenName = geckoInfo.name;
+          tokenSymbol = geckoInfo.symbol;
+        }
+      } catch (err) {
+        // Non-critical
+      }
+    }
+
+    if (!tokenName && !tokenSymbol) {
+      await cache.set(`similar:${mint}`, [], TTL.HOUR);
+      return { count: 0 };
+    }
+
+    // Step 1: Query local database using pg_trgm similarity
+    let results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 15);
+
+    // Step 2: If fewer than 5 results, supplement with GeckoTerminal search
+    if (results.length < 5 && tokenName) {
+      try {
+        const geckoResults = await geckoService.searchTokens(tokenName, 10, SIMILAR_TOKEN_DEX_PREFIXES);
+        const existingAddresses = new Set(results.map(r => r.address));
+        existingAddresses.add(mint);
+
+        for (const token of geckoResults) {
+          if (results.length >= 5) break;
+          const addr = token.address || token.mintAddress;
+          if (!addr || existingAddresses.has(addr)) continue;
+          existingAddresses.add(addr);
+
+          results.push({
+            address: addr,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals || 9,
+            logoURI: token.logoUri || token.logoURI || null,
+            pairCreatedAt: token.pairCreatedAt || null,
+            price: token.price || null,
+            marketCap: token.marketCap || null,
+            volume24h: token.volume24h || null,
+            similarityScore: null,
+            nameSimilarity: null,
+            symbolSimilarity: null,
+            source: 'external'
+          });
+        }
+      } catch (err) {
+        // GeckoTerminal search failed - continue with what we have
+      }
+    }
+
+    // Step 3: If still fewer than 5, search by symbol too
+    if (results.length < 5 && tokenSymbol && tokenSymbol !== tokenName) {
+      try {
+        const symbolResults = await geckoService.searchTokens(tokenSymbol, 10, SIMILAR_TOKEN_DEX_PREFIXES);
+        const existingAddresses = new Set(results.map(r => r.address));
+        existingAddresses.add(mint);
+
+        for (const token of symbolResults) {
+          if (results.length >= 5) break;
+          const addr = token.address || token.mintAddress;
+          if (!addr || existingAddresses.has(addr)) continue;
+          existingAddresses.add(addr);
+
+          results.push({
+            address: addr,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals || 9,
+            logoURI: token.logoUri || token.logoURI || null,
+            pairCreatedAt: token.pairCreatedAt || null,
+            price: token.price || null,
+            marketCap: token.marketCap || null,
+            volume24h: token.volume24h || null,
+            similarityScore: null,
+            nameSimilarity: null,
+            symbolSimilarity: null,
+            source: 'external'
+          });
+        }
+      } catch (err) {
+        // Non-critical
+      }
+    }
+
+    // Step 4: DEX filtering for local DB results
+    const localResults = results.filter(t => t.source === 'local');
+    if (localResults.length > 0) {
+      try {
+        const overviewResults = await Promise.allSettled(
+          localResults.map(t => geckoService.getTokenOverview(t.address))
+        );
+        for (let i = 0; i < localResults.length; i++) {
+          const result = overviewResults[i];
+          if (result.status === 'fulfilled' && result.value) {
+            const overview = result.value;
+            localResults[i]._dexIds = overview.dexIds || [];
+            if (!localResults[i].pairCreatedAt && overview.pairCreatedAt) {
+              localResults[i].pairCreatedAt = overview.pairCreatedAt;
+            }
+            if (!localResults[i].price && overview.price) {
+              localResults[i].price = overview.price;
+            }
+            if (!localResults[i].marketCap && overview.marketCap) {
+              localResults[i].marketCap = overview.marketCap;
+            }
+            if (!localResults[i].volume24h && overview.volume24h) {
+              localResults[i].volume24h = overview.volume24h;
+            }
+          } else {
+            localResults[i]._dexIds = [];
+          }
+        }
+      } catch (err) {
+        for (const t of localResults) t._dexIds = [];
+      }
+
+      results = results.filter(t => {
+        if (t.source !== 'local') return true;
+        if (!t._dexIds || t._dexIds.length === 0) return false;
+        return t._dexIds.some(dex =>
+          SIMILAR_TOKEN_DEX_PREFIXES.some(prefix => dex.startsWith(prefix))
+        );
+      });
+    }
+
+    const final = results.slice(0, 5);
+
+    // Step 5a: Batch-enrich tokens missing metadata
+    const needsTokenData = final.filter(t =>
+      !t.name || !t.symbol || !t.price || !t.marketCap || !t.volume24h || !t.logoURI
+    );
+    if (needsTokenData.length > 0) {
+      try {
+        const enriched = await geckoService.getMultiTokenInfo(
+          needsTokenData.map(t => t.address)
+        );
+        for (const token of needsTokenData) {
+          const data = enriched[token.address];
+          if (data) {
+            if (!token.name && data.name) token.name = data.name;
+            if (!token.symbol && data.symbol) token.symbol = data.symbol;
+            if (!token.price && data.price) token.price = data.price;
+            if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
+            if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
+            if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
+          }
+        }
+      } catch (err) {
+        // Non-critical
+      }
+    }
+
+    // Step 5b: Enrich tokens still missing pairCreatedAt
+    const needsAge = final.filter(t => !t.pairCreatedAt);
+    if (needsAge.length > 0) {
+      try {
+        const overviewResults = await Promise.allSettled(
+          needsAge.map(t => geckoService.getTokenOverview(t.address))
+        );
+        for (let i = 0; i < needsAge.length; i++) {
+          const result = overviewResults[i];
+          if (result.status === 'fulfilled' && result.value) {
+            const overview = result.value;
+            if (!needsAge[i].pairCreatedAt && overview.pairCreatedAt) {
+              needsAge[i].pairCreatedAt = overview.pairCreatedAt;
+            }
+            if (!needsAge[i].name && overview.name && overview.name !== '???') {
+              needsAge[i].name = overview.name;
+            }
+            if (!needsAge[i].symbol && overview.symbol && overview.symbol !== '???') {
+              needsAge[i].symbol = overview.symbol;
+            }
+            if (!needsAge[i].price && overview.price) {
+              needsAge[i].price = overview.price;
+            }
+            if (!needsAge[i].marketCap && overview.marketCap) {
+              needsAge[i].marketCap = overview.marketCap;
+            }
+            if (!needsAge[i].volume24h && overview.volume24h) {
+              needsAge[i].volume24h = overview.volume24h;
+            }
+          }
+        }
+      } catch (err) {
+        // Non-critical
+      }
+    }
+
+    // Clean up internal fields
+    for (const t of final) delete t._dexIds;
+
+    // Store result in cache and clear pending flag
+    await cache.set(`similar:${mint}`, final, TTL.HOUR);
+    await cache.delete(`similar-pending:${mint}`);
+    console.log(`[Worker] Similar tokens for ${mint}: found ${final.length} results`);
+
+    return { count: final.length };
   }
 };
 
@@ -243,7 +489,7 @@ async function start() {
   }
 
   // Create workers for each queue
-  const queueNames = ['maintenance', 'analytics', 'notifications'];
+  const queueNames = ['maintenance', 'analytics', 'notifications', 'search'];
 
   for (const queueName of queueNames) {
     const worker = createWorker(queueName, redisConfig);

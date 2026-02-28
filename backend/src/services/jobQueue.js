@@ -14,7 +14,8 @@ const REDIS_URL = process.env.REDIS_URL;
 const QUEUE_NAMES = {
   MAINTENANCE: 'maintenance',    // Session cleanup, cache pruning
   ANALYTICS: 'analytics',        // View counting, stats aggregation
-  NOTIFICATIONS: 'notifications' // Future: email, webhooks
+  NOTIFICATIONS: 'notifications', // Future: email, webhooks
+  SEARCH: 'search'              // Similar-tokens computation
 };
 
 // Queues (initialized lazily)
@@ -123,6 +124,24 @@ async function addAnalyticsJob(jobName, data = {}, options = {}) {
     return job;
   } catch (err) {
     console.error(`[JobQueue] Failed to add analytics job ${jobName}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Add a job to the search queue
+ */
+async function addSearchJob(jobName, data = {}, options = {}) {
+  if (!isInitialized && !initialize()) {
+    console.warn(`[JobQueue] Cannot add job ${jobName} - queue not initialized`);
+    return null;
+  }
+
+  try {
+    const job = await queues[QUEUE_NAMES.SEARCH].add(jobName, data, options);
+    return job;
+  } catch (err) {
+    console.error(`[JobQueue] Failed to add search job ${jobName}:`, err.message);
     return null;
   }
 }
@@ -393,6 +412,7 @@ module.exports = {
   initialize,
   addMaintenanceJob,
   addAnalyticsJob,
+  addSearchJob,
   scheduleSessionCleanup,
   incrementViewCount,
   flushViewCounts,

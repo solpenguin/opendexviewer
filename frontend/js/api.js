@@ -481,12 +481,16 @@ const api = {
 
     // Get similar tokens (anti-spoofing check)
     async getSimilar(mint) {
-      return apiCache.getOrFetch(
-        `tokens:similar:${mint}`,
-        () => api.request(`/api/tokens/${mint}/similar`),
-        apiCache.TTL.tokenDetail,
-        true
-      );
+      const cacheKey = `tokens:similar:${mint}`;
+      const cached = apiCache.get(cacheKey);
+      if (cached && !cached.pending) return cached;
+
+      const result = await api.request(`/api/tokens/${mint}/similar`);
+      // Only cache final results, not pending responses
+      if (result && !result.pending) {
+        apiCache.set(cacheKey, result, apiCache.TTL.tokenDetail);
+      }
+      return result;
     },
 
     // Community leaderboards

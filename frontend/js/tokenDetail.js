@@ -457,14 +457,26 @@ const tokenDetail = {
     const listEl = document.getElementById('similar-tokens-list');
 
     try {
-      const similar = await api.tokens.getSimilar(this.mint);
+      let similar = await api.tokens.getSimilar(this.mint);
+
+      // Worker may still be computing — retry up to 2 times
+      if (similar && similar.pending) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await new Promise(r => setTimeout(r, 3000));
+          similar = await api.tokens.getSimilar(this.mint);
+          if (!similar || !similar.pending) break;
+        }
+      }
 
       if (loadingEl) loadingEl.style.display = 'none';
 
-      if (!similar || similar.length === 0) {
+      // Normalize: pending response has results array, direct response is array
+      const results = Array.isArray(similar) ? similar : (similar && similar.results) || [];
+      if (results.length === 0) {
         // No similar tokens — keep section hidden
         return;
       }
+      const similar_final = results;
 
       // Show the section and render results
       if (sectionEl) sectionEl.style.display = 'block';
@@ -472,7 +484,7 @@ const tokenDetail = {
       if (listEl) {
         listEl.style.display = 'flex';
         const defaultLogo = utils.getDefaultLogo();
-        listEl.innerHTML = similar.map(token => {
+        listEl.innerHTML = similar_final.map(token => {
           const logoSrc = this.escapeHtml(token.logoURI || defaultLogo);
           const name = this.escapeHtml(token.name || 'Unknown');
           const symbol = this.escapeHtml(token.symbol || '???');
