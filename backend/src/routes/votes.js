@@ -47,14 +47,33 @@ async function verifyHolderStatus(wallet, tokenMint) {
     let percentageHeld = null;
 
     // Try to get token info from cache for supply data
-    // Token info is stored via setWithTimestamp which wraps with { _data, _cachedAt }
-    // Use getWithMeta to correctly unwrap the stored value
     const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(tokenMint));
     const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo && tokenInfo.circulatingSupply) {
       circulatingSupply = tokenInfo.circulatingSupply;
     } else if (tokenInfo && tokenInfo.supply) {
       circulatingSupply = tokenInfo.supply;
+    }
+
+    // Fallback: fetch supply via RPC with dedicated cache (10 min — supply changes slowly)
+    if (!circulatingSupply && balance > 0) {
+      const supplyCacheKey = `supply:${tokenMint}`;
+      const cachedSupply = await cache.get(supplyCacheKey);
+      if (cachedSupply) {
+        circulatingSupply = cachedSupply;
+      } else {
+        try {
+          const supplyResult = await solanaService.getTokenSupply(tokenMint);
+          if (supplyResult && supplyResult.value) {
+            circulatingSupply = parseFloat(supplyResult.value.uiAmount || 0);
+            if (circulatingSupply > 0) {
+              await cache.set(supplyCacheKey, circulatingSupply, TTL.VERY_LONG);
+            }
+          }
+        } catch (err) {
+          // Non-critical — percentage will be 0
+        }
+      }
     }
 
     // Calculate percentage if we have supply data
@@ -250,13 +269,34 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
   const isDevelopmentMode = adminSettings?.developmentMode === true;
   const VOTE_COOLDOWN_MS = 10 * 1000;
 
+  // Pre-fetch all submissions to deduplicate holder verification by (wallet, tokenMint)
+  const submissionMap = new Map();
+  await Promise.all(votes.map(async (vote) => {
+    const submission = await db.getSubmission(vote.submissionId);
+    if (submission) submissionMap.set(vote.submissionId, submission);
+  }));
+
+  // Deduplicate holder verification: one RPC call per unique tokenMint
+  const holderDataMap = new Map();
+  if (!isDevelopmentMode) {
+    const uniqueMints = [...new Set(
+      [...submissionMap.values()].map(s => s.token_mint)
+    )];
+    const holderResults = await Promise.all(
+      uniqueMints.map(mint => verifyHolderStatus(voterWallet, mint).then(data => [mint, data]))
+    );
+    for (const [mint, data] of holderResults) {
+      holderDataMap.set(mint, data);
+    }
+  }
+
   // Process all votes concurrently — each vote targets a different submission
   // and uses atomic DB operations (transactions + UPSERT), so parallel is safe
   const settled = await Promise.all(votes.map(async (vote) => {
     const { submissionId, voteType } = vote;
 
     try {
-      const submission = await db.getSubmission(submissionId);
+      const submission = submissionMap.get(submissionId);
       if (!submission) {
         return { submissionId, success: false, error: 'Submission not found' };
       }
@@ -270,7 +310,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
         voteWeight = 1;
         voterBalance = 1000000;
       } else {
-        const holderData = await verifyHolderStatus(voterWallet, submission.token_mint);
+        const holderData = holderDataMap.get(submission.token_mint);
 
         if (!holderData || !holderData.holdsToken) {
           return { submissionId, success: false, error: 'You must hold this token to vote', code: 'NOT_HOLDER' };

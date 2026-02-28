@@ -354,24 +354,24 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       }
     }
 
-    // Enrich tokens with Helius batch API if available (more efficient than GeckoTerminal multi-token)
-    // Helius batch: 1 request for up to 1000 tokens
-    // GeckoTerminal multi: 1 request for up to 30 tokens
+    // Enrich tokens with Helius batch API only for tokens missing metadata
+    // Skip if GeckoTerminal already provided complete name/symbol/logo
     if (useHeliusEnrichment && tokens && tokens.length > 0) {
-      const addresses = tokens.map(t => t.address || t.mintAddress);
-      const heliusMetadata = await solanaService.getTokenMetadataBatch(addresses);
+      const needsEnrichment = tokens.filter(t => !t.name || !t.symbol || (!t.logoUri && !t.logoURI));
+      if (needsEnrichment.length > 0) {
+        const addresses = needsEnrichment.map(t => t.address || t.mintAddress);
+        const heliusMetadata = await solanaService.getTokenMetadataBatch(addresses);
 
-      for (const token of tokens) {
-        const address = token.address || token.mintAddress;
-        const meta = heliusMetadata[address];
-        if (meta) {
-          // Helius provides: name, symbol, decimals, logoUri
-          // Keep GeckoTerminal data for: price, volume, priceChange (more accurate market data)
-          token.name = meta.name || token.name;
-          token.symbol = meta.symbol || token.symbol;
-          token.decimals = meta.decimals || token.decimals;
-          token.logoUri = meta.logoUri || token.logoUri;
-          token.logoURI = meta.logoUri || token.logoURI;
+        for (const token of needsEnrichment) {
+          const address = token.address || token.mintAddress;
+          const meta = heliusMetadata[address];
+          if (meta) {
+            token.name = meta.name || token.name;
+            token.symbol = meta.symbol || token.symbol;
+            token.decimals = meta.decimals || token.decimals;
+            token.logoUri = meta.logoUri || token.logoUri;
+            token.logoURI = meta.logoUri || token.logoURI;
+          }
         }
       }
     }
@@ -660,7 +660,8 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
       }
 
       const results = tokenInfo ? [tokenInfo] : [];
-      await cache.set(cacheKey, results, TTL.MEDIUM);
+      // Single-token lookups are pure metadata — cache longer
+      await cache.set(cacheKey, results, results.length > 0 ? TTL.METADATA : TTL.MEDIUM);
       return res.json(results);
     }
 
@@ -683,19 +684,18 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
       }
     }
 
-    // 2. If we have fewer than MIN_SEARCH_RESULTS, fetch from external API
+    // 2. If we have fewer than MIN_SEARCH_RESULTS, fetch from external APIs in parallel
     if (results.length < MIN_SEARCH_RESULTS) {
       try {
-        // Use GeckoTerminal for search (free, no API key)
-        let externalResults = await geckoService.searchTokens(query);
+        const [geckoResults, jupiterResults] = await Promise.all([
+          geckoService.searchTokens(query).catch(() => []),
+          jupiterService.searchTokens(query).catch(() => [])
+        ]);
 
-        // Fallback to Jupiter if GeckoTerminal returns empty
-        if (!externalResults || externalResults.length === 0) {
-          externalResults = await jupiterService.searchTokens(query);
-        }
+        // Merge results: GeckoTerminal first (free, no API key), then Jupiter
+        const allExternal = [...(geckoResults || []), ...(jupiterResults || [])];
 
-        // Normalize external results and add unique ones
-        for (const token of externalResults) {
+        for (const token of allExternal) {
           const address = token.address || token.mint;
           if (!address || !SOLANA_ADDRESS_REGEX.test(address)) continue;
           if (!seenAddresses.has(address)) {
@@ -710,7 +710,6 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
               source: 'external'
             });
 
-            // Stop once we have enough results
             if (results.length >= MIN_SEARCH_RESULTS) break;
           }
         }
@@ -923,22 +922,24 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         db.getApprovedSubmissions(mint).catch(() => [])
       ];
 
-      // If holder count not cached, fetch Jupiter + Helius + Birdeye all in parallel
-      // Priority: Jupiter > Helius > Birdeye (best result wins)
+      // If holder count not cached, try sources sequentially with early return
+      // Priority: Jupiter (fastest, includes holderCount in search) > Helius > Birdeye
       if (holders === undefined) {
         fetchPromises.push(
-          Promise.all([
-            jupiterService.getTokenHolderCount(mint).catch(() => null),
-            solanaService.isHeliusConfigured()
-              ? solanaService.getTokenHolderCount(mint).catch(() => null)
-              : Promise.resolve(null),
-            birdeyeService.getTokenOverview(mint).then(o => o?.holder ?? null).catch(() => null)
-          ]).then(([jupiterCount, heliusCount, birdeyeCount]) => {
+          (async () => {
+            const jupiterCount = await jupiterService.getTokenHolderCount(mint).catch(() => null);
             if (jupiterCount != null && jupiterCount > 1) return jupiterCount;
-            if (heliusCount  != null && heliusCount  > 1) return heliusCount;
+
+            if (solanaService.isHeliusConfigured()) {
+              const heliusCount = await solanaService.getTokenHolderCount(mint).catch(() => null);
+              if (heliusCount != null && heliusCount > 1) return heliusCount;
+            }
+
+            const birdeyeCount = await birdeyeService.getTokenOverview(mint).then(o => o?.holder ?? null).catch(() => null);
             if (birdeyeCount != null && birdeyeCount > 1) return birdeyeCount;
-            return jupiterCount ?? heliusCount ?? birdeyeCount ?? null;
-          })
+
+            return jupiterCount ?? null;
+          })()
         );
       }
 
@@ -1049,16 +1050,23 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
   try {
     // Use getOrSetWithFreshness for stampede prevention
     const priceData = await cache.getOrSetWithFreshness(cacheKey, async () => {
-      // Use GeckoTerminal for price data
-      let data = await geckoService.getTokenOverview(mint);
+      // Try GeckoTerminal with 3s timeout, fall back to Jupiter immediately on failure
+      let data = null;
+      try {
+        data = await Promise.race([
+          geckoService.getTokenOverview(mint),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Price timeout')), 3000))
+        ]);
+      } catch (err) {
+        // GeckoTerminal failed or timed out — fall through to Jupiter
+      }
 
-      // Fallback to Jupiter if GeckoTerminal fails
       if (!data) {
         data = await jupiterService.getTokenPrice(mint);
       }
 
       return data;
-    }); // Use standard caching with stampede prevention (was requireFresh=true)
+    });
 
     res.json(priceData);
   } catch (error) {
@@ -1091,12 +1099,17 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
   try {
     // Use getOrSet for caching with stampede prevention
     const chartData = await cache.getOrSet(cacheKey, async () => {
-      // Use GeckoTerminal for chart data
-      let data = await geckoService.getPriceHistory(mint, {
-        interval: normalizedInterval
-      });
+      // Try GeckoTerminal with 4s timeout, fall back to Jupiter on failure/empty
+      let data = null;
+      try {
+        data = await Promise.race([
+          geckoService.getPriceHistory(mint, { interval: normalizedInterval }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Chart timeout')), 4000))
+        ]);
+      } catch (err) {
+        // GeckoTerminal failed or timed out — fall through to Jupiter
+      }
 
-      // Fallback to Jupiter if GeckoTerminal fails
       if (!data || !data.data || data.data.length === 0) {
         data = await jupiterService.getPriceHistory(mint, {
           interval: normalizedInterval,

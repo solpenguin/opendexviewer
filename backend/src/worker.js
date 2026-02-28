@@ -259,6 +259,7 @@ const jobProcessors = {
     }
 
     // Step 4: DEX filtering for local DB results
+    // getTokenOverview is required here — only the pools endpoint returns dexIds
     const localResults = results.filter(t => t.source === 'local');
     if (localResults.length > 0) {
       try {
@@ -270,18 +271,12 @@ const jobProcessors = {
           if (result.status === 'fulfilled' && result.value) {
             const overview = result.value;
             localResults[i]._dexIds = overview.dexIds || [];
-            if (!localResults[i].pairCreatedAt && overview.pairCreatedAt) {
-              localResults[i].pairCreatedAt = overview.pairCreatedAt;
-            }
-            if (!localResults[i].price && overview.price) {
-              localResults[i].price = overview.price;
-            }
-            if (!localResults[i].marketCap && overview.marketCap) {
-              localResults[i].marketCap = overview.marketCap;
-            }
-            if (!localResults[i].volume24h && overview.volume24h) {
-              localResults[i].volume24h = overview.volume24h;
-            }
+            // Preserve overview data to avoid re-fetching in Step 5
+            if (!localResults[i].pairCreatedAt && overview.pairCreatedAt) localResults[i].pairCreatedAt = overview.pairCreatedAt;
+            if (!localResults[i].price && overview.price) localResults[i].price = overview.price;
+            if (!localResults[i].marketCap && overview.marketCap) localResults[i].marketCap = overview.marketCap;
+            if (!localResults[i].volume24h && overview.volume24h) localResults[i].volume24h = overview.volume24h;
+            localResults[i]._enriched = true;
           } else {
             localResults[i]._dexIds = [];
           }
@@ -301,53 +296,53 @@ const jobProcessors = {
 
     const final = results.slice(0, 5);
 
-    // Step 5: Enrich all tokens in parallel — batch metadata + per-token overview
-    const needsTokenData = final.filter(t =>
-      !t.name || !t.symbol || !t.price || !t.marketCap || !t.volume24h || !t.logoURI
+    // Step 5: Enrich tokens still missing metadata (skip tokens already enriched by Step 4)
+    const needsBatchMeta = final.filter(t =>
+      !t._enriched && (!t.name || !t.symbol || !t.price || !t.marketCap || !t.volume24h || !t.logoURI)
     );
     const needsOverview = final.filter(t =>
-      !t.pairCreatedAt || !t.price || !t.marketCap || !t.volume24h
+      !t._enriched && (!t.pairCreatedAt || !t.price || !t.marketCap || !t.volume24h)
     );
 
-    const [batchInfo, overviewResults] = await Promise.all([
-      needsTokenData.length > 0
-        ? geckoService.getMultiTokenInfo(needsTokenData.map(t => t.address)).catch(() => ({}))
-        : {},
-      needsOverview.length > 0
-        ? Promise.allSettled(needsOverview.map(t => geckoService.getTokenOverview(t.address)))
-        : []
-    ]);
+    if (needsBatchMeta.length > 0 || needsOverview.length > 0) {
+      const [batchInfo, overviewResults] = await Promise.all([
+        needsBatchMeta.length > 0
+          ? geckoService.getMultiTokenInfo(needsBatchMeta.map(t => t.address)).catch(() => ({}))
+          : {},
+        needsOverview.length > 0
+          ? Promise.allSettled(needsOverview.map(t => geckoService.getTokenOverview(t.address)))
+          : []
+      ]);
 
-    // Apply batch metadata
-    for (const token of needsTokenData) {
-      const data = batchInfo[token.address];
-      if (data) {
-        if (!token.name && data.name) token.name = data.name;
-        if (!token.symbol && data.symbol) token.symbol = data.symbol;
-        if (!token.price && data.price) token.price = data.price;
-        if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
-        if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
-        if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
+      for (const token of needsBatchMeta) {
+        const data = batchInfo[token.address];
+        if (data) {
+          if (!token.name && data.name) token.name = data.name;
+          if (!token.symbol && data.symbol) token.symbol = data.symbol;
+          if (!token.price && data.price) token.price = data.price;
+          if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
+          if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
+          if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
+        }
       }
-    }
 
-    // Apply per-token overview data
-    for (let i = 0; i < needsOverview.length; i++) {
-      const result = overviewResults[i];
-      if (result.status === 'fulfilled' && result.value) {
-        const overview = result.value;
-        const t = needsOverview[i];
-        if (!t.pairCreatedAt && overview.pairCreatedAt) t.pairCreatedAt = overview.pairCreatedAt;
-        if (!t.name && overview.name && overview.name !== '???') t.name = overview.name;
-        if (!t.symbol && overview.symbol && overview.symbol !== '???') t.symbol = overview.symbol;
-        if (!t.price && overview.price) t.price = overview.price;
-        if (!t.marketCap && overview.marketCap) t.marketCap = overview.marketCap;
-        if (!t.volume24h && overview.volume24h) t.volume24h = overview.volume24h;
+      for (let i = 0; i < needsOverview.length; i++) {
+        const result = overviewResults[i];
+        if (result.status === 'fulfilled' && result.value) {
+          const overview = result.value;
+          const t = needsOverview[i];
+          if (!t.pairCreatedAt && overview.pairCreatedAt) t.pairCreatedAt = overview.pairCreatedAt;
+          if (!t.name && overview.name && overview.name !== '???') t.name = overview.name;
+          if (!t.symbol && overview.symbol && overview.symbol !== '???') t.symbol = overview.symbol;
+          if (!t.price && overview.price) t.price = overview.price;
+          if (!t.marketCap && overview.marketCap) t.marketCap = overview.marketCap;
+          if (!t.volume24h && overview.volume24h) t.volume24h = overview.volume24h;
+        }
       }
     }
 
     // Clean up internal fields
-    for (const t of final) delete t._dexIds;
+    for (const t of final) { delete t._dexIds; delete t._enriched; }
 
     // Store enriched result in cache and clear pending flag
     const cacheTTL = final.length > 0 ? TTL.HOUR : TTL.PRICE_DATA;

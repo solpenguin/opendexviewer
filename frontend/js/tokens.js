@@ -820,6 +820,12 @@ const tokenList = {
         const mint = navigateCell.dataset.navigate;
         // Double-check it's a valid Solana address before navigation
         if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+          // Store token data from list so the detail page can render instantly
+          try {
+            const allTokens = this.tokens?.tokens || this.tokens || [];
+            const token = Array.isArray(allTokens) ? allTokens.find(t => (t.address || t.mintAddress) === mint) : null;
+            if (token) sessionStorage.setItem('token_preview', JSON.stringify({ mint, data: token, ts: Date.now() }));
+          } catch (_) {}
           window.location.href = `token.html?mint=${encodeURIComponent(mint)}`;
         }
         return;

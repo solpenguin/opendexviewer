@@ -324,6 +324,21 @@ const api = {
       if (!skipCache) {
         const cached = apiCache.get(cacheKey);
         if (cached) return cached.data;
+
+        // Seed cache from sessionStorage preview (set by list page on click-through)
+        // so the first get() returns instantly; full data replaces on next fetch
+        try {
+          const raw = sessionStorage.getItem('token_preview');
+          if (raw) {
+            // Always clear on read — prevents stale previews from persisting
+            sessionStorage.removeItem('token_preview');
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.mint === mint && parsed.ts && Date.now() - parsed.ts < 30000) {
+              apiCache.set(cacheKey, parsed.data, 5000); // 5s — just long enough for initial render
+              return parsed.data;
+            }
+          }
+        } catch (_) {}
       }
 
       const data = await api.request(`/api/tokens/${mint}`);
@@ -666,10 +681,18 @@ const api = {
   sentiment: {
     async get(tokenMint, wallet) {
       const params = wallet ? `?wallet=${encodeURIComponent(wallet)}` : '';
-      return api.request(`/api/sentiment/${tokenMint}${params}`);
+      const cacheKey = `sentiment:${tokenMint}:${wallet || 'anon'}`;
+      const cached = apiCache.get(cacheKey);
+      if (cached) return cached.data;
+
+      const data = await api.request(`/api/sentiment/${tokenMint}${params}`);
+      if (data) apiCache.set(cacheKey, data, 60000); // 60s cache
+      return data;
     },
 
     async cast(tokenMint, sentimentType, voterWallet) {
+      // Invalidate cached sentiment so re-fetch gets server-confirmed tally
+      apiCache.clearPattern(`sentiment:${tokenMint}`);
       return api.request(`/api/sentiment/${tokenMint}`, {
         method: 'POST',
         body: JSON.stringify({ sentiment: sentimentType, voterWallet })

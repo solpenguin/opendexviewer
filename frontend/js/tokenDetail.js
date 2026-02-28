@@ -309,7 +309,18 @@ const tokenDetail = {
       throw new Error('Token not found');
     }
 
+    const isPreview = !this.token.submissions && !this.token.holders;
     this.renderToken();
+
+    // If initial data came from list-page preview (sessionStorage seed), fetch full detail
+    if (isPreview) {
+      const mint = this.mint;
+      api.tokens.get(mint, { fresh: true }).then(fullData => {
+        if (this.mint !== mint || !fullData) return;
+        this.token = fullData;
+        this.renderToken();
+      }).catch(() => {});
+    }
   },
 
   // Update price display only
@@ -646,14 +657,18 @@ const tokenDetail = {
       const preload = (interval === '1h') ? this._chartPreload : null;
       this._chartPreload = null;
 
-      // Direct GeckoTerminal only — no backend fallback so the shared backend
-      // rate-limit budget (30 req/min) is reserved for token list and price endpoints.
-      if (!preload && typeof directGecko === 'undefined') {
-        throw new Error('GeckoTerminal client not available');
+      // Try direct GeckoTerminal first, auto-fallback to backend on failure
+      try {
+        if (!preload && (typeof directGecko === 'undefined' || !directGecko._available)) {
+          throw new Error('GeckoTerminal client not available');
+        }
+        this.chartData = preload
+          ? await preload
+          : await directGecko.getOHLCV(this.mint, interval);
+      } catch (directErr) {
+        // Direct GeckoTerminal failed — fall back to backend chart endpoint
+        this.chartData = await api.tokens.getChart(this.mint, { interval });
       }
-      this.chartData = preload
-        ? await preload
-        : await directGecko.getOHLCV(this.mint, interval);
 
       this.renderChart(this.chartData);
       this.updateChartStats(this.chartData);
