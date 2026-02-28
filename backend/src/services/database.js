@@ -1608,7 +1608,7 @@ async function callToken(tokenMint, callerWallet) {
 
     const insertResult = await client.query(
       `INSERT INTO token_calls (token_mint, caller_wallet, mcap_at_call)
-       VALUES ($1, $2, (SELECT market_cap FROM tokens WHERE mint_address = $1))
+       VALUES ($1, $2, (SELECT market_cap FROM tokens WHERE mint_address = $1::text))
        ON CONFLICT (caller_wallet, token_mint) DO UPDATE
          SET created_at = NOW()
        RETURNING mcap_at_call`,

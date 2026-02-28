@@ -1231,6 +1231,10 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
   }
 }));
 
+// Allowed DEX prefixes for similar token filtering.
+// Only tokens with pools on these DEXes are shown to reduce junk/scam results.
+const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
+
 // GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
 // Anti-spoofing: helps users identify confusing or copycat token names
 router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
@@ -1278,12 +1282,13 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
       }
 
       // Step 1: Query local database using pg_trgm similarity
-      let results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 5);
+      // Fetch extra results to allow room after DEX filtering
+      let results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 15);
 
       // Step 2: If fewer than 5 results, supplement with GeckoTerminal search
       if (results.length < 5 && tokenName) {
         try {
-          const geckoResults = await geckoService.searchTokens(tokenName, 10);
+          const geckoResults = await geckoService.searchTokens(tokenName, 10, SIMILAR_TOKEN_DEX_PREFIXES);
           const existingAddresses = new Set(results.map(r => r.address));
           existingAddresses.add(mint);
 
@@ -1317,7 +1322,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
       // Step 3: If still fewer than 5, search by symbol too
       if (results.length < 5 && tokenSymbol && tokenSymbol !== tokenName) {
         try {
-          const symbolResults = await geckoService.searchTokens(tokenSymbol, 10);
+          const symbolResults = await geckoService.searchTokens(tokenSymbol, 10, SIMILAR_TOKEN_DEX_PREFIXES);
           const existingAddresses = new Set(results.map(r => r.address));
           existingAddresses.add(mint);
 
@@ -1346,6 +1351,52 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
         } catch (err) {
           // Non-critical
         }
+      }
+
+      // Step 4: DEX filtering for local DB results.
+      // External results are already DEX-filtered in searchTokens.
+      // Local DB results need a pool lookup to determine their DEX.
+      const localResults = results.filter(t => t.source === 'local');
+      if (localResults.length > 0) {
+        try {
+          const overviewResults = await Promise.allSettled(
+            localResults.map(t => geckoService.getTokenOverview(t.address))
+          );
+          for (let i = 0; i < localResults.length; i++) {
+            const result = overviewResults[i];
+            if (result.status === 'fulfilled' && result.value) {
+              const overview = result.value;
+              localResults[i]._dexIds = overview.dexIds || [];
+              // Back-fill data while we have it
+              if (!localResults[i].pairCreatedAt && overview.pairCreatedAt) {
+                localResults[i].pairCreatedAt = overview.pairCreatedAt;
+              }
+              if (!localResults[i].price && overview.price) {
+                localResults[i].price = overview.price;
+              }
+              if (!localResults[i].marketCap && overview.marketCap) {
+                localResults[i].marketCap = overview.marketCap;
+              }
+              if (!localResults[i].volume24h && overview.volume24h) {
+                localResults[i].volume24h = overview.volume24h;
+              }
+            } else {
+              localResults[i]._dexIds = [];
+            }
+          }
+        } catch (err) {
+          // If DEX check fails entirely, mark all local results with empty dexIds
+          for (const t of localResults) t._dexIds = [];
+        }
+
+        // Filter local results: keep only tokens with a pool on an allowed DEX
+        results = results.filter(t => {
+          if (t.source !== 'local') return true;
+          if (!t._dexIds || t._dexIds.length === 0) return false;
+          return t._dexIds.some(dex =>
+            SIMILAR_TOKEN_DEX_PREFIXES.some(prefix => dex.startsWith(prefix))
+          );
+        });
       }
 
       const final = results.slice(0, 5);
@@ -1377,9 +1428,8 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
       }
 
       // Step 5b: Enrich tokens still missing pairCreatedAt (age) via pool data.
-      // getMultiTokenInfo is a token endpoint and doesn't return pool_created_at,
-      // so we need individual getTokenOverview calls (fetches top pool per token).
-      // Results are cached for an hour so this is a one-time cost per token.
+      // Local results already got age data from the DEX check above,
+      // so this only targets external results still missing age.
       const needsAge = final.filter(t => !t.pairCreatedAt);
       if (needsAge.length > 0) {
         try {
@@ -1393,7 +1443,6 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
               if (!needsAge[i].pairCreatedAt && overview.pairCreatedAt) {
                 needsAge[i].pairCreatedAt = overview.pairCreatedAt;
               }
-              // Also back-fill any still-missing data from pool data
               if (!needsAge[i].name && overview.name && overview.name !== '???') {
                 needsAge[i].name = overview.name;
               }
@@ -1415,6 +1464,9 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
           // Non-critical — age data is supplementary
         }
       }
+
+      // Clean up internal _dexIds field before returning
+      for (const t of final) delete t._dexIds;
 
       return final;
     }, TTL.HOUR);

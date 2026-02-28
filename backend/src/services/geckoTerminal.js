@@ -337,6 +337,11 @@ async function getTokenOverview(mintAddress) {
     const poolName = topPool.name || '';
     const symbol = poolName.split(' / ')[0] || '???';
 
+    // Collect DEX IDs from all pools for filtering
+    const dexIds = [...new Set(pools.map(p =>
+      (p.relationships?.dex?.data?.id || '').toLowerCase()
+    ).filter(Boolean))];
+
     return {
       mintAddress: tokenAddress,
       address: tokenAddress,
@@ -353,7 +358,8 @@ async function getTokenOverview(mintAddress) {
       liquidity,
       totalSupply: null, // Helius provides supply
       holder: null,
-      pairCreatedAt: topPool.pool_created_at || null
+      pairCreatedAt: topPool.pool_created_at || null,
+      dexIds
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenOverview error:', error.message);
@@ -602,8 +608,8 @@ async function getNewTokens(limit = 20, skipEnrichment = false, page = 1) {
  * Search for tokens/pools
  * Endpoint: /search/pools?query={query}&network={network}
  */
-async function searchTokens(query, limit = 20) {
-  console.log(`[GeckoTerminal] searchTokens: query="${query}", limit=${limit}`);
+async function searchTokens(query, limit = 20, allowedDexPrefixes = null) {
+  console.log(`[GeckoTerminal] searchTokens: query="${query}", limit=${limit}, dexFilter=${allowedDexPrefixes ? allowedDexPrefixes.join(',') : 'none'}`);
 
   try {
     const response = await geckoRequest(() =>
@@ -636,6 +642,14 @@ async function searchTokens(query, limit = 20) {
       const baseAddress = baseTokenId ? baseTokenId.replace('solana_', '') : null;
 
       if (!baseAddress || seenAddresses.has(baseAddress)) continue;
+
+      // Filter by DEX if allowedDexPrefixes is provided
+      if (allowedDexPrefixes) {
+        const dexId = (pool.relationships?.dex?.data?.id || '').toLowerCase();
+        const matchesDex = allowedDexPrefixes.some(prefix => dexId.startsWith(prefix));
+        if (!matchesDex) continue;
+      }
+
       seenAddresses.add(baseAddress);
 
       const poolName = attrs.name || '';
