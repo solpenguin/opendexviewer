@@ -491,15 +491,22 @@ const api = {
     },
 
     // Get similar tokens (anti-spoofing check)
+    // Response format: { results: [...], enriched: boolean }
     async getSimilar(mint) {
       const cacheKey = `tokens:similar:${mint}`;
       const cached = apiCache.get(cacheKey);
-      if (cached && cached.data && !cached.data.pending) return cached.data;
+      if (cached && cached.data && cached.data.enriched) return cached.data;
 
       const result = await api.request(`/api/tokens/${mint}/similar`);
-      // Only cache final results, not pending responses
-      if (result && !result.pending) {
-        apiCache.set(cacheKey, result, apiCache.TTL.tokenDetail);
+      if (result) {
+        if (result.enriched) {
+          // Fully enriched — cache for full TTL
+          apiCache.set(cacheKey, result, apiCache.TTL.tokenDetail);
+        } else if (result.results && result.results.length > 0) {
+          // Unenriched but has results — cache briefly so immediate re-renders don't re-fetch
+          apiCache.set(cacheKey, result, 30000);
+        }
+        // No results + not enriched — don't cache, let next call re-fetch
       }
       return result;
     },

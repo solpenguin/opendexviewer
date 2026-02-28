@@ -210,7 +210,7 @@ const jobProcessors = {
     }
 
     if (!tokenName && !tokenSymbol) {
-      await cache.set(`similar:${mint}`, [], TTL.HOUR);
+      await cache.set(`similar:${mint}`, { results: [], enriched: true }, TTL.PRICE_DATA);
       return { count: 0 };
     }
 
@@ -218,12 +218,21 @@ const jobProcessors = {
     let results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 15);
 
     // Step 2: If fewer than 5 results, supplement with GeckoTerminal search
-    if (results.length < 5 && tokenName) {
-      try {
-        const geckoResults = await geckoService.searchTokens(tokenName, 10, SIMILAR_TOKEN_DEX_PREFIXES);
-        const existingAddresses = new Set(results.map(r => r.address));
-        existingAddresses.add(mint);
+    // Parallelize name + symbol searches when both are available
+    if (results.length < 5 && (tokenName || tokenSymbol)) {
+      const searches = [];
+      if (tokenName) {
+        searches.push(geckoService.searchTokens(tokenName, 10, SIMILAR_TOKEN_DEX_PREFIXES).catch(() => []));
+      }
+      if (tokenSymbol && tokenSymbol !== tokenName) {
+        searches.push(geckoService.searchTokens(tokenSymbol, 10, SIMILAR_TOKEN_DEX_PREFIXES).catch(() => []));
+      }
 
+      const searchResults = await Promise.all(searches);
+      const existingAddresses = new Set(results.map(r => r.address));
+      existingAddresses.add(mint);
+
+      for (const geckoResults of searchResults) {
         for (const token of geckoResults) {
           if (results.length >= 5) break;
           const addr = token.address || token.mintAddress;
@@ -246,42 +255,6 @@ const jobProcessors = {
             source: 'external'
           });
         }
-      } catch (err) {
-        // GeckoTerminal search failed - continue with what we have
-      }
-    }
-
-    // Step 3: If still fewer than 5, search by symbol too
-    if (results.length < 5 && tokenSymbol && tokenSymbol !== tokenName) {
-      try {
-        const symbolResults = await geckoService.searchTokens(tokenSymbol, 10, SIMILAR_TOKEN_DEX_PREFIXES);
-        const existingAddresses = new Set(results.map(r => r.address));
-        existingAddresses.add(mint);
-
-        for (const token of symbolResults) {
-          if (results.length >= 5) break;
-          const addr = token.address || token.mintAddress;
-          if (!addr || existingAddresses.has(addr)) continue;
-          existingAddresses.add(addr);
-
-          results.push({
-            address: addr,
-            name: token.name,
-            symbol: token.symbol,
-            decimals: token.decimals || 9,
-            logoURI: token.logoUri || token.logoURI || null,
-            pairCreatedAt: token.pairCreatedAt || null,
-            price: token.price || null,
-            marketCap: token.marketCap || null,
-            volume24h: token.volume24h || null,
-            similarityScore: null,
-            nameSimilarity: null,
-            symbolSimilarity: null,
-            source: 'external'
-          });
-        }
-      } catch (err) {
-        // Non-critical
       }
     }
 
@@ -328,72 +301,57 @@ const jobProcessors = {
 
     const final = results.slice(0, 5);
 
-    // Step 5a: Batch-enrich tokens missing metadata
+    // Step 5: Enrich all tokens in parallel — batch metadata + per-token overview
     const needsTokenData = final.filter(t =>
       !t.name || !t.symbol || !t.price || !t.marketCap || !t.volume24h || !t.logoURI
     );
-    if (needsTokenData.length > 0) {
-      try {
-        const enriched = await geckoService.getMultiTokenInfo(
-          needsTokenData.map(t => t.address)
-        );
-        for (const token of needsTokenData) {
-          const data = enriched[token.address];
-          if (data) {
-            if (!token.name && data.name) token.name = data.name;
-            if (!token.symbol && data.symbol) token.symbol = data.symbol;
-            if (!token.price && data.price) token.price = data.price;
-            if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
-            if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
-            if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
-          }
-        }
-      } catch (err) {
-        // Non-critical
+    const needsOverview = final.filter(t =>
+      !t.pairCreatedAt || !t.price || !t.marketCap || !t.volume24h
+    );
+
+    const [batchInfo, overviewResults] = await Promise.all([
+      needsTokenData.length > 0
+        ? geckoService.getMultiTokenInfo(needsTokenData.map(t => t.address)).catch(() => ({}))
+        : {},
+      needsOverview.length > 0
+        ? Promise.allSettled(needsOverview.map(t => geckoService.getTokenOverview(t.address)))
+        : []
+    ]);
+
+    // Apply batch metadata
+    for (const token of needsTokenData) {
+      const data = batchInfo[token.address];
+      if (data) {
+        if (!token.name && data.name) token.name = data.name;
+        if (!token.symbol && data.symbol) token.symbol = data.symbol;
+        if (!token.price && data.price) token.price = data.price;
+        if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
+        if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
+        if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
       }
     }
 
-    // Step 5b: Enrich tokens still missing pairCreatedAt
-    const needsAge = final.filter(t => !t.pairCreatedAt);
-    if (needsAge.length > 0) {
-      try {
-        const overviewResults = await Promise.allSettled(
-          needsAge.map(t => geckoService.getTokenOverview(t.address))
-        );
-        for (let i = 0; i < needsAge.length; i++) {
-          const result = overviewResults[i];
-          if (result.status === 'fulfilled' && result.value) {
-            const overview = result.value;
-            if (!needsAge[i].pairCreatedAt && overview.pairCreatedAt) {
-              needsAge[i].pairCreatedAt = overview.pairCreatedAt;
-            }
-            if (!needsAge[i].name && overview.name && overview.name !== '???') {
-              needsAge[i].name = overview.name;
-            }
-            if (!needsAge[i].symbol && overview.symbol && overview.symbol !== '???') {
-              needsAge[i].symbol = overview.symbol;
-            }
-            if (!needsAge[i].price && overview.price) {
-              needsAge[i].price = overview.price;
-            }
-            if (!needsAge[i].marketCap && overview.marketCap) {
-              needsAge[i].marketCap = overview.marketCap;
-            }
-            if (!needsAge[i].volume24h && overview.volume24h) {
-              needsAge[i].volume24h = overview.volume24h;
-            }
-          }
-        }
-      } catch (err) {
-        // Non-critical
+    // Apply per-token overview data
+    for (let i = 0; i < needsOverview.length; i++) {
+      const result = overviewResults[i];
+      if (result.status === 'fulfilled' && result.value) {
+        const overview = result.value;
+        const t = needsOverview[i];
+        if (!t.pairCreatedAt && overview.pairCreatedAt) t.pairCreatedAt = overview.pairCreatedAt;
+        if (!t.name && overview.name && overview.name !== '???') t.name = overview.name;
+        if (!t.symbol && overview.symbol && overview.symbol !== '???') t.symbol = overview.symbol;
+        if (!t.price && overview.price) t.price = overview.price;
+        if (!t.marketCap && overview.marketCap) t.marketCap = overview.marketCap;
+        if (!t.volume24h && overview.volume24h) t.volume24h = overview.volume24h;
       }
     }
 
     // Clean up internal fields
     for (const t of final) delete t._dexIds;
 
-    // Store result in cache and clear pending flag
-    await cache.set(`similar:${mint}`, final, TTL.HOUR);
+    // Store enriched result in cache and clear pending flag
+    const cacheTTL = final.length > 0 ? TTL.HOUR : TTL.PRICE_DATA;
+    await cache.set(`similar:${mint}`, { results: final, enriched: true }, cacheTTL);
     await cache.delete(`similar-pending:${mint}`);
     console.log(`[Worker] Similar tokens for ${mint}: found ${final.length} results`);
 

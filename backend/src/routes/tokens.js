@@ -1329,58 +1329,65 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
 
 // GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
 // Anti-spoofing: helps users identify confusing or copycat token names
-// Heavy computation is offloaded to the background worker via BullMQ.
-// This endpoint reads from cache or enqueues a job and returns immediately.
+// Returns fast DB results inline (~5-20ms), then queues worker for GeckoTerminal enrichment.
+// Response format: { results: [...], enriched: boolean }
 router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = `similar:${mint}`;
   const pendingKey = `similar-pending:${mint}`;
 
   try {
-    // Check cache first — worker writes results here
+    // Check cache first — worker writes enriched results here
     const cached = await cache.get(cacheKey);
     if (cached !== undefined) {
       return res.json(cached);
     }
 
-    // Check if a worker job is already in flight
-    const isPending = await cache.get(pendingKey);
-    if (isPending) {
-      return res.json({ pending: true, results: [] });
+    // Resolve token name/symbol for similarity query
+    let tokenName = null;
+    let tokenSymbol = null;
+
+    // Try token-info cache first (fast), then fall back to DB
+    const tokenCacheKey = `token-info:${mint}`;
+    const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+    if (cachedMeta && cachedMeta.value) {
+      tokenName = cachedMeta.value.name;
+      tokenSymbol = cachedMeta.value.symbol;
     }
-
-    // Set pending flag (60s TTL — job should complete within this window)
-    await cache.set(pendingKey, true, 60000);
-
-    // Enqueue worker job (no jobId — pending flag handles dedup)
-    const job = await jobQueue.addSearchJob(
-      'compute-similar-tokens',
-      { mint }
-    );
-
-    if (job) {
-      return res.json({ pending: true, results: [] });
-    }
-
-    // Fallback: job queue unavailable — do a fast DB-only lookup inline
-    await cache.delete(pendingKey);
-    let results = [];
-    try {
-      let tokenName = null;
-      let tokenSymbol = null;
+    if (!tokenName) {
       const localToken = await db.getToken(mint);
       if (localToken) {
         tokenName = localToken.name;
         tokenSymbol = localToken.symbol;
       }
-      if (tokenName || tokenSymbol) {
-        results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 5);
-        await cache.set(cacheKey, results, TTL.HOUR);
-      }
-    } catch (err) {
-      // Non-critical
     }
-    res.json(results);
+
+    // Run inline DB similarity query (~5-20ms)
+    let results = [];
+    if (tokenName || tokenSymbol) {
+      try {
+        results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 5);
+      } catch (err) {
+        console.warn(`[Similar] Inline DB query failed for ${mint}:`, err.message);
+      }
+    }
+
+    // Queue worker for GeckoTerminal enrichment (deduped by pending flag)
+    const isPending = await cache.get(pendingKey);
+    if (!isPending) {
+      await cache.set(pendingKey, true, 60000);
+      const job = await jobQueue.addSearchJob('compute-similar-tokens', { mint });
+      if (!job) {
+        // Worker unavailable — cache inline results as final
+        await cache.delete(pendingKey);
+        const final = { results, enriched: true };
+        await cache.set(cacheKey, final, results.length > 0 ? TTL.HOUR : TTL.PRICE_DATA);
+        return res.json(final);
+      }
+    }
+
+    // Return fast DB results immediately; worker will enrich in background
+    res.json({ results, enriched: false });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch similar tokens' });
   }

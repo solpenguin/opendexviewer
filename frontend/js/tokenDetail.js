@@ -469,6 +469,7 @@ const tokenDetail = {
   },
 
   // Load similar tokens (anti-spoofing section)
+  // Response format: { results: [...], enriched: boolean }
   async loadSimilarTokens() {
     const sectionEl = document.getElementById('similar-tokens-section');
     const loadingEl = document.getElementById('similar-tokens-loading');
@@ -482,45 +483,65 @@ const tokenDetail = {
     if (disclaimerEl) disclaimerEl.style.display = 'none';
 
     try {
-      let similar = await api.tokens.getSimilar(this.mint);
+      const similar = await api.tokens.getSimilar(this.mint);
+      const results = (similar && similar.results) || [];
+      const enriched = similar && similar.enriched;
 
-      // Worker may still be computing — poll until resolved
-      if (similar && similar.pending) {
-        // Initial fast retries (3 x 2s)
-        for (let attempt = 0; attempt < 3; attempt++) {
-          await new Promise(r => setTimeout(r, 2000));
-          similar = await api.tokens.getSimilar(this.mint);
-          if (!similar || !similar.pending) break;
-        }
-
-        // Still pending — continue polling with exponential backoff (3s, 5s, 8s, 13s, max 60s total)
-        if (similar && similar.pending) {
-          const mint = this.mint;
-          const poll = async () => {
-            for (let i = 0; i < 5; i++) {
-              const delay = Math.min(3000 * Math.pow(1.6, i), 15000); // 3s, 4.8s, 7.7s, 12.3s, 15s
-              await new Promise(r => setTimeout(r, delay));
-              if (this.mint !== mint) return;
-              const result = await api.tokens.getSimilar(mint);
-              if (result && !result.pending) {
-                this.renderSimilarTokens(result, sectionEl, loadingEl, listEl, disclaimerEl);
-                return;
-              }
-            }
-            // Truly timed out — show empty state
-            if (loadingEl) loadingEl.style.display = 'none';
-            if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
-            if (listEl) {
-              listEl.style.display = 'flex';
-              listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
-            }
-          };
-          poll().catch(() => {});
-          return; // Loading spinner stays visible while background poll continues
-        }
+      if (enriched) {
+        // Fully enriched — render and done
+        this.renderSimilarTokens(similar, sectionEl, loadingEl, listEl, disclaimerEl);
+        return;
       }
 
-      this.renderSimilarTokens(similar, sectionEl, loadingEl, listEl, disclaimerEl);
+      if (results.length > 0) {
+        // Has fast DB results but not yet enriched — render immediately
+        this.renderSimilarTokens(similar, sectionEl, loadingEl, listEl, disclaimerEl);
+        // One silent background poll to swap in enriched data
+        const mint = this.mint;
+        setTimeout(async () => {
+          try {
+            if (this.mint !== mint) return;
+            api.tokens.clearSimilarCache(mint);
+            const enrichedResult = await api.tokens.getSimilar(mint);
+            if (this.mint !== mint) return;
+            if (enrichedResult && enrichedResult.results && enrichedResult.results.length > 0) {
+              this.renderSimilarTokens(enrichedResult, sectionEl, loadingEl, listEl, disclaimerEl);
+            }
+          } catch (err) {
+            console.warn('[Similar] Background enrichment poll failed:', err.message);
+          }
+        }, 3000);
+        return;
+      }
+
+      // No results and not enriched — worker may produce results from GeckoTerminal
+      // Poll with fast intervals: 1s x 3, then 2s x 3
+      const mint = this.mint;
+      const delays = [1000, 1000, 1000, 2000, 2000, 2000];
+      const poll = async () => {
+        for (const delay of delays) {
+          await new Promise(r => setTimeout(r, delay));
+          if (this.mint !== mint) return;
+          try {
+            api.tokens.clearSimilarCache(mint);
+            const result = await api.tokens.getSimilar(mint);
+            if (result && ((result.results && result.results.length > 0) || result.enriched)) {
+              this.renderSimilarTokens(result, sectionEl, loadingEl, listEl, disclaimerEl);
+              return;
+            }
+          } catch (err) {
+            console.warn('[Similar] Poll attempt failed:', err.message);
+          }
+        }
+        // Timed out — show empty state
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
+        if (listEl) {
+          listEl.style.display = 'flex';
+          listEl.innerHTML = '<div class="similar-tokens-none">No similar tokens found</div>';
+        }
+      };
+      poll().catch(err => console.warn('[Similar] Poll chain failed:', err.message));
     } catch (error) {
       // Non-critical section — show empty state
       if (loadingEl) loadingEl.style.display = 'none';
@@ -553,7 +574,15 @@ const tokenDetail = {
       listEl.style.display = 'flex';
       const defaultLogo = utils.getDefaultLogo();
       listEl.innerHTML = results.map(token => {
-        const logoSrc = this.escapeHtml(token.logoURI || defaultLogo);
+        let logoUrl = token.logoURI || defaultLogo;
+        // Validate logo URL protocol to prevent XSS (only allow https, http, data:image)
+        try {
+          if (logoUrl && !logoUrl.startsWith('data:image/')) {
+            const parsed = new URL(logoUrl);
+            if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') logoUrl = defaultLogo;
+          }
+        } catch { logoUrl = defaultLogo; }
+        const logoSrc = this.escapeHtml(logoUrl);
         const name = this.escapeHtml(token.name || 'Unknown');
         const symbol = this.escapeHtml(token.symbol || '???');
         const address = this.escapeHtml(token.address);
