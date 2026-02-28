@@ -221,11 +221,11 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
   // Clear cache for this token's submissions (key format: submissions:{mint}:{type}:{status})
   await cache.clearPattern(keys.submissions(submission.token_mint) + '*');
 
-  // Get updated tally
-  const tally = await db.getVoteTally(parsedId);
-
-  // Check if submission was auto-moderated
-  const updatedSubmission = await db.getSubmission(parsedId);
+  // Get updated tally and submission status in parallel
+  const [tally, updatedSubmission] = await Promise.all([
+    db.getVoteTally(parsedId),
+    db.getSubmission(parsedId)
+  ]);
 
   res.json({
     ...result,
@@ -244,26 +244,21 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
 router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignature, asyncHandler(async (req, res) => {
   const { votes, voterWallet } = req.body;
 
-  const results = [];
-  const errors = [];
   const tokensToInvalidate = new Set();
 
   // DEVELOPMENT MODE: Bypass holder verification for testing
   const isDevelopmentMode = adminSettings?.developmentMode === true;
+  const VOTE_COOLDOWN_MS = 10 * 1000;
 
-  for (const vote of votes) {
+  // Process all votes concurrently — each vote targets a different submission
+  // and uses atomic DB operations (transactions + UPSERT), so parallel is safe
+  const settled = await Promise.all(votes.map(async (vote) => {
     const { submissionId, voteType } = vote;
 
     try {
-      // Check if submission exists
       const submission = await db.getSubmission(submissionId);
       if (!submission) {
-        errors.push({
-          submissionId,
-          success: false,
-          error: 'Submission not found'
-        });
-        continue;
+        return { submissionId, success: false, error: 'Submission not found' };
       }
 
       let voterPercentage = 0;
@@ -271,33 +266,23 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
       let voterBalance = 0;
 
       if (isDevelopmentMode) {
-        // In development mode, simulate holder data
         voterPercentage = 1.0;
         voteWeight = 1;
         voterBalance = 1000000;
       } else {
-        // SERVER-SIDE HOLDER VERIFICATION
         const holderData = await verifyHolderStatus(voterWallet, submission.token_mint);
 
         if (!holderData || !holderData.holdsToken) {
-          errors.push({
-            submissionId,
-            success: false,
-            error: 'You must hold this token to vote',
-            code: 'NOT_HOLDER'
-          });
-          continue;
+          return { submissionId, success: false, error: 'You must hold this token to vote', code: 'NOT_HOLDER' };
         }
 
         voterPercentage = holderData.percentageHeld || 0;
         if (voterPercentage < db.MIN_VOTE_BALANCE_PERCENT) {
-          errors.push({
-            submissionId,
-            success: false,
+          return {
+            submissionId, success: false,
             error: `Minimum ${db.MIN_VOTE_BALANCE_PERCENT}% of supply required to vote`,
             code: 'INSUFFICIENT_BALANCE'
-          });
-          continue;
+          };
         }
 
         voteWeight = db.calculateVoteWeight(voterPercentage);
@@ -316,11 +301,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
         // Continue with null market cap (will use lowest threshold)
       }
 
-      // Check for existing vote
       const existingVote = await db.getVote(submissionId, voterWallet);
-
-      // Vote cooldown period (10 seconds) to prevent rapid vote flipping
-      const VOTE_COOLDOWN_MS = 10 * 1000;
 
       let result;
       if (existingVote) {
@@ -329,47 +310,34 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
 
         if (timeSinceLastVote < VOTE_COOLDOWN_MS) {
           const remainingSeconds = Math.ceil((VOTE_COOLDOWN_MS - timeSinceLastVote) / 1000);
-          errors.push({
-            submissionId,
-            success: false,
+          return {
+            submissionId, success: false,
             error: `Please wait ${remainingSeconds} seconds before changing your vote`,
             code: 'VOTE_COOLDOWN'
-          });
-          continue;
+          };
         }
 
         if (existingVote.vote_type === voteType) {
-          // Same vote - remove it (toggle off)
           await db.deleteVote(submissionId, voterWallet, marketCap);
           result = { action: 'removed', voteWeight: 0 };
         } else {
-          // Different vote - update it
           await db.updateVote(submissionId, voterWallet, voteType, marketCap);
           result = { action: 'updated', voteType, voteWeight };
         }
       } else {
-        // Create new vote
-        await db.createVote({
-          submissionId,
-          voterWallet,
-          voteType,
-          voterBalance,
-          voterPercentage
-        });
+        await db.createVote({ submissionId, voterWallet, voteType, voterBalance, voterPercentage });
         result = { action: 'created', voteType, voteWeight };
       }
 
-      // Track tokens to invalidate cache
       tokensToInvalidate.add(submission.token_mint);
 
-      // Get updated tally
-      const tally = await db.getVoteTally(submissionId);
-      const updatedSubmission = await db.getSubmission(submissionId);
+      const [tally, updatedSubmission] = await Promise.all([
+        db.getVoteTally(submissionId),
+        db.getSubmission(submissionId)
+      ]);
 
-      results.push({
-        submissionId,
-        success: true,
-        ...result,
+      return {
+        submissionId, success: true, ...result,
         tally: {
           upvotes: tally?.upvotes || 0,
           downvotes: tally?.downvotes || 0,
@@ -377,20 +345,22 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
           weightedScore: parseFloat(tally?.weighted_score) || 0
         },
         submissionStatus: updatedSubmission?.status || 'unknown'
-      });
+      };
     } catch (error) {
-      errors.push({
-        submissionId,
-        success: false,
+      return {
+        submissionId, success: false,
         error: process.env.NODE_ENV !== 'production' ? (error.message || 'Failed to process vote') : 'Failed to process vote'
-      });
+      };
     }
-  }
+  }));
 
-  // Clear cache for all affected tokens (key format: submissions:{mint}:{type}:{status})
-  for (const tokenMint of tokensToInvalidate) {
-    await cache.clearPattern(keys.submissions(tokenMint) + '*');
-  }
+  const results = settled.filter(r => r.success);
+  const errors = settled.filter(r => !r.success);
+
+  // Clear cache for all affected tokens in parallel
+  await Promise.all(
+    [...tokensToInvalidate].map(tokenMint => cache.clearPattern(keys.submissions(tokenMint) + '*'))
+  );
 
   // Return results
   const successCount = results.length;

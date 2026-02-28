@@ -493,13 +493,13 @@ const tokenDetail = {
           if (!similar || !similar.pending) break;
         }
 
-        // Still pending — continue polling in background (3s intervals, up to 30s more)
+        // Still pending — continue polling with exponential backoff (3s, 5s, 8s, 13s, max 60s total)
         if (similar && similar.pending) {
           const mint = this.mint;
           const poll = async () => {
-            for (let i = 0; i < 10; i++) {
-              await new Promise(r => setTimeout(r, 3000));
-              // Stop if user navigated away
+            for (let i = 0; i < 5; i++) {
+              const delay = Math.min(3000 * Math.pow(1.6, i), 15000); // 3s, 4.8s, 7.7s, 12.3s, 15s
+              await new Promise(r => setTimeout(r, delay));
               if (this.mint !== mint) return;
               const result = await api.tokens.getSimilar(mint);
               if (result && !result.pending) {

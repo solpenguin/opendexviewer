@@ -12,7 +12,7 @@ const watchlist = {
       return;
     }
 
-    if (this.isLoading) return;
+    if (this.isLoading || this.isLoaded) return;
     this.isLoading = true;
 
     try {

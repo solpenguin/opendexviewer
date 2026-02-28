@@ -470,18 +470,22 @@ router.get('/tokens',
   asyncHandler(async (req, res) => {
     const { limit = 50, offset = 0 } = req.query;
 
-    const result = await db.pool.query(`
-      SELECT t.*,
-             COUNT(s.id) as submission_count,
-             COUNT(s.id) FILTER (WHERE s.status = 'pending') as pending_count
-      FROM tokens t
-      LEFT JOIN submissions s ON t.mint_address = s.token_mint
-      GROUP BY t.id
-      ORDER BY submission_count DESC, t.created_at DESC
-      LIMIT $1 OFFSET $2
-    `, [Math.min(parseInt(limit) || 50, 100), parseInt(offset) || 0]);
+    const parsedLimit = Math.min(parseInt(limit) || 50, 100);
+    const parsedOffset = parseInt(offset) || 0;
 
-    const countResult = await db.pool.query('SELECT COUNT(*) FROM tokens');
+    const [result, countResult] = await Promise.all([
+      db.pool.query(`
+        SELECT t.*,
+               COUNT(s.id) as submission_count,
+               COUNT(s.id) FILTER (WHERE s.status = 'pending') as pending_count
+        FROM tokens t
+        LEFT JOIN submissions s ON t.mint_address = s.token_mint
+        GROUP BY t.id
+        ORDER BY submission_count DESC, t.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [parsedLimit, parsedOffset]),
+      db.pool.query('SELECT COUNT(*) FROM tokens')
+    ]);
 
     res.json({
       success: true,

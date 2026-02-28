@@ -93,14 +93,18 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         }
       }
 
-      // Step 3: Check cache for any remaining tokens
+      // Step 3: Check cache for any remaining tokens (in parallel)
       const stillMissing = missingMints.filter(m => !heliusMetadata[m]?.name);
       const cacheResults = {};
-      for (const mint of stillMissing) {
-        const tokenCacheKey = keys.tokenInfo(mint);
-        const cachedMeta = await cache.getWithMeta(tokenCacheKey);
-        if (cachedMeta?.value?.name) {
-          cacheResults[mint] = cachedMeta.value;
+      if (stillMissing.length > 0) {
+        const cacheChecks = await Promise.all(
+          stillMissing.map(async (mint) => {
+            const cachedMeta = await cache.getWithMeta(keys.tokenInfo(mint));
+            return { mint, value: cachedMeta?.value };
+          })
+        );
+        for (const { mint, value } of cacheChecks) {
+          if (value?.name) cacheResults[mint] = value;
         }
       }
 
@@ -281,24 +285,19 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         };
       });
 
-      // Enrich with view counts
-      try {
-        const addresses = tokens.map(t => t.address);
-        const viewCounts = await db.getTokenViewsBatch(addresses);
-        tokens.forEach(t => { t.views = viewCounts[t.address] || 0; });
-      } catch { /* non-critical */ }
-
-      // Enrich with sentiment scores
-      try {
-        const addresses = tokens.map(t => t.address);
-        const sentimentScores = await db.getSentimentBatch(addresses);
-        for (const token of tokens) {
-          const s = sentimentScores[token.address];
-          token.sentimentScore = s ? s.score : 0;
-          token.sentimentBullish = s ? s.bullish : 0;
-          token.sentimentBearish = s ? s.bearish : 0;
-        }
-      } catch { /* non-critical */ }
+      // Enrich with view counts and sentiment scores in parallel
+      const addresses = tokens.map(t => t.address);
+      const [viewCounts, sentimentScores] = await Promise.all([
+        db.getTokenViewsBatch(addresses).catch(() => ({})),
+        db.getSentimentBatch(addresses).catch(() => ({}))
+      ]);
+      for (const token of tokens) {
+        token.views = viewCounts[token.address] || 0;
+        const s = sentimentScores[token.address];
+        token.sentimentScore = s ? s.score : 0;
+        token.sentimentBullish = s ? s.bullish : 0;
+        token.sentimentBearish = s ? s.bearish : 0;
+      }
 
       await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
       return res.json(tokens);
@@ -388,29 +387,22 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       });
     }
 
-    // Enrich tokens with view counts from database
+    // Enrich tokens with view counts and sentiment scores in parallel
     if (tokens && tokens.length > 0) {
       const addresses = tokens.map(t => t.address || t.mintAddress);
-      const viewCounts = await db.getTokenViewsBatch(addresses);
+      const [viewCounts, sentimentScores] = await Promise.all([
+        db.getTokenViewsBatch(addresses).catch(() => ({})),
+        db.getSentimentBatch(addresses).catch(() => ({}))
+      ]);
 
       for (const token of tokens) {
         const address = token.address || token.mintAddress;
         token.views = viewCounts[address] || 0;
+        const s = sentimentScores[address];
+        token.sentimentScore = s ? s.score : 0;
+        token.sentimentBullish = s ? s.bullish : 0;
+        token.sentimentBearish = s ? s.bearish : 0;
       }
-    }
-
-    // Enrich tokens with sentiment scores
-    if (tokens && tokens.length > 0) {
-      try {
-        const addresses = tokens.map(t => t.address || t.mintAddress);
-        const sentimentScores = await db.getSentimentBatch(addresses);
-        for (const token of tokens) {
-          const s = sentimentScores[token.address || token.mintAddress];
-          token.sentimentScore = s ? s.score : 0;
-          token.sentimentBullish = s ? s.bullish : 0;
-          token.sentimentBearish = s ? s.bearish : 0;
-        }
-      } catch { /* non-critical */ }
     }
 
     // Cache for 5 minutes (rolling cache for list views)
@@ -459,13 +451,19 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
   // Privacy: Don't log batch request details
 
   try {
-    // Check cache for each mint
+    // Check cache for all mints in parallel
     const results = [];
     const uncachedMints = [];
 
-    for (const mint of validMints) {
-      const cacheKey = keys.tokenInfo(mint);
-      const cached = await cache.getWithMeta(cacheKey);
+    const cacheChecks = await Promise.all(
+      validMints.map(async (mint) => {
+        const cacheKey = keys.tokenInfo(mint);
+        const cached = await cache.getWithMeta(cacheKey);
+        return { mint, cached };
+      })
+    );
+
+    for (const { mint, cached } of cacheChecks) {
       if (cached && cached.value) {
         results.push({ mint, data: cached.value, cached: true });
       } else {
@@ -477,38 +475,32 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
 
     // Batch fetch uncached tokens
     if (uncachedMints.length > 0) {
-      // Priority 1: Try Helius batch API (most efficient)
-      let heliusData = {};
-      if (solanaService.isHeliusConfigured()) {
-        try {
-          heliusData = await solanaService.getTokenMetadataBatch(uncachedMints);
-        } catch (err) {
-          // Privacy: Don't log error details
-        }
-      }
+      // Fetch from Helius and local DB in parallel (independent sources)
+      // Helius has priority; DB is fallback for mints Helius doesn't cover
+      const [heliusData, dbRows] = await Promise.all([
+        solanaService.isHeliusConfigured()
+          ? solanaService.getTokenMetadataBatch(uncachedMints).catch(() => ({}))
+          : Promise.resolve({}),
+        db.getTokensBatch(uncachedMints).catch(() => [])
+      ]);
 
-      // Priority 2: Try local database (batch query)
       const localTokens = {};
-      const mintsToQuery = uncachedMints.filter(m => !heliusData[m]);
-      if (mintsToQuery.length > 0) {
-        const localRows = await db.getTokensBatch(mintsToQuery);
-        if (localRows) {
-          for (const local of localRows) {
-            if (local && local.mint_address) {
-              localTokens[local.mint_address] = {
-                mintAddress: local.mint_address,
-                address: local.mint_address,
-                name: local.name,
-                symbol: local.symbol,
-                decimals: local.decimals,
-                logoUri: local.logo_uri
-              };
-            }
+      if (dbRows) {
+        for (const local of dbRows) {
+          if (local && local.mint_address && !heliusData[local.mint_address]) {
+            localTokens[local.mint_address] = {
+              mintAddress: local.mint_address,
+              address: local.mint_address,
+              name: local.name,
+              symbol: local.symbol,
+              decimals: local.decimals,
+              logoUri: local.logo_uri
+            };
           }
         }
       }
 
-      // Priority 3: Try GeckoTerminal batch (market data)
+      // Priority 3: Try GeckoTerminal batch (market data) for mints still unresolved
       let geckoData = {};
       const stillNeeded = uncachedMints.filter(m => !heliusData[m] && !localTokens[m]);
       if (stillNeeded.length > 0 && stillNeeded.length <= 30) {
@@ -931,19 +923,21 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         db.getApprovedSubmissions(mint).catch(() => [])
       ];
 
-      // If holder count not cached, fetch Jupiter + Helius in parallel and pick the best result
-      // Priority: Jupiter (holderCount field) > Helius (getTokenAccounts total)
+      // If holder count not cached, fetch Jupiter + Helius + Birdeye all in parallel
+      // Priority: Jupiter > Helius > Birdeye (best result wins)
       if (holders === undefined) {
         fetchPromises.push(
           Promise.all([
             jupiterService.getTokenHolderCount(mint).catch(() => null),
             solanaService.isHeliusConfigured()
               ? solanaService.getTokenHolderCount(mint).catch(() => null)
-              : Promise.resolve(null)
-          ]).then(([jupiterCount, heliusCount]) => {
+              : Promise.resolve(null),
+            birdeyeService.getTokenOverview(mint).then(o => o?.holder ?? null).catch(() => null)
+          ]).then(([jupiterCount, heliusCount, birdeyeCount]) => {
             if (jupiterCount != null && jupiterCount > 1) return jupiterCount;
             if (heliusCount  != null && heliusCount  > 1) return heliusCount;
-            return jupiterCount ?? heliusCount ?? null;
+            if (birdeyeCount != null && birdeyeCount > 1) return birdeyeCount;
+            return jupiterCount ?? heliusCount ?? birdeyeCount ?? null;
           })
         );
       }
@@ -951,22 +945,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       const results = await Promise.all(fetchPromises);
       const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
 
-      // Process holder count - try Birdeye as final fallback if parallel fetch returned nothing
-      // Priority: Jupiter+Helius (parallel above) > Birdeye
       let finalHolders = fetchedHolders;
-
-      // If still no valid holder count, try Birdeye as final fallback
-      if (finalHolders === null || finalHolders === undefined || finalHolders <= 1) {
-        try {
-          const birdeyeOverview = await birdeyeService.getTokenOverview(mint);
-          if (birdeyeOverview && birdeyeOverview.holder && birdeyeOverview.holder > (finalHolders || 0)) {
-            finalHolders = birdeyeOverview.holder;
-            console.log(`[Tokens] Birdeye holder count for ${mint}: ${finalHolders}`);
-          }
-        } catch (err) {
-          // Birdeye fallback failed, continue with existing value
-        }
-      }
 
       // Cache holder count for 24 hours if we have a valid count
       // If the count is suspiciously low (<=1), cache for only 1 hour
