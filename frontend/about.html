@@ -24,6 +24,7 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="OpenDEX_Logo.png">
   <link rel="apple-touch-icon" href="OpenDEX_Logo.png">
+  <link rel="manifest" href="/manifest.json">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -291,5 +292,6 @@
   <script src="js/bugReport.js"></script>
   <script src="js/wallet.js"></script>
   <script src="js/announcements.js"></script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 </body>
 </html>

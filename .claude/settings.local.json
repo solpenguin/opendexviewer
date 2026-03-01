@@ -57,7 +57,18 @@
       "Bash(grep -n \"compute-similar-tokens\" \"c:\\\\VS\\\\OPENDEX\\\\opendexviewer\\\\backend\\\\src\"/*.js \"c:\\\\VS\\\\OPENDEX\\\\opendexviewer\\\\backend\\\\src\\\\services\"/*.js)",
       "WebFetch(domain:docs.dexscreener.com)",
       "WebFetch(domain:api.dexscreener.com)",
-      "Bash(xargs grep -l \"utils\\\\s*=\")"
+      "Bash(xargs grep -l \"utils\\\\s*=\")",
+      "Bash(identify \"c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png\")",
+      "Bash(python3 -c \"from PIL import Image; img=Image.open\\(''c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png''\\); print\\(f''{img.size[0]}x{img.size[1]}''\\)\")",
+      "Bash(python3 -c \"from PIL import Image; print\\(''pillow''\\)\")",
+      "Bash(python -c \"from PIL import Image; print\\(''pillow''\\)\")",
+      "Bash(python -c \"from PIL import Image; print\\(''pillow available''\\)\")",
+      "Bash(pip install Pillow)",
+      "Bash(pip3 install Pillow)",
+      "Bash(python3 -m pip install Pillow)",
+      "Bash(npx --yes sharp-cli resize 192 192 -i \"c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png\" -o \"c:/VS/OPENDEX/opendexviewer/frontend/icons/icon-192.png\")",
+      "Bash(npx --yes sharp-cli resize 512 512 -i \"c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png\" -o \"c:/VS/OPENDEX/opendexviewer/frontend/icons/icon-512.png\")",
+      "Bash(echo $?)"
     ]
   }
 }
