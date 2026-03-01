@@ -510,6 +510,19 @@ const adminSettings = {
 };
 
 /**
+ * GET /admin/settings/development-mode
+ * Public (unauthenticated) endpoint for frontend to check if development mode is active.
+ * Read-only, returns only the boolean flag -- no sensitive data exposed.
+ */
+router.get('/settings/development-mode',
+  asyncHandler(async (req, res) => {
+    res.json({
+      developmentMode: adminSettings.developmentMode
+    });
+  })
+);
+
+/**
  * GET /admin/settings
  * Get current admin settings including development mode
  */
@@ -535,16 +548,10 @@ router.patch('/settings',
     const { developmentMode } = req.body;
 
     if (typeof developmentMode === 'boolean') {
-      if (developmentMode && process.env.NODE_ENV === 'production') {
-        return res.status(403).json({
-          success: false,
-          error: 'Development mode cannot be enabled in production'
-        });
-      }
       const previous = adminSettings.developmentMode;
       adminSettings.developmentMode = developmentMode;
       if (previous !== developmentMode) {
-        console.warn(`[Admin] Development mode ${developmentMode ? 'ENABLED' : 'DISABLED'} by admin session at ${new Date().toISOString()}`);
+        console.warn(`[Admin] Development mode ${developmentMode ? 'ENABLED' : 'DISABLED'} by admin session at ${new Date().toISOString()} (env: ${process.env.NODE_ENV || 'unset'})`);
       }
     }
 
