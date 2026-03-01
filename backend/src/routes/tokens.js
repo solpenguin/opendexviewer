@@ -11,7 +11,7 @@ const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
 
 // Allowed values for token list query params — prevents cache key pollution
 const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'tech', 'meme'];
-const VALID_SORTS = ['volume', 'price', 'priceChange24h', 'marketCap'];
+const VALID_SORTS = ['volume', 'price', 'priceChange24h', 'marketCap', 'views'];
 const VALID_ORDERS = ['asc', 'desc'];
 const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other'];
 const VALID_SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'all'];

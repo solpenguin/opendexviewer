@@ -25,6 +25,23 @@ const tokenList = {
     return (typeof config !== 'undefined' && config.cache?.tokenListStaleThreshold) || 60000;
   },
 
+  // Map frontend sort field names to backend API field names
+  // Frontend uses short names (mcap, change) but backend expects full property names
+  apiSortField(sort) {
+    const map = { mcap: 'marketCap', change: 'priceChange24h', volume: 'volume', price: 'price', views: 'views' };
+    return map[sort] || 'marketCap';
+  },
+
+  // Default sort for each filter tab (matches backend's inherent ordering)
+  defaultSortForFilter(filter) {
+    switch (filter) {
+      case 'gainers': return { sort: 'change', order: 'desc' };
+      case 'losers': return { sort: 'change', order: 'asc' };
+      case 'most_viewed': return { sort: 'views', order: 'desc' };
+      default: return { sort: 'mcap', order: 'desc' };
+    }
+  },
+
   // Initialize
   async init() {
     this.bindEvents();
@@ -37,7 +54,14 @@ const tokenList = {
 
   // Initialize sort column header UI to match current sort state
   initSortUI() {
-    // Find the column header that matches the current sort
+    // Clear all sort headers first (removes hardcoded HTML active state)
+    document.querySelectorAll('.sortable').forEach(el => {
+      el.classList.remove('active');
+      const icon = el.querySelector('.sort-icon');
+      if (icon) icon.className = 'sort-icon';
+    });
+
+    // Set the correct header as active
     const activeHeader = document.querySelector(`.sortable[data-sort="${this.currentSort}"]`);
     if (activeHeader) {
       activeHeader.classList.add('active');
@@ -51,12 +75,27 @@ const tokenList = {
     const filter = utils.getUrlParam('filter');
     const page = utils.getUrlParam('page');
     const search = utils.getUrlParam('q');
+    const sort = utils.getUrlParam('sort');
+    const order = utils.getUrlParam('order');
 
     if (filter && ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'watchlist', 'tech', 'meme'].includes(filter)) {
       this.currentFilter = filter;
       document.querySelectorAll('.filter-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.filter === filter);
       });
+
+      // If no sort in URL, use the tab's default sort
+      if (!sort) {
+        const defaults = this.defaultSortForFilter(filter);
+        this.currentSort = defaults.sort;
+        this.sortOrder = defaults.order;
+      }
+    }
+
+    // Restore sort from URL (overrides tab default if present)
+    if (sort && ['price', 'change', 'volume', 'mcap', 'views'].includes(sort)) {
+      this.currentSort = sort;
+      this.sortOrder = order === 'asc' ? 'asc' : 'desc';
     }
 
     if (page && !isNaN(parseInt(page))) {
@@ -146,7 +185,16 @@ const tokenList = {
         this.currentFilter = filter;
         this.currentPage = 1;
         this.isSearchMode = false;
+
+        // Reset sort to match the tab's natural ordering
+        const defaults = this.defaultSortForFilter(filter);
+        this.currentSort = defaults.sort;
+        this.sortOrder = defaults.order;
+        this.initSortUI();
+
         utils.setUrlParam('filter', this.currentFilter);
+        utils.setUrlParam('sort', null);
+        utils.setUrlParam('order', null);
         utils.setUrlParam('q', null);
         document.getElementById('search-input').value = '';
         const clear = document.getElementById('search-clear');
@@ -169,24 +217,16 @@ const tokenList = {
         }
 
         // Update sort icons
-        document.querySelectorAll('.sortable').forEach(el => {
-          el.classList.remove('active');
-          const icon = el.querySelector('.sort-icon');
-          if (icon) icon.className = 'sort-icon';
-        });
-        th.classList.add('active');
-        const icon = th.querySelector('.sort-icon');
-        if (icon) icon.className = `sort-icon ${this.sortOrder}`;
+        this.initSortUI();
 
-        // Re-sort existing data and re-render (no need to fetch again)
-        // This makes sorting instant and reduces API calls
-        if (this.tokens && this.tokens.length > 0) {
-          this.sortTokens();
-          this.render();
-        } else {
-          // No data loaded yet, fetch it
-          this.loadTokens();
-        }
+        // Persist sort state in URL
+        utils.setUrlParam('sort', this.currentSort);
+        utils.setUrlParam('order', this.sortOrder);
+
+        // Reset to page 1 and re-fetch to get correct global ordering
+        this.currentPage = 1;
+        utils.setUrlParam('page', null);
+        this.loadTokens();
       });
     });
 
@@ -284,7 +324,7 @@ const tokenList = {
 
       const params = {
         filter: this.currentFilter,
-        sort: this.currentSort,
+        sort: this.apiSortField(this.currentSort),
         order: this.sortOrder,
         limit: this.pageSize,
         offset: (this.currentPage - 1) * this.pageSize
