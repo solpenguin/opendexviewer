@@ -308,26 +308,35 @@ const tokenDetail = {
 
   // Load token data
   async loadToken() {
-    if (config.app.debug) console.log('[TokenDetail] Loading token:', this.mint);
-    this.token = await api.tokens.get(this.mint);
+    const _t0 = performance.now();
+    let _ok = true;
+    try {
+      if (config.app.debug) console.log('[TokenDetail] Loading token:', this.mint);
+      this.token = await api.tokens.get(this.mint);
 
-    if (config.app.debug) console.log('[TokenDetail] Token data received:', JSON.stringify(this.token, null, 2));
+      if (config.app.debug) console.log('[TokenDetail] Token data received:', JSON.stringify(this.token, null, 2));
 
-    if (!this.token) {
-      throw new Error('Token not found');
-    }
+      if (!this.token) {
+        throw new Error('Token not found');
+      }
 
-    const isPreview = !this.token.submissions && !this.token.holders;
-    this.renderToken();
+      const isPreview = !this.token.submissions && !this.token.holders;
+      this.renderToken();
 
-    // If initial data came from list-page preview (sessionStorage seed), fetch full detail
-    if (isPreview) {
-      const mint = this.mint;
-      api.tokens.get(mint, { fresh: true }).then(fullData => {
-        if (this.mint !== mint || !fullData) return;
-        this.token = fullData;
-        this.renderToken();
-      }).catch(() => {});
+      // If initial data came from list-page preview (sessionStorage seed), fetch full detail
+      if (isPreview) {
+        const mint = this.mint;
+        api.tokens.get(mint, { fresh: true }).then(fullData => {
+          if (this.mint !== mint || !fullData) return;
+          this.token = fullData;
+          this.renderToken();
+        }).catch(() => {});
+      }
+    } catch (err) {
+      _ok = false;
+      throw err;
+    } finally {
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenDetail.load', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -442,6 +451,8 @@ const tokenDetail = {
 
   // Load pools
   async loadPools() {
+    const _t0 = performance.now();
+    let _ok = true;
     const loadingEl = document.getElementById('pools-loading');
     const listEl = document.getElementById('pools-list');
     const emptyEl = document.getElementById('pools-empty');
@@ -478,12 +489,15 @@ const tokenDetail = {
         `).join('');
       }
     } catch (error) {
+      _ok = false;
       console.error('Failed to load pools:', error);
       if (loadingEl) loadingEl.style.display = 'none';
       if (emptyEl) {
         emptyEl.textContent = 'Failed to load pool data.';
         emptyEl.style.display = 'block';
       }
+    } finally {
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenDetail.pools', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -654,6 +668,8 @@ const tokenDetail = {
 
   // Load chart data
   async loadChart(interval = '1h') {
+    const _t0 = performance.now();
+    let _ok = true;
     const chartLoading = document.getElementById('chart-loading');
     const chartError   = document.getElementById('chart-error');
     if (chartLoading) chartLoading.style.display = 'flex';
@@ -685,9 +701,11 @@ const tokenDetail = {
       // Only update on the initial 1H load so the header values stay anchored to 24h.
       if (interval === '1h') this.updateHeaderHighLow(this.chartData);
     } catch (error) {
+      _ok = false;
       this.renderChartError(error);
     } finally {
       if (chartLoading) chartLoading.style.display = 'none';
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenDetail.chart', performance.now() - _t0, _ok, 'frontend');
     }
   },
 

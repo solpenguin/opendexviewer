@@ -312,7 +312,10 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     const geckoPageSize = 20;
     const requestStart = parseInt(offset);
     const requestEnd = requestStart + parseInt(limit);
-    const firstGeckoPage = Math.floor(requestStart / geckoPageSize) + 1;
+    // For gainers/losers, always start from page 1 so each page sorts a consistent
+    // superset of all previous pages' data — prevents duplicate tokens across pages
+    const needsFullSort = (filter === 'gainers' || filter === 'losers');
+    const firstGeckoPage = needsFullSort ? 1 : Math.floor(requestStart / geckoPageSize) + 1;
     const lastGeckoPage = Math.floor(Math.max(0, requestEnd - 1) / geckoPageSize) + 1;
 
     try {

@@ -465,7 +465,7 @@ const adminPanel = {
     this.renderPerfMetrics();
   },
 
-  // Render API latency table on the dashboard
+  // Render performance metrics table on the dashboard (API + frontend latency)
   renderPerfMetrics() {
     const container = document.getElementById('perf-metrics');
     if (!container || typeof latencyTracker === 'undefined') return;
@@ -484,9 +484,15 @@ const adminPanel = {
       return 'var(--red, #ef4444)';
     }
 
+    // Type badge: API (blue) or FE (purple)
+    function typeBadge(type) {
+      if (type === 'frontend') return '<span class="perf-badge perf-badge-fe">FE</span>';
+      return '<span class="perf-badge perf-badge-api">API</span>';
+    }
+
     const rows = summary.map(s => `
       <tr>
-        <td class="perf-endpoint">${this.escapeHtml(String(s.endpoint))}</td>
+        <td class="perf-endpoint">${typeBadge(s.type)} ${this.escapeHtml(String(s.endpoint))}</td>
         <td class="perf-num">${parseInt(s.count) || 0}${s.errors > 0 ? `<span class="perf-err"> ${parseInt(s.errors) || 0}✗</span>` : ''}</td>
         <td class="perf-num" style="color:${latColor(s.avg)}">${parseInt(s.avg) || 0}</td>
         <td class="perf-num" style="color:${latColor(s.p95)}">${parseInt(s.p95) || 0}</td>
@@ -499,7 +505,7 @@ const adminPanel = {
       <table class="perf-table">
         <thead>
           <tr>
-            <th>Endpoint</th>
+            <th>Operation</th>
             <th>Calls</th>
             <th>Avg ms</th>
             <th>P95 ms</th>
@@ -510,7 +516,7 @@ const adminPanel = {
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <p class="perf-legend">Rolling last 100 samples per endpoint &nbsp;·&nbsp; <span style="color:var(--green,#22c55e)">green</span> &lt;200ms &nbsp;·&nbsp; <span style="color:#f59e0b">amber</span> &lt;800ms &nbsp;·&nbsp; <span style="color:var(--red,#ef4444)">red</span> ≥800ms</p>`;
+      <p class="perf-legend">Rolling last 100 samples &nbsp;·&nbsp; <span class="perf-badge perf-badge-api">API</span> backend request &nbsp;·&nbsp; <span class="perf-badge perf-badge-fe">FE</span> frontend operation &nbsp;·&nbsp; <span style="color:var(--green,#22c55e)">green</span> &lt;200ms &nbsp;·&nbsp; <span style="color:#f59e0b">amber</span> &lt;800ms &nbsp;·&nbsp; <span style="color:var(--red,#ef4444)">red</span> ≥800ms</p>`;
   },
 
   // Load submissions

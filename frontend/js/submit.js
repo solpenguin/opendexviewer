@@ -597,6 +597,8 @@ const submitPage = {
     status.innerHTML = '<div class="loading-spinner small"></div>';
     status.className = 'input-status loading';
     errorEl.style.display = 'none';
+    const _t0 = performance.now();
+    let _ok = true;
 
     try {
       const token = await api.tokens.get(mint);
@@ -652,6 +654,9 @@ const submitPage = {
       this.showTokenError('Token not found. Please check the address.');
       this.updateLivePreview();
       this.updateFormState();
+      _ok = false;
+    } finally {
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('submit.lookupToken', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -767,6 +772,8 @@ const submitPage = {
         return;
       }
     }
+    const _t0_submit = performance.now();
+    let _ok_submit = true;
 
     // Collect all valid submissions
     const submissions = [];
@@ -847,6 +854,7 @@ const submitPage = {
       }
 
     } catch (error) {
+      _ok_submit = false;
       console.error('Submission failed:', error);
       toast.error(error.message || 'Submission failed. Please try again.');
     } finally {
@@ -860,6 +868,7 @@ const submitPage = {
         <span id="submit-btn-text">Submit for Community Review</span>
       `;
       this.updateFormState();
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('submit.form', performance.now() - _t0_submit, _ok_submit, 'frontend');
     }
   },
 
@@ -1038,6 +1047,8 @@ const submitPage = {
     // Loading state
     btn.disabled = true;
     textEl.textContent = 'Fetching...';
+    const _t0 = performance.now();
+    let _ok = true;
 
     try {
       const mint = document.getElementById('token-mint')?.value?.trim();
@@ -1102,11 +1113,13 @@ const submitPage = {
       }
 
     } catch (error) {
+      _ok = false;
       console.error('DexScreener pull failed:', error);
       toast.error('Failed to fetch data from DexScreener. Please try again.');
     } finally {
       btn.disabled = false;
       textEl.textContent = 'Pull from DexScreener';
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('submit.dexScreener', performance.now() - _t0, _ok, 'frontend');
     }
   },
 

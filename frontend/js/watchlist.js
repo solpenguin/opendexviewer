@@ -14,6 +14,8 @@ const watchlist = {
 
     if (this.isLoading || this.isLoaded) return;
     this.isLoading = true;
+    const _t0 = performance.now();
+    let _ok = true;
 
     try {
       const response = await api.watchlist.get(wallet.address);
@@ -31,11 +33,13 @@ const watchlist = {
       this.updateAllButtons();
       this.updateWatchlistCount();
     } catch (error) {
+      _ok = false;
       console.error('Failed to load watchlist:', error);
       // Mark as loaded even on error to prevent infinite retries
       this.isLoaded = true;
     } finally {
       this.isLoading = false;
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('watchlist.init', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -108,10 +112,19 @@ const watchlist = {
 
   // Toggle watchlist status
   async toggle(tokenMint) {
-    if (this.has(tokenMint)) {
-      return this.remove(tokenMint);
-    } else {
-      return this.add(tokenMint);
+    const _t0 = performance.now();
+    let _ok = true;
+    try {
+      const result = this.has(tokenMint)
+        ? await this.remove(tokenMint)
+        : await this.add(tokenMint);
+      _ok = result !== false;
+      return result;
+    } catch (err) {
+      _ok = false;
+      throw err;
+    } finally {
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('watchlist.toggle', performance.now() - _t0, _ok, 'frontend');
     }
   },
 

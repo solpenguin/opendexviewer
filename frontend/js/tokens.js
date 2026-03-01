@@ -310,6 +310,8 @@ const tokenList = {
   async loadTokens(silent = false) {
     if (this.isLoading) return;
     this.isLoading = true;
+    const _t0 = performance.now();
+    let _ok = true;
 
     if (!silent) {
       this.showLoading();
@@ -318,7 +320,8 @@ const tokenList = {
     try {
       // Handle watchlist filter separately
       if (this.currentFilter === 'watchlist') {
-        await this.loadWatchlistTokens(silent);
+        const success = await this.loadWatchlistTokens(silent);
+        _ok = success !== false;
         return;
       }
 
@@ -362,6 +365,7 @@ const tokenList = {
       this.lastUpdateTime = Date.now();
       this.updateFreshnessDisplay();
     } catch (error) {
+      _ok = false;
       console.error('[TokenList] Failed to load tokens:', error);
       if (!silent) {
         this.showError('Failed to load tokens. Please try again.');
@@ -369,6 +373,7 @@ const tokenList = {
       }
     } finally {
       this.isLoading = false;
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenList.load', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -455,6 +460,7 @@ const tokenList = {
       if (!silent) {
         this.showError('Failed to load watchlist. Please try again.');
       }
+      return false;
     } finally {
       this.isLoading = false;
     }
@@ -522,6 +528,8 @@ const tokenList = {
     this.searchQuery = trimmed;
     this.isSearchMode = true;
     this.currentPage = 1;
+    const _t0 = performance.now();
+    let _ok = true;
 
     utils.setUrlParam('q', trimmed);
     utils.setUrlParam('filter', null);
@@ -530,10 +538,12 @@ const tokenList = {
       this.tokens = await api.tokens.search(trimmed);
       this.render();
     } catch (error) {
+      _ok = false;
       console.error('Search failed:', error);
       this.showError('Search failed. Please try again.');
     } finally {
       this.isLoading = false;
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenList.search', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -692,6 +702,7 @@ const tokenList = {
   // Maps sort keys to token properties and handles null/undefined values
   sortTokens() {
     if (!this.tokens || this.tokens.length === 0) return;
+    const _t0 = performance.now();
 
     // Map sort field names to token property names
     const sortFieldMap = {
@@ -722,10 +733,12 @@ const tokenList = {
       // Return based on sort direction
       return isDesc ? diff : -diff;
     });
+    if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenList.sort', performance.now() - _t0, true, 'frontend');
   },
 
   // Render token list
   render() {
+    const _t0 = performance.now();
     const tbody = document.getElementById('token-list');
     if (!tbody) return;
 
@@ -835,6 +848,7 @@ const tokenList = {
     this.bindRowClickHandlers();
 
     this.updatePagination();
+    if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenList.render', performance.now() - _t0, true, 'frontend');
   },
 
   // Escape HTML to prevent XSS - delegates to shared utils

@@ -201,6 +201,8 @@ const voting = {
       toast.warning('No votes to submit');
       return;
     }
+    const _t0 = performance.now();
+    let _ok = true;
 
     // Check if any votes are already pending
     const pendingIds = votes.filter(v => this.pendingVotes.has(v.submissionId));
@@ -305,6 +307,7 @@ const voting = {
 
       return { results: successResults, errors: errorResults };
     } catch (error) {
+      _ok = false;
       console.error('Batch vote failed:', error);
 
       // Revert all optimistic updates
@@ -317,6 +320,7 @@ const voting = {
       toast.error('Failed to submit votes. Please try again.');
     } finally {
       votes.forEach(v => this.pendingVotes.delete(v.submissionId));
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('voting.batch', performance.now() - _t0, _ok, 'frontend');
     }
   },
 

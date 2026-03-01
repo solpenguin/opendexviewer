@@ -138,12 +138,12 @@ const apiCache = {
   }
 };
 
-// Latency Tracker - records per-endpoint API call durations (rolling window)
-// Used by the admin dashboard to surface slow endpoints for debugging
+// Latency Tracker - records per-endpoint API and frontend operation durations (rolling window)
+// Used by the admin dashboard to surface slow endpoints and operations for debugging
 const latencyTracker = {
   WINDOW_SIZE: 100, // Keep last 100 samples per endpoint
 
-  data: new Map(), // normalized endpoint → { samples: number[], count: number, errors: number }
+  data: new Map(), // normalized endpoint → { samples: number[], count: number, errors: number, type: string }
 
   // Strip query params and replace long token addresses / numeric IDs with :id
   normalize(endpoint) {
@@ -155,10 +155,10 @@ const latencyTracker = {
     return path;
   },
 
-  record(endpoint, durationMs, success = true) {
+  record(endpoint, durationMs, success = true, type = 'api') {
     const key = this.normalize(endpoint);
     if (!this.data.has(key)) {
-      this.data.set(key, { samples: [], count: 0, errors: 0 });
+      this.data.set(key, { samples: [], count: 0, errors: 0, type });
     }
     const entry = this.data.get(key);
     entry.count++;
@@ -180,6 +180,7 @@ const latencyTracker = {
       const p95 = sorted[Math.min(Math.floor(n * 0.95), n - 1)];
       results.push({
         endpoint: key,
+        type: entry.type || 'api',
         count: entry.count,
         errors: entry.errors,
         avg,

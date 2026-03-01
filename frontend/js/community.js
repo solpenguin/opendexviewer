@@ -78,13 +78,15 @@ const communityPage = {
   },
 
   async loadTopTokens() {
+    const _t0 = performance.now();
+    let _ok = true;
     const fetchers = [
       { id: 'top-called-card', fetch: () => api.tokens.leaderboardCalls({ limit: 1, offset: 0 }), metric: 'calls' },
       { id: 'top-sentiment-card', fetch: () => api.tokens.leaderboardSentiment({ limit: 1, offset: 0 }), metric: 'sentiment' },
       { id: 'top-viewed-card', fetch: () => api.tokens.leaderboardWatchlist({ limit: 1, offset: 0 }), metric: 'viewed' },
     ];
 
-    await Promise.allSettled(fetchers.map(async ({ id, fetch, metric }) => {
+    const results = await Promise.allSettled(fetchers.map(async ({ id, fetch, metric }) => {
       const card = document.getElementById(id);
       if (!card) return;
 
@@ -98,8 +100,11 @@ const communityPage = {
         this.renderTopTokenCard(card, token, metric);
       } catch {
         this.renderTopTokenEmpty(card);
+        throw new Error('fetch failed'); // propagate to allSettled
       }
     }));
+    if (results.some(r => r.status === 'rejected')) _ok = false;
+    if (typeof latencyTracker !== 'undefined') latencyTracker.record('community.topTokens', performance.now() - _t0, _ok, 'frontend');
   },
 
   renderTopTokenCard(card, token, metric) {
@@ -160,6 +165,8 @@ const communityPage = {
   async loadData() {
     const tbody = document.getElementById('community-table-body');
     if (!tbody) return;
+    const _t0 = performance.now();
+    let _ok = true;
 
     tbody.innerHTML = `
       <tr class="loading-row">
@@ -193,6 +200,7 @@ const communityPage = {
       this.render();
       this.updatePagination();
     } catch (error) {
+      _ok = false;
       tbody.innerHTML = `
         <tr class="empty-row">
           <td colspan="6">
@@ -202,6 +210,8 @@ const communityPage = {
           </td>
         </tr>
       `;
+    } finally {
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('community.loadData', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
