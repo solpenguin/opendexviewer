@@ -208,6 +208,12 @@ const submitPage = {
       imgurHelpBtn.addEventListener('click', () => this.showImgurHelpModal());
     }
 
+    // DexScreener pull button
+    const dexPullBtn = document.getElementById('dexscreener-pull-btn');
+    if (dexPullBtn) {
+      dexPullBtn.addEventListener('click', () => this.pullFromDexScreener());
+    }
+
     // Wallet connection buttons for submissions section
     const connectSubmissions = document.getElementById('connect-wallet-submissions');
     if (connectSubmissions) {
@@ -607,6 +613,10 @@ const submitPage = {
       this.tokenData = token;
       this.tokenValid = true;
 
+      // Show DexScreener pull button now that we have a valid token
+      const dexBtn = document.getElementById('dexscreener-pull-btn');
+      if (dexBtn) dexBtn.style.display = 'inline-flex';
+
       // Update preview
       const logoEl = document.getElementById('preview-logo');
       logoEl.src = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
@@ -662,6 +672,10 @@ const submitPage = {
       status.className = 'input-status';
     }
     if (errorEl) errorEl.style.display = 'none';
+
+    // Hide DexScreener pull button
+    const dexBtn = document.getElementById('dexscreener-pull-btn');
+    if (dexBtn) dexBtn.style.display = 'none';
 
     this.hideHolderVerification();
     this.updateLivePreview();
@@ -983,6 +997,166 @@ const submitPage = {
         <div class="modal-actions">
           <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
             Open Imgur
+          </a>
+          <button class="btn btn-secondary" data-action="close-modal">
+            Got it
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeModal = () => {
+      modal.remove();
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    modal.querySelectorAll('[data-action="close-modal"]').forEach(btn => btn.addEventListener('click', closeModal));
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') closeModal();
+    };
+    document.addEventListener('keydown', handleEscape);
+  },
+
+  // Pull social links from DexScreener API and auto-fill empty form fields
+  async pullFromDexScreener() {
+    if (!this.tokenValid || !this.tokenData) {
+      toast.warning('Please enter a valid token address first');
+      return;
+    }
+
+    const btn = document.getElementById('dexscreener-pull-btn');
+    const textEl = document.getElementById('dexscreener-pull-text');
+    if (!btn || !textEl) return;
+
+    // Loading state
+    btn.disabled = true;
+    textEl.textContent = 'Fetching...';
+
+    try {
+      const mint = document.getElementById('token-mint')?.value?.trim();
+      if (!mint) return;
+
+      const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${encodeURIComponent(mint)}`);
+      if (!response.ok) {
+        throw new Error(`DexScreener API returned ${response.status}`);
+      }
+
+      const pairs = await response.json();
+      if (!Array.isArray(pairs) || pairs.length === 0) {
+        toast.warning('Token not found on DexScreener');
+        return;
+      }
+
+      // Extract info from first pair (info block is the same across all pairs for a token)
+      const info = pairs[0].info;
+      if (!info) {
+        toast.warning('No social data found on DexScreener for this token');
+        return;
+      }
+
+      // Build a map of available social data
+      const socialMap = {};
+      if (info.socials && Array.isArray(info.socials)) {
+        info.socials.forEach(s => {
+          if (s.type && s.url) socialMap[s.type] = s.url;
+        });
+      }
+
+      // Map DexScreener fields to form fields
+      const fieldMapping = {
+        twitter: socialMap.twitter || null,
+        telegram: socialMap.telegram || null,
+        discord: socialMap.discord || null,
+        website: (info.websites && info.websites.length > 0) ? info.websites[0].url : null
+      };
+
+      // Fill only empty fields
+      let filledCount = 0;
+      for (const [type, url] of Object.entries(fieldMapping)) {
+        if (!url) continue;
+        const input = document.getElementById(`${type}-url`);
+        if (!input || input.value.trim()) continue; // Skip if already has content
+
+        input.value = url;
+        this.validateField(type, url);
+        filledCount++;
+      }
+
+      // Handle banner -- show instructional popup if available
+      if (info.header) {
+        this.showDexScreenerBannerModal(info.header);
+        if (filledCount > 0) {
+          toast.success(`Filled ${filledCount} field${filledCount > 1 ? 's' : ''} from DexScreener. See banner instructions.`);
+        }
+      } else if (filledCount > 0) {
+        toast.success(`Filled ${filledCount} field${filledCount > 1 ? 's' : ''} from DexScreener`);
+      } else {
+        toast.info('All available fields are already filled');
+      }
+
+    } catch (error) {
+      console.error('DexScreener pull failed:', error);
+      toast.error('Failed to fetch data from DexScreener. Please try again.');
+    } finally {
+      btn.disabled = false;
+      textEl.textContent = 'Pull from DexScreener';
+    }
+  },
+
+  // Show modal with DexScreener banner preview and Imgur upload instructions
+  showDexScreenerBannerModal(bannerUrl) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content imgur-help-modal">
+        <button class="modal-close" data-action="close-modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="modal-header">
+          <h3>Banner Found on DexScreener</h3>
+        </div>
+        <div style="margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, #333);">
+          <img src="${bannerUrl}" alt="DexScreener banner" style="width: 100%; display: block;" onerror="this.style.display='none'">
+        </div>
+        <p style="margin-bottom: 12px; color: var(--text-secondary, #999); font-size: 0.9rem;">
+          We can't use DexScreener image links directly. Follow these steps to add the banner:
+        </p>
+        <div class="imgur-steps">
+          <div class="imgur-step">
+            <span class="step-number">1</span>
+            <div class="step-content">
+              <h4>Save the Banner</h4>
+              <p>Right-click the image above and select <strong>"Save image as..."</strong></p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">2</span>
+            <div class="step-content">
+              <h4>Upload to Imgur</h4>
+              <p>Visit <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="link">imgur.com/upload</a> and upload the saved image (no account required)</p>
+            </div>
+          </div>
+          <div class="imgur-step">
+            <span class="step-number">3</span>
+            <div class="step-content">
+              <h4>Copy the Direct Link</h4>
+              <p>Right-click the uploaded image and select <strong>"Copy image address"</strong>, then paste it into the Banner field</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+            Open Imgur Upload
           </a>
           <button class="btn btn-secondary" data-action="close-modal">
             Got it
