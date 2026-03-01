@@ -923,9 +923,13 @@ const tokenList = {
     // Determine if there are more pages
     this.hasMorePages = this.tokens.length === this.pageSize;
 
-    // Update total pages estimate based on response (cap to prevent unbounded growth)
-    if (this.hasMorePages && this.currentPage >= this.totalPages) {
-      this.totalPages = Math.min(this.currentPage + 1, 100); // Cap at 100 pages
+    // Update total pages estimate based on response
+    if (!this.hasMorePages) {
+      // We know the exact last page now -- shrink totalPages to match
+      this.totalPages = this.currentPage;
+    } else if (this.currentPage >= this.totalPages) {
+      // Grow estimate (cap to prevent unbounded growth)
+      this.totalPages = Math.min(this.currentPage + 1, 100);
     }
 
     if (prevBtn) {

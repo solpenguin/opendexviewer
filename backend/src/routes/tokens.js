@@ -13,7 +13,7 @@ const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
 const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'tech', 'meme'];
 const VALID_SORTS = ['volume', 'price', 'priceChange24h', 'marketCap'];
 const VALID_ORDERS = ['asc', 'desc'];
-const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
+const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other'];
 const VALID_SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'all'];
 const jobQueue = require('../services/jobQueue');
 
@@ -33,7 +33,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   const sort = VALID_SORTS.includes(rawSort) ? rawSort : 'volume';
   const order = VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc';
 
-  const cacheKey = keys.tokenList(`${filter}-${sort}-${order}`, Math.floor(offset / limit));
+  const cacheKey = keys.tokenList(`${filter}-${sort}-${order}-${limit}`, Math.floor(offset / limit));
 
   // Try cache first - use getWithMeta since we store with setWithTimestamp
   // Note: We refresh view counts even for cached responses since they're cheap to fetch
@@ -1361,7 +1361,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
     let tokenSymbol = null;
 
     // Try token-info cache first (fast), then fall back to DB
-    const tokenCacheKey = `token-info:${mint}`;
+    const tokenCacheKey = keys.tokenInfo(mint);
     const cachedMeta = await cache.getWithMeta(tokenCacheKey);
     if (cachedMeta && cachedMeta.value) {
       tokenName = cachedMeta.value.name;

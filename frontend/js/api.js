@@ -1154,10 +1154,12 @@ const loading = {
   show(element, text = 'Loading...') {
     if (!element) return;
     element.dataset.originalContent = element.innerHTML;
+    // Escape text to prevent XSS if callers ever pass dynamic content
+    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     element.innerHTML = `
       <div class="loading-state">
         <div class="loading-spinner"></div>
-        <span>${text}</span>
+        <span>${escaped}</span>
       </div>
     `;
     element.classList.add('is-loading');

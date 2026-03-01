@@ -541,7 +541,11 @@ router.patch('/settings',
           error: 'Development mode cannot be enabled in production'
         });
       }
+      const previous = adminSettings.developmentMode;
       adminSettings.developmentMode = developmentMode;
+      if (previous !== developmentMode) {
+        console.warn(`[Admin] Development mode ${developmentMode ? 'ENABLED' : 'DISABLED'} by admin session at ${new Date().toISOString()}`);
+      }
     }
 
     res.json({

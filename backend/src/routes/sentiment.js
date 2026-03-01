@@ -25,9 +25,10 @@ router.post('/bulk', defaultLimiter, asyncHandler(async (req, res) => {
 router.get('/:mint', defaultLimiter, validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const { wallet } = req.query;
+  const validWallet = wallet && SOLANA_ADDRESS_REGEX.test(wallet) ? wallet : null;
   const [tally, userVote] = await Promise.all([
     db.getSentimentTally(mint),
-    wallet ? db.getSentimentVote(mint, wallet) : Promise.resolve(null)
+    validWallet ? db.getSentimentVote(mint, validWallet) : Promise.resolve(null)
   ]);
   res.json({ tally, userVote });
 }));

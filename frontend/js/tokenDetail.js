@@ -228,11 +228,19 @@ const tokenDetail = {
           clearInterval(this.priceRefreshInterval);
           this.priceRefreshInterval = null;
         }
+        if (this.freshnessInterval) {
+          clearInterval(this.freshnessInterval);
+          this.freshnessInterval = null;
+        }
       } else if (document.visibilityState === 'visible') {
         // Page is visible again, restart intervals if needed
         if (!this.priceRefreshInterval && this.mint) {
           this.refreshPrice(); // Immediate refresh when becoming visible
           this.startPriceRefresh();
+        }
+        if (!this.freshnessInterval && this.lastPriceUpdate) {
+          this.updateFreshnessDisplay();
+          this.startFreshnessTimer();
         }
       }
     };

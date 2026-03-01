@@ -2,12 +2,15 @@
  * Input validation middleware
  */
 
+const { cache } = require('../services/cache');
+
 // Validate Solana address format (base58, exactly 32-44 characters)
 // Standard Solana public keys are 43-44 characters, but some program-derived addresses can be shorter
 const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-// Signature replay protection — tracks used signatures to prevent reuse within the expiry window
-const usedSignatures = new Map();
+// Signature replay protection — uses Redis when available, in-memory Map as fallback
+// Redis-backed tracking survives restarts and is shared across instances
+const usedSignatures = new Map(); // In-memory fallback
 const USED_SIG_CLEANUP_INTERVAL_MS = 60000; // Clean up every minute
 const MAX_USED_SIGNATURES = 50000; // Prevent unbounded memory growth under attack
 let usedSigCleanupTimer = null;
@@ -35,10 +38,24 @@ function stopSignatureCleanup() {
     usedSigCleanupTimer = null;
   }
 }
-function markSignatureUsed(signature, ttlMs) {
+async function markSignatureUsed(signature, ttlMs) {
+  // Try Redis first (shared across instances, survives restarts)
+  if (cache.getBackendType() === 'redis') {
+    try {
+      await cache.set(`sig-replay:${signature}`, 1, ttlMs);
+      return;
+    } catch { /* fall through to in-memory */ }
+  }
   usedSignatures.set(signature, Date.now() + ttlMs);
 }
-function isSignatureUsed(signature) {
+async function isSignatureUsed(signature) {
+  // Check Redis first
+  if (cache.getBackendType() === 'redis') {
+    try {
+      const val = await cache.get(`sig-replay:${signature}`);
+      if (val != null) return true;
+    } catch { /* fall through to in-memory */ }
+  }
   const expiry = usedSignatures.get(signature);
   if (!expiry) return false;
   if (Date.now() > expiry) { usedSignatures.delete(signature); return false; }
@@ -562,7 +579,7 @@ function createDataDeletionSignatureMessage(wallet, timestamp) {
  * Middleware to validate wallet signature for data deletion (GDPR)
  * Requires: wallet, signature, signatureTimestamp in request body
  */
-function validateWalletSignature(req, res, next) {
+async function validateWalletSignature(req, res, next) {
   const { wallet, signature, signatureTimestamp } = req.body;
 
   // Check if signature fields are present
@@ -637,7 +654,7 @@ function validateWalletSignature(req, res, next) {
  * Middleware to validate wallet signature for votes
  * Signature is optional — if not provided, skip validation
  */
-function validateVoteSignature(req, res, next) {
+async function validateVoteSignature(req, res, next) {
   const { submissionId, voterWallet, voteType, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -683,7 +700,7 @@ function validateVoteSignature(req, res, next) {
 
   // Replay protection: reject previously used signatures
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({
       error: 'Signature already used',
       message: 'Each signature can only be used once',
@@ -706,7 +723,7 @@ function validateVoteSignature(req, res, next) {
   }
 
   // Mark signature as used (TTL = expiry window)
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
 
   // Signature is valid - proceed
   next();
@@ -788,7 +805,7 @@ function validateBatchVotes(req, res, next) {
  * Middleware to validate wallet signature for batch votes
  * Signature is optional — if not provided, skip validation
  */
-function validateBatchVoteSignature(req, res, next) {
+async function validateBatchVoteSignature(req, res, next) {
   const { votes, voterWallet, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -834,7 +851,7 @@ function validateBatchVoteSignature(req, res, next) {
 
   // Replay protection
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -852,7 +869,7 @@ function validateBatchVoteSignature(req, res, next) {
     });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -860,7 +877,7 @@ function validateBatchVoteSignature(req, res, next) {
  * Middleware to validate wallet signature for submissions
  * Signature is optional — if not provided, skip validation
  */
-function validateSubmissionSignature(req, res, next) {
+async function validateSubmissionSignature(req, res, next) {
   const { tokenMint, submissionType, submitterWallet, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -911,7 +928,7 @@ function validateSubmissionSignature(req, res, next) {
 
   // Replay protection
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -929,7 +946,7 @@ function validateSubmissionSignature(req, res, next) {
     });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1067,7 +1084,7 @@ function validateBatchSubmissions(req, res, next) {
  * Middleware to validate wallet signature for batch submissions
  * Signature is optional — if not provided, skip validation
  */
-function validateBatchSubmissionSignature(req, res, next) {
+async function validateBatchSubmissionSignature(req, res, next) {
   const { tokenMint, submissions, submitterWallet, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -1113,7 +1130,7 @@ function validateBatchSubmissionSignature(req, res, next) {
 
   // Replay protection
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -1134,7 +1151,7 @@ function validateBatchSubmissionSignature(req, res, next) {
     });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1187,7 +1204,7 @@ function createApiKeySignatureMessage(wallet, timestamp) {
  * Middleware to validate wallet signature for watchlist operations
  * Signature is optional — if not provided, skip validation
  */
-function validateWatchlistSignature(req, res, next) {
+async function validateWatchlistSignature(req, res, next) {
   const { wallet, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -1224,7 +1241,7 @@ function validateWatchlistSignature(req, res, next) {
 
   // Replay protection
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -1234,7 +1251,7 @@ function validateWatchlistSignature(req, res, next) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1242,7 +1259,7 @@ function validateWatchlistSignature(req, res, next) {
  * Middleware to validate wallet signature for sentiment votes
  * Signature is optional — if not provided, skip validation
  */
-function validateSentimentSignature(req, res, next) {
+async function validateSentimentSignature(req, res, next) {
   const { voterWallet, sentiment, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -1278,7 +1295,7 @@ function validateSentimentSignature(req, res, next) {
 
   // Replay protection
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -1288,7 +1305,7 @@ function validateSentimentSignature(req, res, next) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1296,7 +1313,7 @@ function validateSentimentSignature(req, res, next) {
  * Middleware to validate wallet signature for token calls
  * Signature is optional — if not provided, skip validation
  */
-function validateCallSignature(req, res, next) {
+async function validateCallSignature(req, res, next) {
   const { callerWallet, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -1331,7 +1348,7 @@ function validateCallSignature(req, res, next) {
   const expectedMessage = createCallSignatureMessage(mint, callerWallet, timestamp);
 
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -1341,7 +1358,7 @@ function validateCallSignature(req, res, next) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 
@@ -1349,7 +1366,7 @@ function validateCallSignature(req, res, next) {
  * Middleware to validate wallet signature for API key registration
  * Signature is optional — if not provided, skip validation
  */
-function validateApiKeySignature(req, res, next) {
+async function validateApiKeySignature(req, res, next) {
   const { wallet, signature, signatureTimestamp } = req.body;
 
   // Signature is optional - if not provided, skip validation
@@ -1382,7 +1399,7 @@ function validateApiKeySignature(req, res, next) {
 
   // Replay protection
   const sigKey = signature.join(',');
-  if (isSignatureUsed(sigKey)) {
+  if (await isSignatureUsed(sigKey)) {
     return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
   }
 
@@ -1393,7 +1410,7 @@ function validateApiKeySignature(req, res, next) {
     return res.status(401).json({ error: 'Invalid signature', message: 'Wallet signature verification failed', code: 'INVALID_SIGNATURE' });
   }
 
-  markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
   next();
 }
 

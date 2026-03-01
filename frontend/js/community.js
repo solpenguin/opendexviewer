@@ -84,7 +84,7 @@ const communityPage = {
       { id: 'top-viewed-card', fetch: () => api.tokens.leaderboardWatchlist({ limit: 1, offset: 0 }), metric: 'viewed' },
     ];
 
-    fetchers.forEach(async ({ id, fetch, metric }) => {
+    await Promise.allSettled(fetchers.map(async ({ id, fetch, metric }) => {
       const card = document.getElementById(id);
       if (!card) return;
 
@@ -99,7 +99,7 @@ const communityPage = {
       } catch {
         this.renderTopTokenEmpty(card);
       }
-    });
+    }));
   },
 
   renderTopTokenCard(card, token, metric) {

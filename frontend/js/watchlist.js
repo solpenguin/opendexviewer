@@ -220,22 +220,15 @@ const watchlist = {
 
 // Initialize watchlist when wallet connects
 document.addEventListener('DOMContentLoaded', () => {
-  // Listen for wallet connection changes
   if (typeof wallet !== 'undefined') {
-    const originalConnect = wallet.connect.bind(wallet);
-    wallet.connect = async function() {
-      const result = await originalConnect();
-      if (result) {
-        watchlist.init();
-      }
-      return result;
-    };
+    // Listen for wallet connection via CustomEvent (works with both single-wallet and multi-wallet selector)
+    window.addEventListener('walletConnected', () => {
+      watchlist.init();
+    });
 
-    const originalDisconnect = wallet.disconnect.bind(wallet);
-    wallet.disconnect = async function() {
-      await originalDisconnect();
+    window.addEventListener('walletDisconnected', () => {
       watchlist.clear();
-    };
+    });
 
     // Init if already connected (wallet may already be initialized)
     if (wallet.initialized && wallet.connected) {

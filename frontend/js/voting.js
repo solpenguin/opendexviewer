@@ -8,7 +8,8 @@ const voting = {
   developmentMode: false, // When true, bypasses holder verification
 
   // Vote queue for batch submission
-  voteQueue: new Map(), // Map of submissionId -> voteType
+  voteQueue: new Map(), // Map of submissionId -> voteType (what to send to backend)
+  optimisticStates: new Map(), // Map of submissionId -> voteType|null (current UI display state)
   voteQueueTimeout: null, // Timeout for debounced batch submission
   voteQueueDelay: 500, // ms to wait before submitting batch (allows collecting multiple votes)
 
@@ -149,14 +150,19 @@ const voting = {
       }
     }
 
-    // Get current vote state to determine action
-    const currentVote = this.voteStates.get(submissionId);
-    const isSameVote = currentVote === voteType;
+    // Determine toggle using optimistic display state (handles rapid clicks within debounce window)
+    // optimisticStates tracks what the UI currently shows; voteStates tracks server-confirmed state
+    const displayedVote = this.optimisticStates.has(submissionId)
+      ? this.optimisticStates.get(submissionId)
+      : this.voteStates.get(submissionId);
+    const isSameVote = displayedVote === voteType;
+    const intendedState = isSameVote ? null : voteType;
 
     // Update UI immediately (optimistic update)
-    this.updateVoteUI(submissionId, isSameVote ? null : voteType, true);
+    this.updateVoteUI(submissionId, intendedState, true);
+    this.optimisticStates.set(submissionId, intendedState);
 
-    // Add to queue (or update existing entry)
+    // Queue the vote for backend -- always send voteType (backend handles same-type as removal)
     this.voteQueue.set(submissionId, voteType);
 
     // Clear existing timeout
@@ -245,12 +251,7 @@ const voting = {
         }
       }
 
-      // Optimistic UI update (already connected wallet proves ownership)
-      votes.forEach(v => {
-        const currentVote = this.voteStates.get(v.submissionId);
-        const isSameVote = currentVote === v.voteType;
-        this.updateVoteUI(v.submissionId, isSameVote ? null : v.voteType, true);
-      });
+      // Optimistic UI already applied by vote() -- skip redundant update here
 
       // Submit batch votes (no signature required when wallet is connected)
       const result = await api.votes.castBatch({
@@ -267,10 +268,17 @@ const voting = {
 
       // Update vote states for successful votes
       successResults.forEach(r => {
+        const serverState = r.action === 'removed' ? null : r.voteType;
         if (r.action === 'removed') {
           this.voteStates.delete(r.submissionId);
         } else {
           this.voteStates.set(r.submissionId, r.voteType);
+        }
+        // Reconcile UI if server state differs from what's currently displayed
+        const displayedState = this.optimisticStates.get(r.submissionId);
+        this.optimisticStates.delete(r.submissionId);
+        if (displayedState !== undefined && displayedState !== serverState) {
+          this.updateVoteUI(r.submissionId, serverState, false);
         }
 
         // Update vote counts in UI
@@ -281,6 +289,7 @@ const voting = {
 
       // Revert UI for failed votes
       errorResults.forEach(e => {
+        this.optimisticStates.delete(e.submissionId);
         const currentVote = this.voteStates.get(e.submissionId);
         this.updateVoteUI(e.submissionId, currentVote, false);
       });
@@ -300,6 +309,7 @@ const voting = {
 
       // Revert all optimistic updates
       votes.forEach(v => {
+        this.optimisticStates.delete(v.submissionId);
         const currentVote = this.voteStates.get(v.submissionId);
         this.updateVoteUI(v.submissionId, currentVote, false);
       });

@@ -725,16 +725,26 @@ async function getVotesBatch(submissionIds, voterWallet) {
   return result.rows;
 }
 
-async function updateVote(submissionId, voterWallet, voteType, marketCap = null) {
+async function updateVote(submissionId, voterWallet, voteType, { marketCap = null, voterBalance = null, voterPercentage = null } = {}) {
   if (!pool) return;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `UPDATE votes SET vote_type = $3, updated_at = NOW()
-       WHERE submission_id = $1 AND voter_wallet = $2`,
-      [submissionId, voterWallet, voteType]
-    );
+    // Recalculate vote weight from current holder percentage
+    const voteWeight = voterPercentage != null ? calculateVoteWeight(voterPercentage) : null;
+    if (voteWeight != null) {
+      await client.query(
+        `UPDATE votes SET vote_type = $3, vote_weight = $4, voter_balance = $5, voter_percentage = $6, updated_at = NOW()
+         WHERE submission_id = $1 AND voter_wallet = $2`,
+        [submissionId, voterWallet, voteType, voteWeight, voterBalance, voterPercentage]
+      );
+    } else {
+      await client.query(
+        `UPDATE votes SET vote_type = $3, updated_at = NOW()
+         WHERE submission_id = $1 AND voter_wallet = $2`,
+        [submissionId, voterWallet, voteType]
+      );
+    }
     await client.query(
       `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
        SELECT
@@ -761,8 +771,13 @@ async function updateVote(submissionId, voterWallet, voteType, marketCap = null)
   } finally {
     client.release();
   }
-  const weightedScore = (await getVoteTally(submissionId))?.weighted_score || 0;
-  await checkAutoModeration(submissionId, parseFloat(weightedScore), marketCap);
+  // Post-commit: run auto-moderation check (non-critical -- don't fail the vote if this errors)
+  try {
+    const weightedScore = (await getVoteTally(submissionId))?.weighted_score || 0;
+    await checkAutoModeration(submissionId, parseFloat(weightedScore), marketCap);
+  } catch (err) {
+    console.error(`[Votes] Post-commit auto-moderation failed for submission ${submissionId}:`, err.message);
+  }
 }
 
 async function deleteVote(submissionId, voterWallet, marketCap = null) {
@@ -800,8 +815,13 @@ async function deleteVote(submissionId, voterWallet, marketCap = null) {
   } finally {
     client.release();
   }
-  const weightedScore = (await getVoteTally(submissionId))?.weighted_score || 0;
-  await checkAutoModeration(submissionId, parseFloat(weightedScore), marketCap);
+  // Post-commit: run auto-moderation check (non-critical -- don't fail the vote if this errors)
+  try {
+    const weightedScore = (await getVoteTally(submissionId))?.weighted_score || 0;
+    await checkAutoModeration(submissionId, parseFloat(weightedScore), marketCap);
+  } catch (err) {
+    console.error(`[Votes] Post-commit auto-moderation failed for submission ${submissionId}:`, err.message);
+  }
 }
 
 async function getVoteTally(submissionId) {
@@ -1918,6 +1938,18 @@ async function deleteUserData(walletAddress) {
     // Delete API keys
     await client.query(
       'DELETE FROM api_keys WHERE owner_wallet = $1',
+      [walletAddress]
+    );
+
+    // Delete token calls
+    const callsCount = await client.query(
+      'SELECT COUNT(*) FROM token_calls WHERE caller_wallet = $1',
+      [walletAddress]
+    );
+    counts.tokenCalls = parseInt(callsCount.rows[0].count);
+
+    await client.query(
+      'DELETE FROM token_calls WHERE caller_wallet = $1',
       [walletAddress]
     );
 

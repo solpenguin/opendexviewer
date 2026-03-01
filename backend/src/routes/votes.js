@@ -222,7 +222,7 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
       result = { message: 'Vote removed', action: 'removed', voteWeight: 0 };
     } else {
       // Different vote - update it (with new weight based on current balance)
-      await db.updateVote(parsedId, voterWallet, voteType, marketCap);
+      await db.updateVote(parsedId, voterWallet, voteType, { marketCap, voterBalance, voterPercentage });
       result = { message: 'Vote updated', action: 'updated', voteType, voteWeight };
     }
   } else {
@@ -361,7 +361,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
           await db.deleteVote(submissionId, voterWallet, marketCap);
           result = { action: 'removed', voteWeight: 0 };
         } else {
-          await db.updateVote(submissionId, voterWallet, voteType, marketCap);
+          await db.updateVote(submissionId, voterWallet, voteType, { marketCap, voterBalance, voterPercentage });
           result = { action: 'updated', voteType, voteWeight };
         }
       } else {

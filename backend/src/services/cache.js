@@ -547,7 +547,10 @@ class CacheService {
     const fetchPromise = (async () => {
       try {
         const value = await fetchFn();
-        await this.setWithTimestamp(key, value, TTL.PRICE_DATA);
+        // Don't cache null/undefined results -- they likely indicate transient API failures
+        if (value != null) {
+          await this.setWithTimestamp(key, value, TTL.PRICE_DATA);
+        }
         return value;
       } finally {
         this.inFlightFetches.delete(freshnessKey);
