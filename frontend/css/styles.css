@@ -5097,16 +5097,9 @@ a:hover {
     order: 3;
     width: 100%;
     justify-content: center;
-    overflow-x: auto;
     flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    overflow: visible;
     padding-bottom: 2px;
-  }
-
-  .nav::-webkit-scrollbar {
-    display: none;
   }
 
   .nav-dropdown-menu {
@@ -8040,16 +8033,9 @@ body.landscape .hero h1 {
     order: 3;
     width: 100%;
     justify-content: center;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    overflow: visible;
     gap: 0.25rem;
     padding: 0.25rem 0;
-  }
-
-  .nav::-webkit-scrollbar {
-    display: none;
   }
 
   .nav-link {
