@@ -530,6 +530,23 @@
   <script src="js/wallet.js"></script>
   <script src="js/submit.js"></script>
   <script src="js/announcements.js"></script>
-  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+  <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    (function() {
+      var dd = document.querySelector('.nav-dropdown');
+      if (!dd) return;
+      var toggle = dd.querySelector('.nav-dropdown-toggle');
+      if (!toggle) return;
+      toggle.addEventListener('click', function(e) {
+        if (!matchMedia('(hover: none)').matches) return;
+        if (dd.classList.contains('open')) return;
+        e.preventDefault();
+        dd.classList.add('open');
+      });
+      document.addEventListener('click', function(e) {
+        if (!dd.contains(e.target)) dd.classList.remove('open');
+      });
+    })();
+  </script>
 </body>
 </html>
