@@ -68,7 +68,9 @@
       "Bash(python3 -m pip install Pillow)",
       "Bash(npx --yes sharp-cli resize 192 192 -i \"c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png\" -o \"c:/VS/OPENDEX/opendexviewer/frontend/icons/icon-192.png\")",
       "Bash(npx --yes sharp-cli resize 512 512 -i \"c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png\" -o \"c:/VS/OPENDEX/opendexviewer/frontend/icons/icon-512.png\")",
-      "Bash(echo $?)"
+      "Bash(echo $?)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }
