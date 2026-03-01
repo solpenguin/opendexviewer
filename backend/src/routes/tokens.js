@@ -62,7 +62,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     // Handle most_viewed filter separately - uses our local database
     // Optimized: Fetches metadata in batches to avoid rate limiting issues
     if (filter === 'most_viewed') {
-      const mostViewed = await db.getMostViewedTokens(parseInt(limit));
+      const mostViewed = await db.getMostViewedTokens(parseInt(limit), parseInt(offset));
 
       if (!mostViewed || mostViewed.length === 0) {
         return res.json([]);
@@ -200,7 +200,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
     // Handle category filters (tech / meme) - tokens tagged by community submissions
     if (filter === 'tech' || filter === 'meme') {
-      const mints = await db.getTokensByCategory(filter, parseInt(limit));
+      const mints = await db.getTokensByCategory(filter, parseInt(limit), parseInt(offset));
 
       if (!mints || mints.length === 0) {
         return res.json([]);
@@ -307,30 +307,39 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     // Optimization: Skip GeckoTerminal enrichment - use Helius batch API instead
     const useHeliusEnrichment = solanaService.isHeliusConfigured();
 
-    // Calculate page number from offset (GeckoTerminal uses 1-based pages)
-    // GeckoTerminal returns ~20 tokens per page
+    // GeckoTerminal uses its own page size (~20 tokens/page, 1-based)
+    // Calculate which gecko pages we need to cover the requested offset+limit window
     const geckoPageSize = 20;
-    const geckoPage = Math.floor(parseInt(offset) / geckoPageSize) + 1;
-    // Privacy: Don't log API usage details
+    const requestStart = parseInt(offset);
+    const requestEnd = requestStart + parseInt(limit);
+    const firstGeckoPage = Math.floor(requestStart / geckoPageSize) + 1;
+    const lastGeckoPage = Math.floor(Math.max(0, requestEnd - 1) / geckoPageSize) + 1;
 
     try {
-      switch (filter) {
-        case 'new':
-          tokens = await geckoService.getNewTokens(parseInt(limit), useHeliusEnrichment, geckoPage);
-          break;
-        case 'gainers':
-          // Get trending and sort by price change
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment, page: geckoPage });
-          tokens = tokens?.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
-          break;
-        case 'losers':
-          // Get trending and sort by price change (ascending)
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment, page: geckoPage });
-          tokens = tokens?.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
-          break;
-        default: // trending
-          tokens = await geckoService.getTrendingTokens({ limit: parseInt(limit), skipEnrichment: useHeliusEnrichment, page: geckoPage });
+      // Fetch all gecko pages needed to cover the requested window
+      let allTokens = [];
+      for (let gp = firstGeckoPage; gp <= lastGeckoPage; gp++) {
+        let pageTokens;
+        switch (filter) {
+          case 'new':
+            pageTokens = await geckoService.getNewTokens(geckoPageSize, useHeliusEnrichment, gp);
+            break;
+          default: // trending, gainers, losers all fetch trending pools
+            pageTokens = await geckoService.getTrendingTokens({ limit: geckoPageSize, skipEnrichment: useHeliusEnrichment, page: gp });
+        }
+        if (pageTokens) allTokens = allTokens.concat(pageTokens);
       }
+
+      // Apply filter-specific sorting before slicing
+      if (filter === 'gainers') {
+        allTokens.sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
+      } else if (filter === 'losers') {
+        allTokens.sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
+      }
+
+      // Slice to the requested window within the fetched data
+      const sliceStart = requestStart - (firstGeckoPage - 1) * geckoPageSize;
+      tokens = allTokens.slice(sliceStart, sliceStart + parseInt(limit));
     } catch (err) {
       geckoError = err;
       // Privacy: Don't log error details

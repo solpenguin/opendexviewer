@@ -1613,21 +1613,21 @@ async function getTokenViewsBatch(tokenMints) {
 }
 
 // Get most viewed tokens
-async function getMostViewedTokens(limit = 10) {
+async function getMostViewedTokens(limit = 10, offset = 0) {
   if (!pool) return [];
 
   const result = await pool.query(
     `SELECT token_mint, view_count, last_viewed_at
      FROM token_views
      ORDER BY view_count DESC
-     LIMIT $1`,
-    [limit]
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
   );
   return result.rows;
 }
 
 // Get distinct token mints that have approved submissions with a given category
-async function getTokensByCategory(category, limit = 50) {
+async function getTokensByCategory(category, limit = 50, offset = 0) {
   if (!pool) return [];
 
   const result = await pool.query(
@@ -1635,8 +1635,8 @@ async function getTokensByCategory(category, limit = 50) {
      FROM submissions s
      WHERE s.status = 'approved' AND s.category = $1
      ORDER BY s.token_mint
-     LIMIT $2`,
-    [category, limit]
+     LIMIT $2 OFFSET $3`,
+    [category, limit, offset]
   );
   return result.rows.map(r => r.token_mint);
 }
