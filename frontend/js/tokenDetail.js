@@ -53,14 +53,16 @@ const tokenDetail = {
       this.recordView();
 
       // Load additional data in parallel
+      // Note: voting.initForPage() must run AFTER loadSubmissions() because it queries
+      // the DOM for [data-submission-id] elements that loadSubmissions() renders
       await Promise.all([
         this.loadChart(this.currentInterval),
         this.loadPools(),
         this.loadSubmissions(),
-        voting.initForPage(), // Initialize voting (loads requirements & checks dev mode)
         sentiment.loadForToken(this.mint), // Load community sentiment
         this.loadSimilarTokens() // Load similar tokens (anti-spoofing)
       ]);
+      await voting.initForPage(); // Initialize voting after submissions are rendered
 
       // Start price refresh and freshness timer
       this.startPriceRefresh();
@@ -265,6 +267,7 @@ const tokenDetail = {
 
   // Start price refresh (configurable via config.cache.priceRefresh)
   startPriceRefresh() {
+    if (this.priceRefreshInterval) clearInterval(this.priceRefreshInterval);
     this.priceRefreshInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         this.refreshPrice();
@@ -1205,10 +1208,14 @@ const tokenDetail = {
     // Handle banner display
     if (hasBanner) {
       const topBanner = bannerSubmissions.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+      if (!bannerWrapper) return;
       bannerWrapper.style.display = 'block';
 
       const bannerImg = document.getElementById('community-banner');
-      bannerImg.src = topBanner.content_url;
+      if (!bannerImg) return;
+      // Validate protocol to prevent javascript: or data: URI injection from user-submitted URLs
+      const bannerUrl = topBanner.content_url;
+      bannerImg.src = (bannerUrl && (bannerUrl.startsWith('https://') || bannerUrl.startsWith('http://'))) ? bannerUrl : '';
       bannerImg.onerror = function() {
         bannerWrapper.style.display = 'none';
       };
@@ -1440,7 +1447,8 @@ const tokenDetail = {
 
       if (s.submission_type === 'banner') {
         const img = document.createElement('img');
-        img.src = s.content_url;
+        const imgUrl = s.content_url;
+        img.src = (imgUrl && (imgUrl.startsWith('https://') || imgUrl.startsWith('http://'))) ? imgUrl : '';
         img.className = 'submission-preview';
         img.alt = 'Banner preview';
         img.loading = 'lazy';

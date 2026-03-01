@@ -1139,7 +1139,7 @@ const submitPage = {
           <h3>Banner Found on DexScreener</h3>
         </div>
         <div style="margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, #333);">
-          <img src="${bannerUrl}" alt="DexScreener banner" style="width: 100%; display: block;" onerror="this.style.display='none'">
+          <img id="dex-banner-preview" alt="DexScreener banner" style="width: 100%; display: block;">
         </div>
         <p style="margin-bottom: 12px; color: var(--text-secondary, #999); font-size: 0.9rem;">
           We can't use DexScreener image links directly. Follow these steps to add the banner:
@@ -1186,6 +1186,13 @@ const submitPage = {
     };
 
     modal.querySelectorAll('[data-action="close-modal"]').forEach(btn => btn.addEventListener('click', closeModal));
+
+    // Set banner image src safely (avoids XSS from interpolating external URL into innerHTML)
+    const bannerPreview = modal.querySelector('#dex-banner-preview');
+    if (bannerPreview && bannerUrl && (bannerUrl.startsWith('https://') || bannerUrl.startsWith('http://'))) {
+      bannerPreview.src = bannerUrl;
+      bannerPreview.addEventListener('error', function() { this.style.display = 'none'; }, { once: true });
+    }
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeModal();

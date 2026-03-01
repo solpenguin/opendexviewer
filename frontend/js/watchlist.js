@@ -218,7 +218,7 @@ const watchlist = {
     try {
       const response = await api.watchlist.checkBatch(wallet.address, tokenMints);
       // Update local cache with results
-      Object.entries(response.watchlist).forEach(([mint, inWatchlist]) => {
+      Object.entries(response?.watchlist || {}).forEach(([mint, inWatchlist]) => {
         if (inWatchlist) {
           this.items.set(mint, { mint });
         }

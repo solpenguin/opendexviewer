@@ -44,12 +44,46 @@ const tokenList = {
 
   // Initialize
   async init() {
+    this._initRowClickHandler();
     this.bindEvents();
     this.restoreState();
     this.initSortUI(); // Initialize sort column header UI
     await this.loadTokens();
     this.startAutoRefresh();
     this.startFreshnessTimer();
+  },
+
+  // Create a stable bound reference for the row click handler (called once in init)
+  _initRowClickHandler() {
+    this.handleRowClick = (e) => {
+      const target = e.target;
+
+      // Handle navigation clicks (cells with data-navigate attribute)
+      const navigateCell = target.closest('[data-navigate]');
+      if (navigateCell && !target.closest('.watchlist-btn')) {
+        const mint = navigateCell.dataset.navigate;
+        if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+          try {
+            const allTokens = this.tokens?.tokens || this.tokens || [];
+            const token = Array.isArray(allTokens) ? allTokens.find(t => (t.address || t.mintAddress) === mint) : null;
+            if (token) sessionStorage.setItem('token_preview', JSON.stringify({ mint, data: token, ts: Date.now() }));
+          } catch (_) {}
+          window.location.href = `token.html?mint=${encodeURIComponent(mint)}`;
+        }
+        return;
+      }
+
+      // Handle watchlist button clicks
+      const watchlistBtn = target.closest('.watchlist-btn');
+      if (watchlistBtn) {
+        e.stopPropagation();
+        const mint = watchlistBtn.dataset.watchlistToken;
+        if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint) && typeof watchlist !== 'undefined') {
+          watchlist.toggle(mint);
+        }
+        return;
+      }
+    };
   },
 
   // Initialize sort column header UI to match current sort state
@@ -857,47 +891,13 @@ const tokenList = {
   },
 
   // Bind click handlers for token rows using event delegation (safer than inline onclick)
+  // Uses the stable handler created once in _initRowClickHandler() to avoid listener leaks
   bindRowClickHandlers() {
     const tbody = document.getElementById('token-list');
     if (!tbody) return;
 
-    // Remove existing listener to prevent duplicates
+    // Remove then re-add the stable listener (safe because reference is the same)
     tbody.removeEventListener('click', this.handleRowClick);
-
-    // Use event delegation for all row clicks
-    this.handleRowClick = (e) => {
-      const target = e.target;
-
-      // Handle navigation clicks (cells with data-navigate attribute)
-      const navigateCell = target.closest('[data-navigate]');
-      if (navigateCell && !target.closest('.watchlist-btn')) {
-        const mint = navigateCell.dataset.navigate;
-        // Double-check it's a valid Solana address before navigation
-        if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
-          // Store token data from list so the detail page can render instantly
-          try {
-            const allTokens = this.tokens?.tokens || this.tokens || [];
-            const token = Array.isArray(allTokens) ? allTokens.find(t => (t.address || t.mintAddress) === mint) : null;
-            if (token) sessionStorage.setItem('token_preview', JSON.stringify({ mint, data: token, ts: Date.now() }));
-          } catch (_) {}
-          window.location.href = `token.html?mint=${encodeURIComponent(mint)}`;
-        }
-        return;
-      }
-
-      // Handle watchlist button clicks
-      const watchlistBtn = target.closest('.watchlist-btn');
-      if (watchlistBtn) {
-        e.stopPropagation();
-        const mint = watchlistBtn.dataset.watchlistToken;
-        // Validate address before calling watchlist toggle
-        if (mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint) && typeof watchlist !== 'undefined') {
-          watchlist.toggle(mint);
-        }
-        return;
-      }
-    };
-
     tbody.addEventListener('click', this.handleRowClick);
   },
 

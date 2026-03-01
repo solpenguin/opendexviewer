@@ -614,7 +614,8 @@ async function getApprovedSubmissions(tokenMint) {
 }
 
 // Vote operations - Optimized with delta-based tally updates for high concurrency
-async function createVote({ submissionId, voterWallet, voteType, voterBalance = 0, voterPercentage = 0 }) {
+async function createVote({ submissionId, voterWallet, voteType, voterBalance = 0, voterPercentage = 0, marketCap = null }) {
+  if (!pool) throw new Error('Database not available');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -648,7 +649,7 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
          vote_weight = EXCLUDED.vote_weight,
          voter_balance = EXCLUDED.voter_balance,
          voter_percentage = EXCLUDED.voter_percentage,
-         created_at = NOW()
+         updated_at = NOW()
        RETURNING *`,
       [submissionId, voterWallet, voteType, voteWeight, voterBalance, voterPercentage]
     );
@@ -695,6 +696,16 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
     );
 
     await client.query('COMMIT');
+
+    // Post-commit: run auto-moderation check (non-critical -- don't fail the vote if this errors)
+    try {
+      const tally = await getVoteTally(submissionId);
+      const weightedScore = parseFloat(tally?.weighted_score) || 0;
+      await checkAutoModeration(submissionId, weightedScore, marketCap);
+    } catch (err) {
+      console.error(`[Votes] Post-commit auto-moderation failed for submission ${submissionId}:`, err.message);
+    }
+
     return result.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');

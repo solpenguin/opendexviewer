@@ -443,7 +443,9 @@ class CacheService {
     const fetchPromise = (async () => {
       try {
         const value = await fetchFn();
-        await this.set(key, value, ttlMs);
+        if (value != null) {
+          await this.set(key, value, ttlMs);
+        }
         return value;
       } finally {
         // Clean up in-flight tracking

@@ -216,12 +216,7 @@ const communityPage = {
   },
 
   escapeHtml(text) {
-    if (!text) return '';
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    return utils.escapeHtml(text);
   },
 
   render() {

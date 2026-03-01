@@ -350,12 +350,9 @@ const voting = {
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   },
 
-  // Escape HTML to prevent XSS
+  // Escape HTML to prevent XSS - delegates to shared utils for consistent quote escaping
   escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
+    return utils.escapeHtml(text);
   },
 
   // Show modal for insufficient balance

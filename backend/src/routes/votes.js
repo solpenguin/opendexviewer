@@ -232,7 +232,8 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
       voterWallet,
       voteType,
       voterBalance,
-      voterPercentage
+      voterPercentage,
+      marketCap
     });
     result = { message: 'Vote cast', action: 'created', voteType, voteWeight };
   }
@@ -365,7 +366,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
           result = { action: 'updated', voteType, voteWeight };
         }
       } else {
-        await db.createVote({ submissionId, voterWallet, voteType, voterBalance, voterPercentage });
+        await db.createVote({ submissionId, voterWallet, voteType, voterBalance, voterPercentage, marketCap });
         result = { action: 'created', voteType, voteWeight };
       }
 
