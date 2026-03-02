@@ -61,10 +61,12 @@ router.get('/community/batch',
       }
     }
 
-    // Fetch community content for each token
+    // Single batch query for all mints (eliminates N+1: was 1 query per mint)
+    const submissionsByMint = await db.getApprovedSubmissionsBatch(mintList);
+
     const results = {};
-    await Promise.all(mintList.map(async (mint) => {
-      const submissions = await db.getApprovedSubmissions(mint);
+    for (const mint of mintList) {
+      const submissions = submissionsByMint[mint] || [];
 
       const community = {
         banner: null,
@@ -89,7 +91,7 @@ router.get('/community/batch',
       }
 
       results[mint] = community;
-    }));
+    }
 
     res.json({
       success: true,

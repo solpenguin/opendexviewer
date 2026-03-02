@@ -613,6 +613,27 @@ async function getApprovedSubmissions(tokenMint) {
   return getSubmissionsByToken(tokenMint, { status: 'approved' });
 }
 
+// Batch version — single query for multiple mints (eliminates N+1 in public API batch endpoint)
+async function getApprovedSubmissionsBatch(tokenMints) {
+  if (!pool || !tokenMints || tokenMints.length === 0) return {};
+  const result = await pool.query(
+    `SELECT s.*, vt.upvotes, vt.downvotes, vt.score
+     FROM submissions s
+     LEFT JOIN vote_tallies vt ON s.id = vt.submission_id
+     WHERE s.token_mint = ANY($1) AND s.status = 'approved'
+     ORDER BY vt.score DESC, s.created_at DESC`,
+    [tokenMints]
+  );
+  // Group by token_mint
+  const grouped = {};
+  for (const mint of tokenMints) grouped[mint] = [];
+  for (const row of result.rows) {
+    if (!grouped[row.token_mint]) grouped[row.token_mint] = [];
+    grouped[row.token_mint].push(row);
+  }
+  return grouped;
+}
+
 // Vote operations - Optimized with delta-based tally updates for high concurrency
 async function createVote({ submissionId, voterWallet, voteType, voterBalance = 0, voterPercentage = 0, marketCap = null }) {
   if (!pool) throw new Error('Database not available');
@@ -632,7 +653,6 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
 
     const isNewVote = existingVote.rows.length === 0;
     const oldVoteType = existingVote.rows[0]?.vote_type;
-    const oldVoteWeight = existingVote.rows[0]?.vote_weight || 0;
 
     // Skip if vote unchanged
     if (!isNewVote && oldVoteType === voteType) {
@@ -640,7 +660,7 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
       return existingVote.rows[0];
     }
 
-    // Insert or update the vote
+    // Insert or update the vote (UPSERT handles concurrent inserts safely)
     const result = await client.query(
       `INSERT INTO votes (submission_id, voter_wallet, vote_type, vote_weight, voter_balance, voter_percentage)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -654,45 +674,28 @@ async function createVote({ submissionId, voterWallet, voteType, voterBalance = 
       [submissionId, voterWallet, voteType, voteWeight, voterBalance, voterPercentage]
     );
 
-    // Delta-based tally update (O(1) instead of O(n) full scan)
-    // Calculate the delta values based on vote change
-    let upvoteDelta = 0;
-    let downvoteDelta = 0;
-    let weightedDelta = 0;
-
-    if (isNewVote) {
-      // New vote
-      if (voteType === 'up') {
-        upvoteDelta = 1;
-        weightedDelta = voteWeight;
-      } else {
-        downvoteDelta = 1;
-        weightedDelta = -voteWeight;
-      }
-    } else {
-      // Changed vote (up->down or down->up)
-      if (oldVoteType === 'up' && voteType === 'down') {
-        upvoteDelta = -1;
-        downvoteDelta = 1;
-        weightedDelta = -oldVoteWeight - voteWeight;
-      } else if (oldVoteType === 'down' && voteType === 'up') {
-        upvoteDelta = 1;
-        downvoteDelta = -1;
-        weightedDelta = oldVoteWeight + voteWeight;
-      }
-    }
-
-    // Apply delta update to tally (atomic, no full scan)
+    // Full-scan tally recalculation — safe under concurrent writes.
+    // The previous delta-based approach was O(1) but vulnerable to double-counting
+    // when two transactions for the same (submission, voter) both computed isNewVote=true
+    // before either committed. Full-scan is O(n) on votes for this submission but
+    // guarantees correctness regardless of interleaving. Typical n < 100.
     await client.query(
       `INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
-       VALUES ($1, GREATEST(0, $2), GREATEST(0, $3), $2 - $3, $4, NOW())
+       SELECT
+         $1,
+         COUNT(*) FILTER (WHERE vote_type = 'up'),
+         COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down'),
+         COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
+         NOW()
+       FROM votes WHERE submission_id = $1
        ON CONFLICT (submission_id) DO UPDATE SET
-         upvotes = GREATEST(0, vote_tallies.upvotes + $2),
-         downvotes = GREATEST(0, vote_tallies.downvotes + $3),
-         score = GREATEST(0, vote_tallies.upvotes + $2) - GREATEST(0, vote_tallies.downvotes + $3),
-         weighted_score = vote_tallies.weighted_score + $4,
+         upvotes = EXCLUDED.upvotes,
+         downvotes = EXCLUDED.downvotes,
+         score = EXCLUDED.score,
+         weighted_score = EXCLUDED.weighted_score,
          updated_at = NOW()`,
-      [submissionId, upvoteDelta, downvoteDelta, weightedDelta]
+      [submissionId]
     );
 
     await client.query('COMMIT');
@@ -2488,6 +2491,7 @@ module.exports = {
   getSubmission,
   getSubmissionsByToken,
   getApprovedSubmissions,
+  getApprovedSubmissionsBatch,
   getSubmissionsByWallet,
   getPendingSubmissions,
   updateSubmissionStatus,

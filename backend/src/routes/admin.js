@@ -23,9 +23,9 @@ const { cache, keys } = require('../services/cache');
 const loginAttempts = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_LOGIN_ATTEMPT_ENTRIES = 10000; // Prevent unbounded growth under distributed attack
+const MAX_LOGIN_ATTEMPT_ENTRIES = 1000; // Hard cap — prevents memory growth under distributed brute-force
 
-// Cleanup stale login attempt records every 5 minutes
+// Cleanup stale login attempt records every 2 minutes (was 5 — faster eviction under attack)
 setInterval(() => {
   const now = Date.now();
   for (const [ip, data] of loginAttempts) {
@@ -39,7 +39,7 @@ setInterval(() => {
     const toRemove = entries.slice(0, loginAttempts.size - MAX_LOGIN_ATTEMPT_ENTRIES);
     for (const [ip] of toRemove) loginAttempts.delete(ip);
   }
-}, 5 * 60 * 1000);
+}, 2 * 60 * 1000);
 
 // ==========================================
 // Authentication Endpoints

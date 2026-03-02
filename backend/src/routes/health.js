@@ -28,67 +28,60 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
     checks: {}
   };
 
-  // Check database
-  try {
-    const dbHealth = await db.checkHealth();
+  // Run independent health checks in parallel (was sequential — could take 10-30s under load)
+  const [dbResult, rpcResult, cacheResult, jupiterResult] = await Promise.allSettled([
+    db.checkHealth(),
+    solanaService.checkHealth(),
+    cache.checkHealth(),
+    jupiterService.checkHealth()
+  ]);
+
+  // Database
+  if (dbResult.status === 'fulfilled') {
     health.checks.database = {
-      status: dbHealth.healthy ? 'ok' : 'error',
-      ...dbHealth
+      status: dbResult.value.healthy ? 'ok' : 'error',
+      ...dbResult.value
     };
-  } catch (error) {
-    health.checks.database = {
-      status: 'error',
-      error: 'Database check failed'
-    };
+    if (!dbResult.value.healthy) health.status = 'degraded';
+  } else {
+    health.checks.database = { status: 'error', error: 'Database check failed' };
     health.status = 'degraded';
   }
 
-  // Check Solana RPC
-  try {
-    const rpcHealth = await solanaService.checkHealth();
+  // Solana RPC
+  if (rpcResult.status === 'fulfilled') {
     health.checks.solana_rpc = {
-      status: rpcHealth.healthy ? 'ok' : 'error',
-      ...rpcHealth
+      status: rpcResult.value.healthy ? 'ok' : 'error',
+      ...rpcResult.value
     };
-  } catch (error) {
-    health.checks.solana_rpc = {
-      status: 'error',
-      error: 'Solana RPC check failed'
-    };
+    if (!rpcResult.value.healthy) health.status = 'degraded';
+  } else {
+    health.checks.solana_rpc = { status: 'error', error: 'Solana RPC check failed' };
     health.status = 'degraded';
   }
 
-  // Check cache (Redis or in-memory)
-  try {
-    const cacheHealth = await cache.checkHealth();
+  // Cache (errors don't degrade — falls back to memory)
+  if (cacheResult.status === 'fulfilled') {
     health.checks.cache = {
-      status: cacheHealth.healthy ? 'ok' : 'error',
-      ...cacheHealth
+      status: cacheResult.value.healthy ? 'ok' : 'error',
+      ...cacheResult.value
     };
-  } catch (error) {
-    health.checks.cache = {
-      status: 'error',
-      error: 'Cache check failed'
-    };
-    // Cache errors don't degrade the service - we can fall back to memory
+  } else {
+    health.checks.cache = { status: 'error', error: 'Cache check failed' };
   }
 
-  // Check Jupiter API
-  try {
-    const jupiterHealth = await jupiterService.checkHealth();
+  // Jupiter API
+  if (jupiterResult.status === 'fulfilled') {
     health.checks.jupiter_api = {
-      status: jupiterHealth.healthy ? 'ok' : 'error',
-      configured: jupiterHealth.configured,
-      ...jupiterHealth
+      status: jupiterResult.value.healthy ? 'ok' : 'error',
+      configured: jupiterResult.value.configured,
+      ...jupiterResult.value
     };
-    if (!jupiterHealth.healthy && jupiterHealth.configured) {
+    if (!jupiterResult.value.healthy && jupiterResult.value.configured) {
       health.status = 'degraded';
     }
-  } catch (error) {
-    health.checks.jupiter_api = {
-      status: 'error',
-      error: 'Jupiter API check failed'
-    };
+  } else {
+    health.checks.jupiter_api = { status: 'error', error: 'Jupiter API check failed' };
   }
 
   // Circuit breaker status - shows which external APIs are being protected

@@ -9,6 +9,9 @@ const submitPage = {
   walletConnected: false,
   termsAccepted: false,
 
+  // Guard against concurrent submit — button.disabled alone has a race window
+  submitInProgress: false,
+
   // Track validation state for each field
   fieldValidation: {
     banner: { valid: false, url: '' },
@@ -753,7 +756,12 @@ const submitPage = {
 
   // Submit form - handles multiple submissions with a SINGLE signature
   async submitForm() {
+    // Atomic guard — prevents double-submit even if rapid clicks bypass button.disabled
+    if (this.submitInProgress) return;
+    this.submitInProgress = true;
+
     if (!this.walletConnected) {
+      this.submitInProgress = false;
       toast.error('Please connect your wallet first');
       return;
     }
@@ -761,6 +769,7 @@ const submitPage = {
     // Check holder verification (bypassed in development mode)
     const holderOk = this.holderVerified || this.developmentMode;
     if (!holderOk) {
+      this.submitInProgress = false;
       toast.error('You must hold this token to submit content for it');
       return;
     }
@@ -769,6 +778,7 @@ const submitPage = {
     if (!this.termsAccepted) {
       const accepted = await this.showTermsModal();
       if (!accepted) {
+        this.submitInProgress = false;
         return;
       }
     }
@@ -789,6 +799,7 @@ const submitPage = {
     });
 
     if (submissions.length === 0) {
+      this.submitInProgress = false;
       toast.error('Please fill in at least one content field');
       return;
     }
@@ -858,6 +869,7 @@ const submitPage = {
       console.error('Submission failed:', error);
       toast.error(error.message || 'Submission failed. Please try again.');
     } finally {
+      this.submitInProgress = false;
       submitBtn.disabled = false;
       submitBtn.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

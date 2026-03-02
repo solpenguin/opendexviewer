@@ -70,7 +70,8 @@
       "Bash(npx --yes sharp-cli resize 512 512 -i \"c:/VS/OPENDEX/opendexviewer/frontend/OpenDEX_Logo.png\" -o \"c:/VS/OPENDEX/opendexviewer/frontend/icons/icon-512.png\")",
       "Bash(echo $?)",
       "WebFetch(domain:docs.github.com)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(grep -n \"pendingVotes\\\\|voteQueue\\\\|inFlight\\\\|submitInProgress\\\\|pendingSubmissions\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
     ]
   }
 }

@@ -269,12 +269,12 @@ const api = {
           // Use Retry-After header if available, otherwise exponential backoff
           let delay;
           if (error.retryAfter) {
-            delay = error.retryAfter * 1000;
+            delay = Math.min(error.retryAfter * 1000, 30000);
           } else {
             // Exponential backoff with jitter to prevent thundering herd
             const baseDelay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
             const jitter = Math.random() * 1000; // 0-1s random jitter
-            delay = baseDelay + jitter;
+            delay = Math.min(baseDelay + jitter, 30000); // Cap at 30s
           }
           await new Promise(r => setTimeout(r, delay));
         }
