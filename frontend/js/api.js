@@ -567,6 +567,19 @@ const api = {
     }
   },
 
+  // Hackathon endpoints
+  hackathon: {
+    async getTokens() {
+      const cacheKey = 'hackathon:tokens';
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request('/api/hackathon/tokens'),
+        apiCache.TTL.tokenList,
+        true
+      );
+    }
+  },
+
   // Submission endpoints
   submissions: {
     async create(data) {

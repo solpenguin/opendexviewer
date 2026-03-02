@@ -68,6 +68,10 @@ services:
       - key: AUTO_REJECT_THRESHOLD
         value: "-10"
 
+      # Hackathon token list (comma-separated Solana mint addresses)
+      - key: HACKATHON_TOKENS
+        sync: false
+
       # Performance tuning
       # View count buffer: flush every 2s instead of 5s (reduces memory spikes under load)
       - key: VIEW_FLUSH_INTERVAL_MS
@@ -167,4 +171,5 @@ databases:
 # 4. Add these rewrite rules in Settings > Redirects/Rewrites:
 #    - Source: /token/*  -> Destination: /token.html (Rewrite)
 #    - Source: /submit   -> Destination: /submit.html (Rewrite)
+#    - Source: /hackathon -> Destination: /hackathon.html (Rewrite)
 # =====================================================

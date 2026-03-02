@@ -9376,6 +9376,89 @@ body.landscape .hero h1 {
   }
 }
 
+/* ===== Hackathon Page ===== */
+
+.hackathon-hero {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(99, 102, 241, 0.06));
+  border-color: rgba(245, 158, 11, 0.15);
+}
+
+.hackathon-hero .submit-hero-icon {
+  color: #f59e0b;
+}
+
+.hackathon-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0 0.25rem;
+}
+
+.hackathon-table-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.hackathon-table-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.hackathon-count {
+  font-weight: 500;
+}
+
+.hackathon-table .cell-change {
+  min-width: 80px;
+  text-align: right;
+}
+
+.hackathon-table .cell-liquidity {
+  text-align: right;
+  min-width: 100px;
+}
+
+.price-change {
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.price-change.positive {
+  color: var(--green);
+}
+
+.price-change.negative {
+  color: var(--red);
+}
+
+.price-change.neutral {
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .hackathon-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .hackathon-table .cell-volume,
+  .hackathon-table .cell-liquidity {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .hackathon-table .cell-mcap {
+    display: none;
+  }
+}
+
 /* ===== Token Call Modal ===== */
 .call-modal {
   position: fixed;
