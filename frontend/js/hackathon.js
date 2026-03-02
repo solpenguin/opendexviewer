@@ -18,7 +18,7 @@ const hackathonPage = {
     if (this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="6">
+          <td colspan="5">
             <div class="loading-state">
               <div class="loading-spinner"></div>
               <span>Loading hackathon tokens...</span>
@@ -53,7 +53,7 @@ const hackathonPage = {
       if (this.tokens.length === 0) {
         tbody.innerHTML = `
           <tr class="empty-row">
-            <td colspan="6">
+            <td colspan="5">
               <div class="empty-state">
                 <span>Failed to load hackathon tokens. Please try again.</span>
               </div>
@@ -71,7 +71,7 @@ const hackathonPage = {
     if (!this.tokens || this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="empty-row">
-          <td colspan="6">
+          <td colspan="5">
             <div class="empty-state">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-dim); margin-bottom: 0.75rem;">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -96,11 +96,6 @@ const hackathonPage = {
       const safeName = utils.escapeHtml(token.name || 'Unknown');
       const safeSymbol = utils.escapeHtml(token.symbol || '???');
 
-      const change = token.priceChange24h || 0;
-      const changeClass = change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral';
-      const changeSign = change > 0 ? '+' : '';
-      const changeDisplay = change !== 0 ? `${changeSign}${change.toFixed(2)}%` : '0.00%';
-
       return `
         <tr class="token-row" data-mint="${safeAddress}">
           <td class="cell-rank">${rank}</td>
@@ -114,9 +109,6 @@ const hackathonPage = {
             </div>
           </td>
           <td class="cell-price" data-navigate="${safeAddress}">${utils.formatPrice(token.price, 6)}</td>
-          <td class="cell-change" data-navigate="${safeAddress}">
-            <span class="price-change ${changeClass}">${changeDisplay}</span>
-          </td>
           <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap, '$')}</td>
           <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h, '$')}</td>
         </tr>
