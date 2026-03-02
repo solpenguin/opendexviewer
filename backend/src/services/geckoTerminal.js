@@ -264,6 +264,7 @@ async function getMultiTokenInfo(addresses) {
         result[address] = {
           price: parseFloat(attrs.price_usd) || null,
           volume24h: parseFloat(attrs.volume_usd?.h24) || null,
+          priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || null,
           marketCap: parseFloat(attrs.market_cap_usd) || null,
           fdv: parseFloat(attrs.fdv_usd) || null,
           name: attrs.name,

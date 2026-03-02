@@ -94,10 +94,12 @@ router.get('/tokens', asyncHandler(async (req, res) => {
     }
   }
 
-  // --- Phase 2: Market data (price, priceChange24h, mcap, volume) ---
-  // getTokenOverview: per-token pool endpoint → price, priceChange24h, marketCap, volume24h
-  // getMultiTokenInfo: batch token endpoint → price, marketCap, volume24h (no priceChange24h)
-  // Run both in parallel: overview is primary (has priceChange24h), multi fills gaps (esp. marketCap).
+  // --- Phase 2: Market data via batch endpoint (1 API call per 30 tokens) ---
+  // Uses ONLY getMultiTokenInfo to avoid GeckoTerminal rate limiter queue timeouts.
+  // getTokenOverview makes per-token pool calls (N API calls) which saturate the
+  // 30 req/min rate limit and cause 39s+ queue waits with timeouts.
+  // getMultiTokenInfo batches up to 30 tokens in a single API call.
+  // Trade-off: priceChange24h is only on pool endpoints, so it may be 0 here.
   const marketMap = new Map(); // mint → { price, priceChange24h, marketCap, volume24h }
 
   // Chunk getMultiTokenInfo calls (max 30 per request)
@@ -106,56 +108,20 @@ router.get('/tokens', asyncHandler(async (req, res) => {
     multiChunks.push(hackathonMints.slice(i, i + 30));
   }
 
-  const [overviewResults, ...multiResults] = await Promise.all([
-    Promise.allSettled(
-      hackathonMints.map(mint => geckoService.getTokenOverview(mint))
-    ),
-    ...multiChunks.map(chunk => geckoService.getMultiTokenInfo(chunk).catch(() => ({})))
-  ]);
+  const multiResults = await Promise.allSettled(
+    multiChunks.map(chunk => geckoService.getMultiTokenInfo(chunk))
+  );
 
-  // Merge multi-token batch results into a single map
-  const multiMap = new Map();
-  for (const data of multiResults) {
-    if (data) {
-      for (const [mint, info] of Object.entries(data)) {
-        multiMap.set(mint, info);
-      }
-    }
-  }
-
-  // Process overview results as primary source
-  for (let i = 0; i < hackathonMints.length; i++) {
-    const mint = hackathonMints[i];
-    const result = overviewResults[i];
+  for (const result of multiResults) {
     if (result.status === 'fulfilled' && result.value) {
-      const o = result.value;
-      marketMap.set(mint, {
-        price: o.price || 0,
-        priceChange24h: o.priceChange24h || 0,
-        marketCap: o.marketCap || 0,
-        volume24h: o.volume24h || 0
-      });
-    }
-  }
-
-  // Enrich from getMultiTokenInfo: fill gaps where overview returned 0 or failed
-  for (const mint of hackathonMints) {
-    const multi = multiMap.get(mint);
-    if (!multi) continue;
-
-    if (marketMap.has(mint)) {
-      const existing = marketMap.get(mint);
-      if (!existing.marketCap && multi.marketCap) existing.marketCap = multi.marketCap;
-      if (!existing.volume24h && multi.volume24h) existing.volume24h = multi.volume24h;
-      if (!existing.price && multi.price) existing.price = multi.price;
-    } else {
-      // Overview failed entirely — use multi data as fallback
-      marketMap.set(mint, {
-        price: multi.price || 0,
-        priceChange24h: 0, // Not available from multi endpoint
-        marketCap: multi.marketCap || 0,
-        volume24h: multi.volume24h || 0
-      });
+      for (const [mint, info] of Object.entries(result.value)) {
+        marketMap.set(mint, {
+          price: info.price || 0,
+          priceChange24h: info.priceChange24h || 0,
+          marketCap: info.marketCap || 0,
+          volume24h: info.volume24h || 0
+        });
+      }
     }
   }
 
