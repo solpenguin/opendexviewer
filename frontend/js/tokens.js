@@ -154,6 +154,8 @@ const tokenList = {
     const searchClear = document.getElementById('search-clear');
 
     if (searchInput) {
+      this._dropdownIndex = -1;
+
       // Live search on input
       searchInput.addEventListener('input', utils.debounce((e) => {
         const value = e.target.value.trim();
@@ -166,14 +168,34 @@ const tokenList = {
         }
       }, 300));
 
-      // Search on Enter
+      // Keyboard navigation
       searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
+        const dropdown = document.getElementById('search-results');
+        const items = dropdown ? dropdown.querySelectorAll('.search-result-item') : [];
+
+        if (e.key === 'ArrowDown') {
           e.preventDefault();
-          this.search(searchInput.value);
+          if (dropdown && dropdown.style.display !== 'none' && items.length > 0) {
+            this._dropdownIndex = Math.min(this._dropdownIndex + 1, items.length - 1);
+            this._highlightDropdownItem(items);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (dropdown && dropdown.style.display !== 'none' && items.length > 0) {
+            this._dropdownIndex = Math.max(this._dropdownIndex - 1, 0);
+            this._highlightDropdownItem(items);
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this._dropdownIndex >= 0 && items[this._dropdownIndex]) {
+            items[this._dropdownIndex].click();
+          } else {
+            this.search(searchInput.value);
+          }
           this.hideSearchDropdown();
         } else if (e.key === 'Escape') {
           this.hideSearchDropdown();
+          searchInput.blur();
         }
       });
 
@@ -192,9 +214,11 @@ const tokenList = {
 
     if (searchClear) {
       searchClear.addEventListener('click', () => {
-        document.getElementById('search-input').value = '';
+        const input = document.getElementById('search-input');
+        input.value = '';
         searchClear.style.display = 'none';
         this.clearSearch();
+        input.focus();
       });
     }
 
@@ -587,11 +611,21 @@ const tokenList = {
     const dropdown = document.getElementById('search-results');
     if (!dropdown) return;
 
+    this._dropdownIndex = -1;
+
+    // Show loading state immediately
+    dropdown.innerHTML = '<div class="search-dropdown-loading"><div class="loading-spinner"></div></div>';
+    dropdown.style.display = 'block';
+
     try {
       const results = await api.tokens.search(query);
       const limitedResults = results.slice(0, 8);
 
-      // Clear existing results
+      // Check if input has changed while we were fetching
+      const currentValue = document.getElementById('search-input')?.value.trim();
+      if (currentValue !== query) return;
+
+      // Clear loading state
       dropdown.innerHTML = '';
 
       if (limitedResults.length === 0) {
@@ -637,12 +671,31 @@ const tokenList = {
           link.appendChild(price);
           dropdown.appendChild(link);
         });
-      }
 
-      dropdown.style.display = 'block';
+        // "Press Enter" hint
+        if (results.length > 8) {
+          const hint = document.createElement('div');
+          hint.className = 'search-dropdown-hint';
+          hint.textContent = `Press Enter for all ${results.length} results`;
+          dropdown.appendChild(hint);
+        }
+      }
     } catch (error) {
       console.error('Search dropdown error:', error);
+      dropdown.innerHTML = '';
+      const errDiv = document.createElement('div');
+      errDiv.className = 'search-no-results';
+      errDiv.textContent = 'Search failed — try again';
+      dropdown.appendChild(errDiv);
     }
+  },
+
+  // Highlight active dropdown item during keyboard navigation
+  _highlightDropdownItem(items) {
+    items.forEach((item, i) => {
+      item.classList.toggle('search-result-active', i === this._dropdownIndex);
+      if (i === this._dropdownIndex) item.scrollIntoView({ block: 'nearest' });
+    });
   },
 
   // Hide search dropdown
@@ -651,6 +704,7 @@ const tokenList = {
     if (dropdown) {
       dropdown.style.display = 'none';
     }
+    this._dropdownIndex = -1;
   },
 
   // Clear search
