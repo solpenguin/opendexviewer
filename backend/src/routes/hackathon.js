@@ -89,7 +89,8 @@ router.get('/tokens', asyncHandler(async (req, res) => {
             name: h.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
             symbol: h.symbol || '???',
             decimals: h.decimals || 9,
-            logoUri: h.logoUri || null
+            logoUri: h.logoUri || null,
+            supply: h.supply || null
           });
         } else if (dbMap.has(mint)) {
           const d = dbMap.get(mint);
@@ -97,14 +98,16 @@ router.get('/tokens', asyncHandler(async (req, res) => {
             name: d.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
             symbol: d.symbol || '???',
             decimals: d.decimals || 9,
-            logoUri: d.logo_uri || null
+            logoUri: d.logo_uri || null,
+            supply: null
           });
         } else {
           metadataMap.set(mint, {
             name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
             symbol: '???',
             decimals: 9,
-            logoUri: null
+            logoUri: null,
+            supply: null
           });
         }
       }
@@ -147,6 +150,17 @@ router.get('/tokens', asyncHandler(async (req, res) => {
       const meta = metadataMap.get(mint);
       const market = marketMap.get(mint);
 
+      const price = market ? market.price : 0;
+
+      // Market cap fallback chain:
+      // 1. GeckoTerminal market_cap_usd (from token endpoint)
+      // 2. GeckoTerminal fdv_usd (fully diluted valuation)
+      // 3. Computed: current price × on-chain supply (from Helius)
+      let marketCap = market ? market.marketCap : 0;
+      if (!marketCap && price && meta.supply) {
+        marketCap = price * meta.supply;
+      }
+
       return {
         mintAddress: mint,
         address: mint,
@@ -154,9 +168,9 @@ router.get('/tokens', asyncHandler(async (req, res) => {
         symbol: meta.symbol,
         decimals: meta.decimals,
         logoUri: meta.logoUri,
-        price: market ? market.price : 0,
+        price,
         priceChange24h: market ? market.priceChange24h : 0,
-        marketCap: market ? market.marketCap : 0,
+        marketCap,
         volume24h: market ? market.volume24h : 0
       };
     });
