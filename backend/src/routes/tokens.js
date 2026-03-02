@@ -719,6 +719,9 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
               decimals: token.decimals,
               logoURI: token.logoURI || token.logoUri || token.logo,
               price: token.price || 0,
+              priceChange24h: token.priceChange24h ?? null,
+              volume24h: token.volume24h ?? null,
+              marketCap: token.marketCap ?? null,
               source: 'external'
             });
 

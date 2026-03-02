@@ -862,9 +862,9 @@ const tokenList = {
 
     tbody.innerHTML = this.tokens.map((token, index) => {
       const rank = (this.currentPage - 1) * this.pageSize + index + 1;
-      const change = token.priceChange24h || 0;
-      // Don't show positive/negative class if price is 0 (data pending)
-      const changeClass = token.price === 0 ? '' : (change >= 0 ? 'change-positive' : 'change-negative');
+      const change = token.priceChange24h ?? null;
+      // Don't show positive/negative class if price is 0 (data pending) or change is missing
+      const changeClass = (!token.price || change == null) ? '' : (change >= 0 ? 'change-positive' : 'change-negative');
       // Handle different property names from various API responses
       const rawAddress = token.mintAddress || token.address || token.mint || '';
       // Validate and sanitize Solana address - only allow valid base58 characters
@@ -899,10 +899,10 @@ const tokenList = {
               </div>
             </div>
           </td>
-          <td class="cell-price" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data…"></span>' : utils.formatPrice(token.price, 6)}</td>
-          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data…"></span>' : utils.formatChange(change)}</td>
-          <td class="cell-volume" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data…"></span>' : utils.formatNumber(token.volume24h, '$')}</td>
-          <td class="cell-mcap" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data…"></span>' : utils.formatNumber(token.marketCap, '$')}</td>
+          <td class="cell-price" data-navigate="${safeAddress}">${token.price == null ? '--' : token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatPrice(token.price, 6)}</td>
+          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${change == null ? '--' : token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatChange(change)}</td>
+          <td class="cell-volume" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatNumber(token.volume24h, '$')}</td>
+          <td class="cell-mcap" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatNumber(token.marketCap, '$')}</td>
           <td class="cell-views" data-navigate="${safeAddress}">${token.views > 0 ? token.views.toLocaleString() : '0'}</td>
           <td class="cell-sentiment" data-navigate="${safeAddress}">${(() => {
             const s = token.sentimentScore || 0;
