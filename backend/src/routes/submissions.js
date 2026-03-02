@@ -27,6 +27,7 @@ function sanitizeSubmissionOutput(submission) {
     // Privacy: Don't expose submitter_wallet in public responses
     status: submission.status,
     category: submission.category || null,
+    is_cto: submission.is_cto || false,
     created_at: submission.created_at,
     // Vote data
     upvotes: submission.upvotes || 0,
@@ -99,7 +100,7 @@ router.post('/', strictLimiter, validateSubmission, validateSubmissionSignature,
 // POST /api/submissions/batch - Create multiple submissions with a single signature
 // This reduces the number of wallet signature requests from N to 1
 router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubmissionSignature, asyncHandler(async (req, res) => {
-  const { tokenMint, submissions, submitterWallet, category } = req.body;
+  const { tokenMint, submissions, submitterWallet, category, isCTO } = req.body;
 
   const results = [];
   const errors = [];
@@ -112,7 +113,8 @@ router.post('/batch', strictLimiter, validateBatchSubmissions, validateBatchSubm
         submissionType: sub.submissionType,
         contentUrl: sub.contentUrl,
         submitterWallet: submitterWallet || null,
-        category: category || null
+        category: category || null,
+        isCTO: !!isCTO
       });
 
       results.push({

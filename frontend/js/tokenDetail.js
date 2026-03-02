@@ -1311,6 +1311,35 @@ const tokenDetail = {
     nameRow.appendChild(badge);
   },
 
+  // Show CTO badge when a submission is explicitly marked CTO or content has been replaced
+  updateCTOBadge() {
+    const nameRow = document.querySelector('.token-name-row');
+    if (!nameRow) return;
+
+    const existing = nameRow.querySelector('.cto-badge');
+    if (existing) existing.remove();
+
+    const approved = this.submissions.filter(s => s.status === 'approved');
+
+    // Check 1: Any approved submission explicitly marked as CTO by submitter
+    const hasExplicitCTO = approved.some(s => s.is_cto);
+
+    // Check 2: Any submission type has 2+ approved (content was replaced)
+    const typeCounts = {};
+    for (const s of approved) {
+      typeCounts[s.submission_type] = (typeCounts[s.submission_type] || 0) + 1;
+    }
+    const hasReplacementCTO = Object.values(typeCounts).some(count => count >= 2);
+
+    if (!hasExplicitCTO && !hasReplacementCTO) return;
+
+    const badge = document.createElement('span');
+    badge.className = 'cto-badge';
+    badge.textContent = 'CTO';
+    badge.title = 'Community Takeover — content has been updated by the community';
+    nameRow.appendChild(badge);
+  },
+
   // Legacy methods for backward compatibility
   updateBanner() {
     this.updateCommunitySection();
@@ -1346,6 +1375,7 @@ const tokenDetail = {
       // Update the combined community section (uses only approved for display)
       this.updateCommunitySection();
       this.updateCategoryBadge();
+      this.updateCTOBadge();
       this.renderSubmissions('banner');
     } catch (error) {
       console.error('Failed to load submissions:', error);

@@ -168,6 +168,9 @@ async function initializeDatabase() {
       -- Add category column for existing databases
       ALTER TABLE submissions ADD COLUMN IF NOT EXISTS category VARCHAR(10);
 
+      -- CTO (Community Takeover) flag — set by submitter when replacing existing content
+      ALTER TABLE submissions ADD COLUMN IF NOT EXISTS is_cto BOOLEAN DEFAULT FALSE;
+
       CREATE TABLE IF NOT EXISTS votes (
         id SERIAL PRIMARY KEY,
         submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
@@ -534,7 +537,7 @@ async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
 
 // Submission operations
 // Uses transaction to atomically check for duplicates and create submission
-async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet, category }) {
+async function createSubmission({ tokenMint, submissionType, contentUrl, submitterWallet, category, isCTO }) {
   if (!pool) throw new Error('Database not available');
   const client = await pool.connect();
   try {
@@ -543,10 +546,10 @@ async function createSubmission({ tokenMint, submissionType, contentUrl, submitt
     // Insert with ON CONFLICT to handle race conditions atomically
     // The unique index idx_submissions_unique_content enforces uniqueness at DB level
     const result = await client.query(
-      `INSERT INTO submissions (token_mint, submission_type, content_url, submitter_wallet, category)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO submissions (token_mint, submission_type, content_url, submitter_wallet, category, is_cto)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [tokenMint, submissionType, contentUrl, submitterWallet, category || null]
+      [tokenMint, submissionType, contentUrl, submitterWallet, category || null, !!isCTO]
     );
 
     // Initialize vote tally

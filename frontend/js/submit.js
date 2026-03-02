@@ -6,6 +6,7 @@ const submitPage = {
   tokenData: null,
   holderData: null,
   mySubmissions: [],
+  existingSubmissions: [], // Approved submissions for the selected token (for CTO detection)
   walletConnected: false,
   termsAccepted: false,
 
@@ -196,6 +197,12 @@ const submitPage = {
         });
       }
     });
+
+    // CTO toggle — update live preview when toggled
+    const ctoToggle = document.getElementById('cto-toggle');
+    if (ctoToggle) {
+      ctoToggle.addEventListener('change', () => this.updateLivePreview());
+    }
 
     // Form submission
     if (form) {
@@ -484,6 +491,17 @@ const submitPage = {
     if (emptyLinks) {
       emptyLinks.style.display = hasAnyLink ? 'none' : 'block';
     }
+
+    // CTO badge: show if user toggled CTO checkbox, or if filling in a type that replaces existing content
+    const ctoBadge = document.getElementById('preview-cto-badge');
+    if (ctoBadge) {
+      const manualCTO = document.getElementById('cto-toggle')?.checked;
+      const existingTypes = new Set(this.existingSubmissions.map(s => s.submission_type));
+      const autoDetectedCTO = Object.entries(this.fieldValidation).some(
+        ([type, data]) => data.valid && existingTypes.has(type)
+      );
+      ctoBadge.style.display = (manualCTO || autoDetectedCTO) ? 'inline-block' : 'none';
+    }
   },
 
   // Check if connected wallet holds the token
@@ -639,6 +657,14 @@ const submitPage = {
         this.checkHolderStatus(mint);
       }
 
+      // Fetch existing approved submissions for CTO badge detection (non-blocking)
+      api.submissions.getByToken(mint).then(subs => {
+        if (lookupId === this.currentLookupId) {
+          this.existingSubmissions = (subs || []).filter(s => s.status === 'approved');
+          this.updateLivePreview();
+        }
+      }).catch(() => { /* non-critical */ });
+
       this.updateLivePreview();
       this.updateFormState();
 
@@ -669,6 +695,7 @@ const submitPage = {
     this.tokenData = null;
     this.holderVerified = false;
     this.holderData = null;
+    this.existingSubmissions = [];
 
     const preview = document.getElementById('token-preview');
     const status = document.getElementById('token-status');
@@ -818,12 +845,16 @@ const submitPage = {
       const categoryEl = document.querySelector('input[name="category"]:checked');
       const category = categoryEl && categoryEl.value !== 'none' ? categoryEl.value : null;
 
+      // Read CTO toggle
+      const isCTO = document.getElementById('cto-toggle')?.checked || false;
+
       // Submit all items in a single batch request (no signature needed - wallet already connected)
       const batchData = {
         tokenMint,
         submissions,
         submitterWallet: wallet.address,
-        ...(category && { category })
+        ...(category && { category }),
+        ...(isCTO && { isCTO: true })
       };
 
       const response = await api.submissions.createBatch(batchData);
@@ -904,6 +935,10 @@ const submitPage = {
     // Reset category selector
     const noneCategory = document.querySelector('input[name="category"][value="none"]');
     if (noneCategory) noneCategory.checked = true;
+
+    // Reset CTO toggle
+    const ctoToggle = document.getElementById('cto-toggle');
+    if (ctoToggle) ctoToggle.checked = false;
 
     this.resetTokenPreview();
     this.updateFilledCount();
