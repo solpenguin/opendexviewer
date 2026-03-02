@@ -407,13 +407,16 @@
         <div id="tab-tokens" class="admin-tab">
           <div class="tab-header">
             <h2>Tokens</h2>
-            <button id="refresh-tokens" class="btn btn-ghost btn-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
-                <path d="M21 3v5h-5"/>
-              </svg>
-              Refresh
-            </button>
+            <div class="tab-actions">
+              <input type="text" id="tokens-search" class="form-input" placeholder="Search by address, name, or symbol..." style="width: 320px;">
+              <button id="refresh-tokens" class="btn btn-ghost btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                  <path d="M21 3v5h-5"/>
+                </svg>
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div class="table-container">
@@ -426,11 +429,12 @@
                   <th>Submissions</th>
                   <th>Pending</th>
                   <th>Created</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="tokens-table">
                 <tr class="loading-row">
-                  <td colspan="6">
+                  <td colspan="7">
                     <div class="loading-state">
                       <div class="loading-spinner"></div>
                       <span>Loading tokens...</span>
@@ -655,6 +659,23 @@
       <div class="modal-actions">
         <button id="confirm-cancel" class="btn btn-ghost">Cancel</button>
         <button id="confirm-ok" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Token Edit Modal -->
+  <div id="token-edit-modal" class="modal" style="display: none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content modal-wide">
+      <div class="modal-header">
+        <h3 id="token-edit-title">Edit Token Submissions</h3>
+        <button id="token-edit-close" class="btn btn-ghost btn-sm">&times;</button>
+      </div>
+      <div id="token-edit-body" class="modal-body">
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>Loading submissions...</span>
+        </div>
       </div>
     </div>
   </div>

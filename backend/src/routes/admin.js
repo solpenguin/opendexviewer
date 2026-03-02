@@ -218,13 +218,21 @@ router.get('/submissions',
   validateAdminSession,
   requireDatabase,
   asyncHandler(async (req, res) => {
-    const { status, limit = 50, offset = 0, sortBy, sortOrder } = req.query;
+    const { status, tokenMint, limit = 50, offset = 0, sortBy, sortOrder } = req.query;
 
     // Validate status if provided
     if (status && !['pending', 'approved', 'rejected'].includes(status)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid status filter'
+      });
+    }
+
+    // Validate tokenMint if provided
+    if (tokenMint && !SOLANA_ADDRESS_REGEX.test(tokenMint)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token mint address'
       });
     }
 
@@ -235,6 +243,7 @@ router.get('/submissions',
 
     const result = await db.getAllSubmissions({
       status,
+      tokenMint,
       limit: Math.min(Math.max(1, parseInt(limit) || 50), 100),
       offset: Math.max(0, parseInt(offset) || 0),
       sortBy: validatedSortBy,
@@ -297,6 +306,73 @@ router.patch('/submissions/:id/status',
       success: true,
       data: updated
     });
+  })
+);
+
+/**
+ * PATCH /admin/submissions/:id
+ * Update submission content (content_url, is_cto)
+ */
+router.patch('/submissions/:id',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const submissionId = parseInt(req.params.id);
+    if (isNaN(submissionId)) {
+      return res.status(400).json({ success: false, error: 'Invalid submission ID' });
+    }
+
+    const { contentUrl, isCTO } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (contentUrl !== undefined) {
+      if (typeof contentUrl !== 'string' || contentUrl.trim().length === 0) {
+        return res.status(400).json({ success: false, error: 'contentUrl must be a non-empty string' });
+      }
+      if (contentUrl.trim().length > 2000) {
+        return res.status(400).json({ success: false, error: 'contentUrl exceeds maximum length (2000)' });
+      }
+      try {
+        const parsed = new URL(contentUrl.trim());
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return res.status(400).json({ success: false, error: 'contentUrl must use http or https protocol' });
+        }
+      } catch {
+        return res.status(400).json({ success: false, error: 'contentUrl must be a valid URL' });
+      }
+      params.push(contentUrl.trim());
+      updates.push(`content_url = $${params.length}`);
+    }
+
+    if (isCTO !== undefined) {
+      if (typeof isCTO !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'isCTO must be a boolean' });
+      }
+      params.push(isCTO);
+      updates.push(`is_cto = $${params.length}`);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+
+    params.push(submissionId);
+    const result = await db.pool.query(
+      `UPDATE submissions SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Submission not found' });
+    }
+
+    // Invalidate cache for this token
+    if (result.rows[0].token_mint) {
+      await cache.clearPattern(keys.submissions(result.rows[0].token_mint) + '*');
+    }
+
+    res.json({ success: true, data: result.rows[0] });
   })
 );
 
@@ -468,10 +544,24 @@ router.get('/tokens',
   validateAdminSession,
   requireDatabase,
   asyncHandler(async (req, res) => {
-    const { limit = 50, offset = 0 } = req.query;
+    const { limit = 50, offset = 0, search } = req.query;
 
     const parsedLimit = Math.min(parseInt(limit) || 50, 100);
     const parsedOffset = parseInt(offset) || 0;
+
+    // Build WHERE clause for optional search by mint address, name, or symbol
+    // Escape LIKE metacharacters to prevent wildcard injection
+    let whereClause = '';
+    let countWhereClause = '';
+    const queryParams = [parsedLimit, parsedOffset];
+    let searchParam = null;
+    if (search && search.trim().length >= 2) {
+      const term = search.trim().slice(0, 100).replace(/[%_\\]/g, '\\$&');
+      searchParam = `%${term}%`;
+      queryParams.push(searchParam);
+      whereClause = `WHERE t.mint_address ILIKE $3 OR t.name ILIKE $3 OR t.symbol ILIKE $3`;
+      countWhereClause = `WHERE t.mint_address ILIKE $1 OR t.name ILIKE $1 OR t.symbol ILIKE $1`;
+    }
 
     const [result, countResult] = await Promise.all([
       db.pool.query(`
@@ -480,11 +570,17 @@ router.get('/tokens',
                COUNT(s.id) FILTER (WHERE s.status = 'pending') as pending_count
         FROM tokens t
         LEFT JOIN submissions s ON t.mint_address = s.token_mint
+        ${whereClause}
         GROUP BY t.id
         ORDER BY submission_count DESC, t.created_at DESC
         LIMIT $1 OFFSET $2
-      `, [parsedLimit, parsedOffset]),
-      db.pool.query('SELECT COUNT(*) FROM tokens')
+      `, queryParams),
+      db.pool.query(
+        searchParam
+          ? `SELECT COUNT(*) FROM tokens t ${countWhereClause}`
+          : 'SELECT COUNT(*) FROM tokens',
+        searchParam ? [searchParam] : []
+      )
     ]);
 
     res.json({

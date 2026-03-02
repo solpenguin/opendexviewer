@@ -119,6 +119,19 @@ const adminApi = {
     return this.request(`/admin/tokens${query ? `?${query}` : ''}`);
   },
 
+  async getTokenSubmissions(tokenMint, params = {}) {
+    const queryParams = { tokenMint, ...params };
+    const query = new URLSearchParams(queryParams).toString();
+    return this.request(`/admin/submissions${query ? `?${query}` : ''}`);
+  },
+
+  async updateSubmission(id, updates) {
+    return this.request(`/admin/submissions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates)
+    });
+  },
+
   // Settings
   async getSettings() {
     return this.request('/admin/settings');
@@ -255,6 +268,16 @@ const adminPanel = {
     document.getElementById('refresh-apikeys')?.addEventListener('click', () => this.loadApiKeys());
     document.getElementById('refresh-tokens')?.addEventListener('click', () => this.loadTokens());
 
+    // Token search (debounced)
+    let tokenSearchTimer = null;
+    document.getElementById('tokens-search')?.addEventListener('input', () => {
+      clearTimeout(tokenSearchTimer);
+      tokenSearchTimer = setTimeout(() => {
+        this.pagination.tokens.page = 1;
+        this.loadTokens();
+      }, 400);
+    });
+
     // Submission filter
     document.getElementById('submission-filter')?.addEventListener('change', () => {
       this.pagination.submissions.page = 1;
@@ -275,8 +298,12 @@ const adminPanel = {
     this.bindPagination('bugreports');
 
     // Modal
-    document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.hideModal());
+    document.querySelector('#confirm-modal .modal-backdrop')?.addEventListener('click', () => this.hideModal());
     document.getElementById('confirm-cancel')?.addEventListener('click', () => this.hideModal());
+
+    // Token edit modal
+    document.querySelector('#token-edit-modal .modal-backdrop')?.addEventListener('click', () => this.hideTokenEditModal());
+    document.getElementById('token-edit-close')?.addEventListener('click', () => this.hideTokenEditModal());
 
     // Development mode toggle
     document.getElementById('dev-mode-toggle')?.addEventListener('change', (e) => this.toggleDevMode(e.target.checked));
@@ -666,7 +693,7 @@ const adminPanel = {
     const tbody = document.getElementById('tokens-table');
     tbody.innerHTML = `
       <tr class="loading-row">
-        <td colspan="6">
+        <td colspan="7">
           <div class="loading-state">
             <div class="loading-spinner"></div>
             <span>Loading tokens...</span>
@@ -678,8 +705,12 @@ const adminPanel = {
     try {
       const { page, limit } = this.pagination.tokens;
       const offset = (page - 1) * limit;
+      const search = document.getElementById('tokens-search')?.value.trim() || '';
 
-      const result = await adminApi.getTokens({ limit, offset });
+      const params = { limit, offset };
+      if (search.length >= 2) params.search = search;
+
+      const result = await adminApi.getTokens(params);
       const { tokens, total } = result.data;
 
       this.pagination.tokens.total = total;
@@ -688,7 +719,7 @@ const adminPanel = {
       if (tokens.length === 0) {
         tbody.innerHTML = `
           <tr class="empty-row">
-            <td colspan="6">No tokens found</td>
+            <td colspan="7">${search ? 'No tokens match your search' : 'No tokens found'}</td>
           </tr>
         `;
         return;
@@ -703,21 +734,110 @@ const adminPanel = {
             </div>
           </td>
           <td>${this.escapeHtml(token.symbol || '-')}</td>
-          <td class="wallet-address">${this.truncateAddress(token.mint_address)}</td>
+          <td class="wallet-address" title="${this.escapeHtml(token.mint_address)}">${this.truncateAddress(token.mint_address)}</td>
           <td>${token.submission_count}</td>
           <td>${token.pending_count > 0 ? `<span class="status-badge pending">${token.pending_count}</span>` : '0'}</td>
           <td>${this.formatDate(token.created_at)}</td>
+          <td>
+            <div class="table-actions">
+              <button class="action-btn view token-edit-btn" data-mint="${this.escapeHtml(token.mint_address)}" data-name="${this.escapeHtml(token.name || 'Unknown')}">Edit</button>
+            </div>
+          </td>
         </tr>
       `).join('');
+
+      // Wire edit buttons
+      tbody.querySelectorAll('.token-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.showTokenEditModal(btn.dataset.mint, btn.dataset.name);
+        });
+      });
 
     } catch (error) {
       console.error('Failed to load tokens:', error);
       tbody.innerHTML = `
         <tr class="empty-row">
-          <td colspan="6">Failed to load tokens: ${this.escapeHtml(error.message)}</td>
+          <td colspan="7">Failed to load tokens: ${this.escapeHtml(error.message)}</td>
         </tr>
       `;
     }
+  },
+
+  // Token edit modal
+  async showTokenEditModal(mintAddress, tokenName) {
+    const modal = document.getElementById('token-edit-modal');
+    const title = document.getElementById('token-edit-title');
+    const body = document.getElementById('token-edit-body');
+
+    title.textContent = `Edit: ${tokenName}`;
+    body.innerHTML = `
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <span>Loading submissions...</span>
+      </div>
+    `;
+    modal.style.display = 'flex';
+
+    try {
+      const result = await adminApi.getTokenSubmissions(mintAddress, { limit: 100 });
+      const submissions = result.data.submissions || [];
+
+      if (submissions.length === 0) {
+        body.innerHTML = '<div class="no-submissions-msg">No submissions for this token.</div>';
+        return;
+      }
+
+      body.innerHTML = submissions.map(sub => `
+        <div class="submission-edit-row" data-sub-id="${parseInt(sub.id, 10) || 0}">
+          <span class="sub-type">${this.escapeHtml(sub.submission_type)}</span>
+          <span class="sub-status"><span class="status-badge ${this.escapeHtml(sub.status)}">${this.escapeHtml(sub.status)}</span></span>
+          <input type="text" class="sub-url-input" value="${this.escapeHtml(sub.content_url || '')}" data-field="contentUrl">
+          <label class="sub-cto-label">
+            <input type="checkbox" ${sub.is_cto ? 'checked' : ''} data-field="isCTO">
+            CTO
+          </label>
+          <button class="btn btn-primary btn-sm sub-save-btn">Save</button>
+        </div>
+      `).join('');
+
+      // Wire save buttons
+      body.querySelectorAll('.sub-save-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const row = btn.closest('.submission-edit-row');
+          const id = parseInt(row.dataset.subId);
+          const contentUrl = row.querySelector('[data-field="contentUrl"]').value.trim();
+          const isCTO = row.querySelector('[data-field="isCTO"]').checked;
+
+          if (!contentUrl) {
+            toast.error('URL cannot be empty');
+            return;
+          }
+
+          btn.disabled = true;
+          btn.textContent = 'Saving...';
+
+          try {
+            await adminApi.updateSubmission(id, { contentUrl, isCTO });
+            toast.success('Submission updated');
+            btn.textContent = 'Saved';
+            setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1500);
+            this.loadTokens();
+          } catch (error) {
+            toast.error(`Failed to save: ${error.message}`);
+            btn.textContent = 'Save';
+            btn.disabled = false;
+          }
+        });
+      });
+
+    } catch (error) {
+      body.innerHTML = `<div class="no-submissions-msg">Failed to load submissions: ${this.escapeHtml(error.message)}</div>`;
+    }
+  },
+
+  hideTokenEditModal() {
+    document.getElementById('token-edit-modal').style.display = 'none';
+    document.getElementById('token-edit-body').innerHTML = '';
   },
 
   // Update pagination UI

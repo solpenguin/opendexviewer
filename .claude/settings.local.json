@@ -72,7 +72,8 @@
       "WebFetch(domain:docs.github.com)",
       "WebFetch(domain:api.github.com)",
       "Bash(grep -n \"pendingVotes\\\\|voteQueue\\\\|inFlight\\\\|submitInProgress\\\\|pendingSubmissions\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
-      "Bash(grep -n \"api.submissions.getByToken\\\\|POST.*submissions\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
+      "Bash(grep -n \"api.submissions.getByToken\\\\|POST.*submissions\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(grep -n \"ALTER TABLE.*tokens\\\\|ADD COLUMN\" /c/VS/OPENDEX/opendexviewer/backend/db/init.sql /c/VS/OPENDEX/opendexviewer/backend/db/migrations/*.sql)"
     ]
   }
 }

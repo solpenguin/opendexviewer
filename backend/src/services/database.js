@@ -1479,7 +1479,7 @@ async function getBugReportCounts() {
 }
 
 // Get all submissions with pagination for admin
-async function getAllSubmissions({ status, limit = 50, offset = 0, sortBy = 'created_at', sortOrder = 'DESC' } = {}) {
+async function getAllSubmissions({ status, tokenMint, limit = 50, offset = 0, sortBy = 'created_at', sortOrder = 'DESC' } = {}) {
   if (!pool) return { submissions: [], total: 0 };
 
   // Validate sort column
@@ -1495,10 +1495,20 @@ async function getAllSubmissions({ status, limit = 50, offset = 0, sortBy = 'cre
     LEFT JOIN tokens t ON s.token_mint = t.mint_address
   `;
   const params = [];
+  const conditions = [];
 
   if (status) {
     params.push(status);
-    query += ` WHERE s.status = $${params.length}`;
+    conditions.push(`s.status = $${params.length}`);
+  }
+
+  if (tokenMint) {
+    params.push(tokenMint);
+    conditions.push(`s.token_mint = $${params.length}`);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
   }
 
   // Handle sorting - use explicit map to prevent interpolation of user input
@@ -1519,9 +1529,17 @@ async function getAllSubmissions({ status, limit = 50, offset = 0, sortBy = 'cre
   // Get total count
   let countQuery = `SELECT COUNT(*) FROM submissions s`;
   const countParams = [];
+  const countConditions = [];
   if (status) {
     countParams.push(status);
-    countQuery += ` WHERE s.status = $1`;
+    countConditions.push(`s.status = $${countParams.length}`);
+  }
+  if (tokenMint) {
+    countParams.push(tokenMint);
+    countConditions.push(`s.token_mint = $${countParams.length}`);
+  }
+  if (countConditions.length > 0) {
+    countQuery += ` WHERE ${countConditions.join(' AND ')}`;
   }
   const countResult = await pool.query(countQuery, countParams);
 
