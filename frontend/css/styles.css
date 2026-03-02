@@ -9447,7 +9447,6 @@ body.landscape .hero h1 {
     gap: 0.5rem;
   }
 
-  .hackathon-table .cell-volume,
   .hackathon-table .cell-liquidity {
     display: none;
   }

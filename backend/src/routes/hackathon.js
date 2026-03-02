@@ -19,6 +19,8 @@ if (raw) {
     .split(',')
     .map(s => s.trim())
     .filter(s => s.length > 0 && SOLANA_ADDRESS_REGEX.test(s));
+  // Deduplicate (preserve order)
+  hackathonMints = [...new Set(hackathonMints)];
   console.log(`[Hackathon] Loaded ${hackathonMints.length} token(s) from HACKATHON_TOKENS`);
 } else {
   console.log('[Hackathon] HACKATHON_TOKENS not set — hackathon page will show empty state');
@@ -44,154 +46,121 @@ router.get('/tokens', asyncHandler(async (req, res) => {
     return res.json(cached.value);
   }
 
-  // Fetch token data using the same multi-source strategy as /api/tokens/batch
-  const results = [];
-  const uncachedMints = [];
+  // --- Phase 1: Metadata (name, symbol, logo) from Helius + DB ---
+  const metadataMap = new Map(); // mint → { name, symbol, logoUri, decimals }
 
-  // Check individual token caches
-  const cacheChecks = await Promise.all(
-    hackathonMints.map(async (mint) => {
-      const cacheKey = keys.tokenInfo(mint);
-      const cachedToken = await cache.getWithMeta(cacheKey);
-      return { mint, cached: cachedToken };
-    })
+  const [heliusData, dbRows] = await Promise.all([
+    solanaService.isHeliusConfigured()
+      ? solanaService.getTokenMetadataBatch(hackathonMints).catch(() => ({}))
+      : Promise.resolve({}),
+    db.getTokensBatch(hackathonMints).catch(() => [])
+  ]);
+
+  // Index DB rows by mint address
+  const dbMap = new Map();
+  if (dbRows) {
+    for (const row of dbRows) {
+      if (row && row.mint_address) {
+        dbMap.set(row.mint_address, row);
+      }
+    }
+  }
+
+  // Build metadata: Helius first, DB fallback
+  for (const mint of hackathonMints) {
+    if (heliusData[mint]) {
+      const h = heliusData[mint];
+      metadataMap.set(mint, {
+        name: h.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+        symbol: h.symbol || '???',
+        decimals: h.decimals || 9,
+        logoUri: h.logoUri || null
+      });
+    } else if (dbMap.has(mint)) {
+      const d = dbMap.get(mint);
+      metadataMap.set(mint, {
+        name: d.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+        symbol: d.symbol || '???',
+        decimals: d.decimals || 9,
+        logoUri: d.logo_uri || null
+      });
+    } else {
+      metadataMap.set(mint, {
+        name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+        symbol: '???',
+        decimals: 9,
+        logoUri: null
+      });
+    }
+  }
+
+  // --- Phase 2: Market data (price, priceChange24h, mcap, liquidity) ---
+  // getTokenOverview fetches pool data which includes priceChange24h and liquidity.
+  // getMultiTokenInfo only returns price/volume/mcap (no priceChange24h or liquidity).
+  // For the bounded hackathon set, individual pool fetches are acceptable with 60s response caching.
+  const marketMap = new Map(); // mint → { price, priceChange24h, marketCap, liquidity }
+
+  const overviewResults = await Promise.allSettled(
+    hackathonMints.map(mint => geckoService.getTokenOverview(mint))
   );
 
-  for (const { mint, cached: cachedToken } of cacheChecks) {
-    if (cachedToken && cachedToken.value) {
-      results.push({ mint, data: cachedToken.value });
-    } else {
-      uncachedMints.push(mint);
+  for (let i = 0; i < hackathonMints.length; i++) {
+    const mint = hackathonMints[i];
+    const result = overviewResults[i];
+    if (result.status === 'fulfilled' && result.value) {
+      const o = result.value;
+      marketMap.set(mint, {
+        price: o.price || 0,
+        priceChange24h: o.priceChange24h || 0,
+        marketCap: o.marketCap || 0,
+        liquidity: o.liquidity || 0
+      });
     }
   }
 
-  // Batch fetch uncached tokens from Helius + DB + GeckoTerminal
-  if (uncachedMints.length > 0) {
-    const [heliusData, dbRows] = await Promise.all([
-      solanaService.isHeliusConfigured()
-        ? solanaService.getTokenMetadataBatch(uncachedMints).catch(() => ({}))
-        : Promise.resolve({}),
-      db.getTokensBatch(uncachedMints).catch(() => [])
-    ]);
-
-    const localTokens = {};
-    if (dbRows) {
-      for (const local of dbRows) {
-        if (local && local.mint_address && !heliusData[local.mint_address]) {
-          localTokens[local.mint_address] = {
-            mintAddress: local.mint_address,
-            address: local.mint_address,
-            name: local.name,
-            symbol: local.symbol,
-            decimals: local.decimals,
-            logoUri: local.logo_uri
-          };
+  // Fallback: for tokens that failed getTokenOverview, try getMultiTokenInfo batch
+  const missingMarket = hackathonMints.filter(m => !marketMap.has(m));
+  if (missingMarket.length > 0) {
+    try {
+      // getMultiTokenInfo handles max 30 per call
+      const chunks = [];
+      for (let i = 0; i < missingMarket.length; i += 30) {
+        chunks.push(missingMarket.slice(i, i + 30));
+      }
+      for (const chunk of chunks) {
+        const data = await geckoService.getMultiTokenInfo(chunk);
+        for (const mint of chunk) {
+          if (data[mint]) {
+            marketMap.set(mint, {
+              price: data[mint].price || 0,
+              priceChange24h: 0, // Not available from multi endpoint
+              marketCap: data[mint].marketCap || 0,
+              liquidity: 0 // Not available from multi endpoint
+            });
+          }
         }
       }
-    }
-
-    // GeckoTerminal for market data on remaining tokens
-    let geckoData = {};
-    const stillNeeded = uncachedMints.filter(m => !heliusData[m] && !localTokens[m]);
-    if (stillNeeded.length > 0 && stillNeeded.length <= 30) {
-      try {
-        geckoData = await geckoService.getMultiTokenInfo(stillNeeded);
-      } catch (_) { /* swallow */ }
-    }
-
-    for (const mint of uncachedMints) {
-      let tokenData = null;
-
-      if (heliusData[mint]) {
-        const h = heliusData[mint];
-        tokenData = {
-          mintAddress: mint,
-          address: mint,
-          name: h.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-          symbol: h.symbol || '???',
-          decimals: h.decimals || 9,
-          logoUri: h.logoUri || null,
-          price: 0,
-          priceChange24h: 0,
-          volume24h: 0,
-          marketCap: 0,
-          liquidity: 0
-        };
-      } else if (localTokens[mint]) {
-        tokenData = {
-          ...localTokens[mint],
-          price: 0,
-          priceChange24h: 0,
-          volume24h: 0,
-          marketCap: 0,
-          liquidity: 0
-        };
-      } else if (geckoData[mint]) {
-        const g = geckoData[mint];
-        tokenData = {
-          mintAddress: mint,
-          address: mint,
-          name: g.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-          symbol: g.symbol || '???',
-          decimals: g.decimals || 9,
-          logoUri: g.logoUri || null,
-          price: g.price || 0,
-          priceChange24h: 0,
-          volume24h: g.volume24h || 0,
-          marketCap: g.marketCap || 0,
-          liquidity: g.liquidity || 0
-        };
-      } else {
-        tokenData = {
-          mintAddress: mint,
-          address: mint,
-          name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-          symbol: '???',
-          decimals: 9,
-          logoUri: null,
-          price: 0,
-          priceChange24h: 0,
-          volume24h: 0,
-          marketCap: 0,
-          liquidity: 0
-        };
-      }
-
-      // Cache individual token
-      if (tokenData) {
-        const cacheKey = keys.tokenInfo(mint);
-        await cache.setWithTimestamp(cacheKey, tokenData, TTL.PRICE_DATA);
-        results.push({ mint, data: tokenData });
-      }
-    }
+    } catch (_) { /* swallow — tokens will show zero values */ }
   }
 
-  // Now enrich all tokens with GeckoTerminal market data (price, volume, mcap, liquidity)
-  // Individual caches may have stale price data; batch-fetch fresh market data
-  let marketData = {};
-  try {
-    marketData = await geckoService.getMultiTokenInfo(hackathonMints.slice(0, 30));
-  } catch (_) { /* swallow */ }
-
-  // Build response in original env var order
+  // --- Phase 3: Build response in env var order ---
   const tokens = hackathonMints.map(mint => {
-    const result = results.find(r => r.mint === mint);
-    if (!result || !result.data) return null;
+    const meta = metadataMap.get(mint);
+    const market = marketMap.get(mint);
 
-    const token = { ...result.data };
-
-    // Overlay fresh market data if available
-    const market = marketData[mint];
-    if (market) {
-      if (market.price !== undefined) token.price = market.price;
-      if (market.priceChange24h !== undefined) token.priceChange24h = market.priceChange24h;
-      if (market.volume24h !== undefined) token.volume24h = market.volume24h;
-      if (market.marketCap !== undefined) token.marketCap = market.marketCap;
-      if (market.liquidity !== undefined) token.liquidity = market.liquidity;
-    }
-
-    return token;
-  }).filter(Boolean);
+    return {
+      mintAddress: mint,
+      address: mint,
+      name: meta.name,
+      symbol: meta.symbol,
+      decimals: meta.decimals,
+      logoUri: meta.logoUri,
+      price: market ? market.price : 0,
+      priceChange24h: market ? market.priceChange24h : 0,
+      marketCap: market ? market.marketCap : 0,
+      liquidity: market ? market.liquidity : 0
+    };
+  });
 
   const response = {
     success: true,

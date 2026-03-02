@@ -18,7 +18,7 @@ const hackathonPage = {
     if (this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="loading-row">
-          <td colspan="7">
+          <td colspan="6">
             <div class="loading-state">
               <div class="loading-spinner"></div>
               <span>Loading hackathon tokens...</span>
@@ -53,7 +53,7 @@ const hackathonPage = {
       if (this.tokens.length === 0) {
         tbody.innerHTML = `
           <tr class="empty-row">
-            <td colspan="7">
+            <td colspan="6">
               <div class="empty-state">
                 <span>Failed to load hackathon tokens. Please try again.</span>
               </div>
@@ -71,7 +71,7 @@ const hackathonPage = {
     if (!this.tokens || this.tokens.length === 0) {
       tbody.innerHTML = `
         <tr class="empty-row">
-          <td colspan="7">
+          <td colspan="6">
             <div class="empty-state">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-dim); margin-bottom: 0.75rem;">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -118,7 +118,6 @@ const hackathonPage = {
             <span class="price-change ${changeClass}">${changeDisplay}</span>
           </td>
           <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap, '$')}</td>
-          <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h, '$')}</td>
           <td class="cell-liquidity" data-navigate="${safeAddress}">${utils.formatNumber(token.liquidity, '$')}</td>
         </tr>
       `;
