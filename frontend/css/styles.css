@@ -9418,7 +9418,7 @@ body.landscape .hero h1 {
   text-align: right;
 }
 
-.hackathon-table .cell-liquidity {
+.hackathon-table .cell-volume {
   text-align: right;
   min-width: 100px;
 }
@@ -9447,7 +9447,7 @@ body.landscape .hero h1 {
     gap: 0.5rem;
   }
 
-  .hackathon-table .cell-liquidity {
+  .hackathon-table .cell-volume {
     display: none;
   }
 }

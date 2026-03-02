@@ -118,7 +118,7 @@ const hackathonPage = {
             <span class="price-change ${changeClass}">${changeDisplay}</span>
           </td>
           <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap, '$')}</td>
-          <td class="cell-liquidity" data-navigate="${safeAddress}">${utils.formatNumber(token.liquidity, '$')}</td>
+          <td class="cell-volume" data-navigate="${safeAddress}">${utils.formatNumber(token.volume24h, '$')}</td>
         </tr>
       `;
     }).join('');

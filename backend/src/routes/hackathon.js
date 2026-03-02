@@ -94,16 +94,36 @@ router.get('/tokens', asyncHandler(async (req, res) => {
     }
   }
 
-  // --- Phase 2: Market data (price, priceChange24h, mcap, liquidity) ---
-  // getTokenOverview fetches pool data which includes priceChange24h and liquidity.
-  // getMultiTokenInfo only returns price/volume/mcap (no priceChange24h or liquidity).
-  // For the bounded hackathon set, individual pool fetches are acceptable with 60s response caching.
-  const marketMap = new Map(); // mint → { price, priceChange24h, marketCap, liquidity }
+  // --- Phase 2: Market data (price, priceChange24h, mcap, volume) ---
+  // getTokenOverview: per-token pool endpoint → price, priceChange24h, marketCap, volume24h
+  // getMultiTokenInfo: batch token endpoint → price, marketCap, volume24h (no priceChange24h)
+  // Run both in parallel: overview is primary (has priceChange24h), multi fills gaps (esp. marketCap).
+  const marketMap = new Map(); // mint → { price, priceChange24h, marketCap, volume24h }
 
-  const overviewResults = await Promise.allSettled(
-    hackathonMints.map(mint => geckoService.getTokenOverview(mint))
-  );
+  // Chunk getMultiTokenInfo calls (max 30 per request)
+  const multiChunks = [];
+  for (let i = 0; i < hackathonMints.length; i += 30) {
+    multiChunks.push(hackathonMints.slice(i, i + 30));
+  }
 
+  const [overviewResults, ...multiResults] = await Promise.all([
+    Promise.allSettled(
+      hackathonMints.map(mint => geckoService.getTokenOverview(mint))
+    ),
+    ...multiChunks.map(chunk => geckoService.getMultiTokenInfo(chunk).catch(() => ({})))
+  ]);
+
+  // Merge multi-token batch results into a single map
+  const multiMap = new Map();
+  for (const data of multiResults) {
+    if (data) {
+      for (const [mint, info] of Object.entries(data)) {
+        multiMap.set(mint, info);
+      }
+    }
+  }
+
+  // Process overview results as primary source
   for (let i = 0; i < hackathonMints.length; i++) {
     const mint = hackathonMints[i];
     const result = overviewResults[i];
@@ -113,34 +133,30 @@ router.get('/tokens', asyncHandler(async (req, res) => {
         price: o.price || 0,
         priceChange24h: o.priceChange24h || 0,
         marketCap: o.marketCap || 0,
-        liquidity: o.liquidity || 0
+        volume24h: o.volume24h || 0
       });
     }
   }
 
-  // Fallback: for tokens that failed getTokenOverview, try getMultiTokenInfo batch
-  const missingMarket = hackathonMints.filter(m => !marketMap.has(m));
-  if (missingMarket.length > 0) {
-    try {
-      // getMultiTokenInfo handles max 30 per call
-      const chunks = [];
-      for (let i = 0; i < missingMarket.length; i += 30) {
-        chunks.push(missingMarket.slice(i, i + 30));
-      }
-      for (const chunk of chunks) {
-        const data = await geckoService.getMultiTokenInfo(chunk);
-        for (const mint of chunk) {
-          if (data[mint]) {
-            marketMap.set(mint, {
-              price: data[mint].price || 0,
-              priceChange24h: 0, // Not available from multi endpoint
-              marketCap: data[mint].marketCap || 0,
-              liquidity: 0 // Not available from multi endpoint
-            });
-          }
-        }
-      }
-    } catch (_) { /* swallow — tokens will show zero values */ }
+  // Enrich from getMultiTokenInfo: fill gaps where overview returned 0 or failed
+  for (const mint of hackathonMints) {
+    const multi = multiMap.get(mint);
+    if (!multi) continue;
+
+    if (marketMap.has(mint)) {
+      const existing = marketMap.get(mint);
+      if (!existing.marketCap && multi.marketCap) existing.marketCap = multi.marketCap;
+      if (!existing.volume24h && multi.volume24h) existing.volume24h = multi.volume24h;
+      if (!existing.price && multi.price) existing.price = multi.price;
+    } else {
+      // Overview failed entirely — use multi data as fallback
+      marketMap.set(mint, {
+        price: multi.price || 0,
+        priceChange24h: 0, // Not available from multi endpoint
+        marketCap: multi.marketCap || 0,
+        volume24h: multi.volume24h || 0
+      });
+    }
   }
 
   // --- Phase 3: Build response in env var order ---
@@ -158,7 +174,7 @@ router.get('/tokens', asyncHandler(async (req, res) => {
       price: market ? market.price : 0,
       priceChange24h: market ? market.priceChange24h : 0,
       marketCap: market ? market.marketCap : 0,
-      liquidity: market ? market.liquidity : 0
+      volume24h: market ? market.volume24h : 0
     };
   });
 
