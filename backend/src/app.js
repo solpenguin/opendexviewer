@@ -20,6 +20,7 @@ const sentimentRoutes = require('./routes/sentiment');
 const callRoutes = require('./routes/calls');
 const bugReportRoutes = require('./routes/bugReports');
 const hackathonRoutes = require('./routes/hackathon');
+const ogfinderRoutes = require('./routes/ogfinder');
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -268,6 +269,7 @@ app.use('/api/sentiment', sentimentRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/bug-reports', bugReportRoutes);
 app.use('/api/hackathon', hackathonRoutes);
+app.use('/api/ogfinder', ogfinderRoutes);
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);

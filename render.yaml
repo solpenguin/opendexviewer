@@ -172,4 +172,5 @@ databases:
 #    - Source: /token/*  -> Destination: /token.html (Rewrite)
 #    - Source: /submit   -> Destination: /submit.html (Rewrite)
 #    - Source: /hackathon -> Destination: /hackathon.html (Rewrite)
+#    - Source: /ogfinder  -> Destination: /ogfinder.html (Rewrite)
 # =====================================================

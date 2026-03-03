@@ -567,6 +567,20 @@ const api = {
     }
   },
 
+  // OG Finder endpoints
+  ogfinder: {
+    async search(query) {
+      const encoded = encodeURIComponent(query.trim());
+      const cacheKey = `ogfinder:search:${encoded}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/ogfinder/search?q=${encoded}`),
+        apiCache.TTL.tokenList,
+        true
+      );
+    }
+  },
+
   // Hackathon endpoints
   hackathon: {
     async getTokens() {

@@ -9481,6 +9481,190 @@ body.landscape .hero h1 {
   }
 }
 
+/* ===== OG Finder Page ===== */
+
+.ogfinder-hero {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(99, 102, 241, 0.06));
+  border-color: rgba(34, 197, 94, 0.15);
+}
+
+.ogfinder-hero .submit-hero-icon {
+  color: #22c55e;
+}
+
+/* Search bar */
+.ogfinder-search {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 540px;
+  width: 100%;
+  margin-top: 1.25rem;
+}
+
+.ogfinder-search-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.ogfinder-search-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.ogfinder-search-input {
+  width: 100%;
+  padding: 0.75rem 2.5rem 0.75rem 2.75rem;
+  font-size: 0.9375rem;
+  font-family: var(--font-primary);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ogfinder-search-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.ogfinder-search-input::placeholder {
+  color: var(--text-dim);
+}
+
+.ogfinder-search-clear {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ogfinder-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Table header */
+.ogfinder-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.ogfinder-table-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ogfinder-title-icon {
+  color: #22c55e;
+  flex-shrink: 0;
+}
+
+.ogfinder-table-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ogfinder-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-full, 9999px);
+}
+
+.ogfinder-count:empty {
+  display: none;
+}
+
+.ogfinder-query-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Mint address column */
+.ogfinder-mint {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* Date column */
+.ogfinder-table .cell-date {
+  text-align: right;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  min-width: 110px;
+}
+
+.ogfinder-table .cell-mint {
+  min-width: 100px;
+}
+
+/*
+ * OG Finder table responsive breakpoints:
+ *   Desktop: #, Token, Mint Address, Mint Date, Market Cap  (5 cols)
+ *   <=768:   #, Token, Mint Date, Market Cap                (4 cols — hide Mint Address)
+ *   <=480:   #, Token, Mint Date                            (3 cols — hide Market Cap)
+ */
+@media (max-width: 768px) {
+  .ogfinder-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.375rem;
+    padding: 0.625rem 1rem;
+  }
+
+  .ogfinder-search {
+    flex-direction: column;
+  }
+
+  .ogfinder-table .cell-mint {
+    display: none;
+  }
+
+  .ogfinder-table .cell-mcap,
+  .ogfinder-table .cell-date {
+    display: table-cell;
+  }
+}
+
+@media (max-width: 480px) {
+  .ogfinder-table .cell-mcap {
+    display: none;
+  }
+
+  .ogfinder-table .cell-date {
+    display: table-cell;
+  }
+}
+
 /* ===== Token Call Modal ===== */
 .call-modal {
   position: fixed;

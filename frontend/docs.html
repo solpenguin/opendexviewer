@@ -46,7 +46,13 @@
         <a href="/" class="nav-link">Tokens</a>
         <a href="submit.html" class="nav-link">Submit</a>
         <a href="community.html" class="nav-link">Community</a>
-        <a href="hackathon.html" class="nav-link">Hackathon</a>
+        <div class="nav-dropdown">
+          <a href="#" class="nav-link nav-dropdown-toggle">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
+          <div class="nav-dropdown-menu">
+            <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
+            <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
+          </div>
+        </div>
         <div class="nav-dropdown">
           <a href="about.html" class="nav-link nav-dropdown-toggle active">About <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
           <div class="nav-dropdown-menu">
@@ -1145,18 +1151,21 @@ status   string   pending | approved | rejected | all</code></pre>
       window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
     })();
     (function() {
-      var dd = document.querySelector('.nav-dropdown');
-      if (!dd) return;
-      var toggle = dd.querySelector('.nav-dropdown-toggle');
-      if (!toggle) return;
-      toggle.addEventListener('click', function(e) {
-        if (!matchMedia('(hover: none)').matches) return;
-        if (dd.classList.contains('open')) return;
-        e.preventDefault();
-        dd.classList.add('open');
+      var dropdowns = document.querySelectorAll('.nav-dropdown');
+      dropdowns.forEach(function(dd) {
+        var toggle = dd.querySelector('.nav-dropdown-toggle');
+        if (!toggle) return;
+        toggle.addEventListener('click', function(e) {
+          if (!matchMedia('(hover: none)').matches) return;
+          if (dd.classList.contains('open')) return;
+          e.preventDefault();
+          dd.classList.add('open');
+        });
       });
       document.addEventListener('click', function(e) {
-        if (!dd.contains(e.target)) dd.classList.remove('open');
+        dropdowns.forEach(function(dd) {
+          if (!dd.contains(e.target)) dd.classList.remove('open');
+        });
       });
     })();
   </script>
