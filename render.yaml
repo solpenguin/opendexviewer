@@ -173,4 +173,5 @@ databases:
 #    - Source: /submit   -> Destination: /submit.html (Rewrite)
 #    - Source: /hackathon -> Destination: /hackathon.html (Rewrite)
 #    - Source: /ogfinder  -> Destination: /ogfinder.html (Rewrite)
+#    - Source: /          -> Destination: /home.html (Rewrite)
 # =====================================================
