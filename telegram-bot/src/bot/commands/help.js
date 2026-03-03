@@ -15,6 +15,8 @@ module.exports = (bot) => {
       `/removealert &lt;id&gt; - Remove an alert\n\n` +
       `<b>Anti-Spoofing</b>\n` +
       `/pvp &lt;CA&gt; - Find tokens with similar names/tickers\n\n` +
+      `<b>OG Finder</b>\n` +
+      `/og &lt;query&gt; - Find the oldest PumpFun tokens by name or ticker\n\n` +
       `<b>Community</b>\n` +
       `/community - Leaderboards &amp; highlights (watchlisted, sentiment, calls)\n\n` +
       `<b>Other</b>\n` +

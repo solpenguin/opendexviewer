@@ -49,5 +49,10 @@ module.exports = {
   async getSentiment(mint) {
     const { data } = await client.get(`/api/sentiment/${mint}`);
     return data;
+  },
+
+  async ogfinderSearch(query) {
+    const { data } = await client.get('/api/ogfinder/search', { params: { q: query } });
+    return data;
   }
 };

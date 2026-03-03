@@ -6,6 +6,8 @@ const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/validation');
 const { cache, TTL } = require('../services/cache');
+const db = require('../services/database');
+const solanaService = require('../services/solana');
 const pumpfunService = require('../services/pumpfun');
 
 /**
@@ -40,7 +42,7 @@ router.get('/search', asyncHandler(async (req, res) => {
   try {
     const rawTokens = await pumpfunService.searchTokens(query, 50);
 
-    // Normalize response to consistent shape
+    // Normalize PumpFun response to consistent shape
     const tokens = rawTokens.map(token => ({
       mint: token.mint || token.address || '',
       name: token.name || '',
@@ -50,6 +52,34 @@ router.get('/search', asyncHandler(async (req, res) => {
       marketCap: token.usd_market_cap || token.market_cap || token.marketCap || 0,
       complete: token.complete || false
     }));
+
+    // Enrich logos via Helius + DB (PumpFun returns IPFS URIs that often fail to load)
+    const mints = tokens.map(t => t.mint).filter(Boolean);
+    if (mints.length > 0) {
+      const [heliusData, dbRows] = await Promise.all([
+        solanaService.isHeliusConfigured()
+          ? solanaService.getTokenMetadataBatch(mints).catch(() => ({}))
+          : Promise.resolve({}),
+        db.getTokensBatch(mints).catch(() => [])
+      ]);
+
+      const dbMap = new Map();
+      if (dbRows) {
+        for (const row of dbRows) {
+          if (row && row.mint_address) dbMap.set(row.mint_address, row);
+        }
+      }
+
+      for (const token of tokens) {
+        const helius = heliusData[token.mint];
+        const dbRow = dbMap.get(token.mint);
+        if (helius && helius.logoUri) {
+          token.imageUri = helius.logoUri;
+        } else if (dbRow && dbRow.logo_uri) {
+          token.imageUri = dbRow.logo_uri;
+        }
+      }
+    }
 
     // Already sorted by created_timestamp asc from the API, but ensure it
     tokens.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
