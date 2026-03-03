@@ -33,13 +33,13 @@ router.get('/search', asyncHandler(async (req, res) => {
 
   // Cache key based on lowercased query
   const cacheKey = `ogfinder:search:${query.toLowerCase()}`;
-  const cached = await cache.getWithMeta(cacheKey);
 
-  if (cached && cached.value && cached.fresh) {
-    return res.json(cached.value);
-  }
+  // OG Finder data is extremely stable (oldest tokens rarely change).
+  // Use getOrSet with a 30-minute TTL + built-in stampede prevention:
+  // concurrent identical queries share a single PumpFun call.
+  const OG_CACHE_TTL = 1800000; // 30 minutes
 
-  try {
+  const response = await cache.getOrSet(cacheKey, async () => {
     const rawTokens = await pumpfunService.searchTokens(query, 50);
 
     // Normalize PumpFun response to consistent shape
@@ -84,7 +84,7 @@ router.get('/search', asyncHandler(async (req, res) => {
     // Already sorted by created_timestamp asc from the API, but ensure it
     tokens.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
-    const response = {
+    return {
       success: true,
       data: {
         tokens,
@@ -92,17 +92,9 @@ router.get('/search', asyncHandler(async (req, res) => {
         query
       }
     };
+  }, OG_CACHE_TTL);
 
-    await cache.setWithTimestamp(cacheKey, response, TTL.LONG);
-    res.json(response);
-  } catch (error) {
-    // Serve stale cache if refresh fails
-    if (cached && cached.value) {
-      console.warn('[OGFinder] Refresh failed, serving stale cache:', error.message);
-      return res.json(cached.value);
-    }
-    throw error;
-  }
+  res.json(response);
 }));
 
 /**
