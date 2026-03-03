@@ -9562,6 +9562,7 @@ body.landscape .hero h1 {
   gap: 0.5rem;
   max-width: 540px;
   width: 100%;
+  margin: 0 auto;
 }
 
 .ogfinder-search-wrapper {
