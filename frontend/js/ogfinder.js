@@ -1,4 +1,4 @@
-/* global api, utils */
+/* global api, utils, directPumpfun */
 
 const ogFinderPage = {
   tokens: [],
@@ -98,23 +98,24 @@ const ogFinderPage = {
       '<span>Searching PumpFun tokens...</span></div></td></tr>';
 
     try {
-      var result = await api.ogfinder.search(query);
-      this.tokens = (result.data && result.data.tokens) || [];
+      var tokens = await this._fetchTokens(query);
+
+      // Sort oldest first
+      tokens.sort(function(a, b) { return a.createdTimestamp - b.createdTimestamp; });
+      this.tokens = tokens;
 
       // Update count
       var countEl = document.getElementById('ogfinder-count');
       if (countEl) {
-        countEl.textContent = this.tokens.length > 0
-          ? this.tokens.length + ' token' + (this.tokens.length !== 1 ? 's' : '')
+        countEl.textContent = tokens.length > 0
+          ? tokens.length + ' token' + (tokens.length !== 1 ? 's' : '')
           : '';
       }
 
       // Update query label
       var queryLabel = document.getElementById('ogfinder-query-label');
       if (queryLabel) {
-        queryLabel.textContent = this.tokens.length > 0
-          ? 'Results for "' + query + '"'
-          : '';
+        queryLabel.textContent = tokens.length > 0 ? 'Results for "' + query + '"' : '';
       }
 
       this.render();
@@ -131,6 +132,46 @@ const ogFinderPage = {
     } finally {
       this.setSearching(false);
     }
+  },
+
+  /**
+   * Fetch tokens: try direct PumpFun from the browser first (distributes rate
+   * limit across user IPs), then enrich logos via the backend.
+   * Falls back to the backend search endpoint if direct PumpFun is unavailable.
+   */
+  async _fetchTokens(query) {
+    var useDirect = typeof directPumpfun !== 'undefined' && directPumpfun._available;
+
+    if (useDirect) {
+      try {
+        var raw = await directPumpfun.search(query, 50);
+        var tokens = raw.map(function(t) { return directPumpfun.normalise(t); });
+
+        // Enrich logos server-side (Helius + DB — needs API keys)
+        var mints = tokens.map(function(t) { return t.mint; }).filter(Boolean);
+        if (mints.length > 0) {
+          try {
+            var enrichResult = await api.ogfinder.enrich(mints);
+            var enriched = (enrichResult && enrichResult.data) || {};
+            tokens.forEach(function(token) {
+              if (enriched[token.mint]) token.imageUri = enriched[token.mint];
+            });
+          } catch (enrichErr) {
+            // Non-fatal: PumpFun IPFS URIs will be used as fallback
+            console.warn('[OGFinder] Logo enrichment failed:', enrichErr.message);
+          }
+        }
+
+        return tokens;
+      } catch (directErr) {
+        console.warn('[OGFinder] Direct PumpFun failed, falling back to backend:', directErr.message);
+        // Fall through to backend search below
+      }
+    }
+
+    // Backend fallback (also used by Telegram bot path, includes enrichment)
+    var result = await api.ogfinder.search(query);
+    return (result && result.data && result.data.tokens) || [];
   },
 
   formatAge(timestamp) {

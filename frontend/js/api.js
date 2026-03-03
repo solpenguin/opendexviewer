@@ -569,6 +569,7 @@ const api = {
 
   // OG Finder endpoints
   ogfinder: {
+    // Backend fallback search — used by Telegram bot and when direct PumpFun fails
     async search(query) {
       const encoded = encodeURIComponent(query.trim());
       const cacheKey = `ogfinder:search:${encoded}`;
@@ -578,6 +579,15 @@ const api = {
         apiCache.TTL.tokenList,
         true
       );
+    },
+
+    // Logo enrichment: send mints to backend, get back { [mint]: logoUri }
+    async enrich(mints) {
+      return api.request('/api/ogfinder/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mints })
+      });
     }
   },
 

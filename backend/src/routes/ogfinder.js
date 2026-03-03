@@ -105,4 +105,47 @@ router.get('/search', asyncHandler(async (req, res) => {
   }
 }));
 
+/**
+ * POST /api/ogfinder/enrich
+ * Accepts a list of mint addresses, returns enriched logo URIs from Helius + DB.
+ * Called by the frontend after fetching raw token data directly from PumpFun,
+ * keeping API keys server-side while distributing PumpFun rate limits across users.
+ */
+router.post('/enrich', asyncHandler(async (req, res) => {
+  const mints = req.body && Array.isArray(req.body.mints) ? req.body.mints : [];
+
+  // Validate and cap batch size
+  const batch = mints
+    .filter(m => typeof m === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(m))
+    .slice(0, 100);
+
+  if (batch.length === 0) {
+    return res.json({ success: true, data: {} });
+  }
+
+  const [heliusData, dbRows] = await Promise.all([
+    solanaService.isHeliusConfigured()
+      ? solanaService.getTokenMetadataBatch(batch).catch(() => ({}))
+      : Promise.resolve({}),
+    db.getTokensBatch(batch).catch(() => [])
+  ]);
+
+  const dbMap = new Map();
+  if (dbRows) {
+    for (const row of dbRows) {
+      if (row && row.mint_address) dbMap.set(row.mint_address, row);
+    }
+  }
+
+  const enriched = {};
+  for (const mint of batch) {
+    const helius = heliusData[mint];
+    const dbRow = dbMap.get(mint);
+    if (helius && helius.logoUri) enriched[mint] = helius.logoUri;
+    else if (dbRow && dbRow.logo_uri) enriched[mint] = dbRow.logo_uri;
+  }
+
+  res.json({ success: true, data: enriched });
+}));
+
 module.exports = router;
