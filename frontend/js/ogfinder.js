@@ -31,6 +31,18 @@ const ogFinderPage = {
       });
     }
 
+    // Hint tag quick-search buttons
+    document.querySelectorAll('.ogfinder-hint-tag').forEach(function(tag) {
+      tag.addEventListener('click', function() {
+        var q = tag.dataset.query;
+        if (q) {
+          input.value = q;
+          if (clearBtn) clearBtn.style.display = '';
+          self.search();
+        }
+      });
+    });
+
     // Check for query param on load (e.g. ?q=pepe)
     var params = new URLSearchParams(window.location.search);
     var q = params.get('q');
@@ -74,6 +86,10 @@ const ogFinderPage = {
 
     resultsSection.style.display = '';
     this.setSearching(true);
+
+    // Collapse hero to compact mode once a search is performed
+    var hero = document.getElementById('ogfinder-hero');
+    if (hero) hero.classList.add('ogfinder-hero-compact');
 
     // Show loading
     tbody.innerHTML =

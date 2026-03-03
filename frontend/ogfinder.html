@@ -85,29 +85,39 @@
 
   <main class="main ogfinder-page">
     <!-- Hero + Search -->
-    <section class="submit-hero ogfinder-hero">
-      <div class="submit-hero-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
-      </div>
-      <h1>OG Finder</h1>
-      <p>Find the oldest PumpFun tokens by name or ticker</p>
-
-      <div class="ogfinder-search">
-        <div class="ogfinder-search-wrapper">
-          <svg class="ogfinder-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <section id="ogfinder-hero" class="ogfinder-hero">
+      <div class="ogfinder-hero-glow"></div>
+      <div class="ogfinder-hero-content">
+        <div class="ogfinder-hero-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
           </svg>
-          <input type="text" id="ogfinder-input" class="ogfinder-search-input" placeholder="Search by token name or ticker..." autocomplete="off" maxlength="50">
-          <button id="ogfinder-clear" class="ogfinder-search-clear" style="display: none;" aria-label="Clear search">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
         </div>
-        <button id="ogfinder-btn" class="btn btn-accent">Search</button>
+        <h1 class="ogfinder-title">OG Finder</h1>
+        <p class="ogfinder-subtitle">Find the oldest PumpFun tokens by name or ticker</p>
+
+        <div class="ogfinder-search">
+          <div class="ogfinder-search-wrapper">
+            <svg class="ogfinder-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <input type="text" id="ogfinder-input" class="ogfinder-search-input" placeholder="Search by token name or ticker..." autocomplete="off" maxlength="50">
+            <button id="ogfinder-clear" class="ogfinder-search-clear" style="display: none;" aria-label="Clear search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <button id="ogfinder-btn" class="btn btn-accent">Search</button>
+        </div>
+
+        <div class="ogfinder-hints">
+          <span class="ogfinder-hint">Try searching:</span>
+          <button class="ogfinder-hint-tag" data-query="pepe">pepe</button>
+          <button class="ogfinder-hint-tag" data-query="doge">doge</button>
+          <button class="ogfinder-hint-tag" data-query="trump">trump</button>
+          <button class="ogfinder-hint-tag" data-query="cat">cat</button>
+        </div>
       </div>
     </section>
 
