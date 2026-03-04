@@ -50,6 +50,12 @@ const tokenDetail = {
     try {
       await this.loadToken();
       this.hideLoading();
+
+      // Yield to the browser so it can reflow the just-shown #token-content.
+      // Without this, chart containers may still report 0 dimensions and LWCV
+      // throws "Value is null" on createChart().
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
       this.lastPriceUpdate = Date.now();
       this.updateFreshnessDisplay();
 
@@ -156,10 +162,10 @@ const tokenDetail = {
     // Chart type toggle (line/candle)
     document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)').forEach(btn => {
       const handler = () => {
-        document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         // Sync modal type buttons
-        document.querySelectorAll(`.modal-type-btn[data-type="${btn.dataset.type}"]`).forEach(b => b.classList.add('active'));
+        document.querySelectorAll('.modal-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === btn.dataset.type));
         this.chartType = btn.dataset.type;
         if (this.chartData) {
           this.renderChart(this.chartData);
@@ -172,10 +178,10 @@ const tokenDetail = {
     // Chart metric toggle (price/mcap)
     document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(btn => {
       const handler = () => {
-        document.querySelectorAll('.chart-metric-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         // Sync modal metric buttons
-        document.querySelectorAll(`.modal-metric-btn[data-metric="${btn.dataset.metric}"]`).forEach(b => b.classList.add('active'));
+        document.querySelectorAll('.modal-metric-btn').forEach(b => b.classList.toggle('active', b.dataset.metric === btn.dataset.metric));
         this.chartMetric = btn.dataset.metric;
 
         // Update chart title
@@ -197,14 +203,19 @@ const tokenDetail = {
       bindHandler(btn, 'click', handler);
     });
 
-    // Chart timeframes
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+    // Chart timeframes (page only — modal timeframes bound in _bindModalControls)
+    document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)').forEach(btn => {
       const handler = () => {
-        document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentInterval = btn.dataset.interval;
+        // Sync modal timeframe buttons
+        document.querySelectorAll('.modal-timeframe-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.interval === btn.dataset.interval);
+        });
 
         this.loadChart(this.currentInterval);
+        if (this._modalOpen) this._renderModalChart();
       };
       bindHandler(btn, 'click', handler);
     });
@@ -850,23 +861,29 @@ const tokenDetail = {
     if (lows.length  > 0) lowEl.textContent  = utils.formatPrice(Math.min(...lows));
   },
 
-  // Create a TradingView Lightweight Chart instance
+  // Create a TradingView Lightweight Chart instance.
+  // LWCV v5 throws "Value is null" when the container has zero dimensions,
+  // so we use explicit pixel values with sensible fallbacks.
   _createChart(container, isModal = false) {
     const formatValue = this.chartMetric === 'mcap'
       ? (v) => utils.formatNumber(v)
       : (v) => utils.formatPrice(v);
 
-    // LWCV v5 crashes with "Value is null" if container has zero dimensions,
-    // which can happen if the DOM hasn't reflowed after display:block.
-    // Use parent dimensions or sensible fallbacks; ResizeObserver corrects later.
-    const w = container.clientWidth || container.parentElement?.clientWidth || 600;
-    const h = container.clientHeight || container.parentElement?.clientHeight || 280;
+    // Force a synchronous layout reflow so clientWidth/Height reflect the
+    // actual rendered size — even if #token-content was just toggled to
+    // display:block in the same event-loop tick.
+    void container.offsetWidth;
+
+    // Determine dimensions with cascading fallbacks.
+    const parent = container.parentElement;
+    const w = container.clientWidth || (parent && parent.clientWidth) || 600;
+    const h = container.clientHeight || (parent && parent.clientHeight) || 280;
 
     const chart = LightweightCharts.createChart(container, {
       width: w,
       height: h,
       layout: {
-        background: { type: 'solid', color: '#00000000' },
+        background: { type: 'solid', color: 'transparent' },
         textColor: '#6b6b73',
         fontFamily: 'Inter, sans-serif',
         fontSize: 11
@@ -973,6 +990,7 @@ const tokenDetail = {
 
   // Add active indicators to a chart instance
   _addIndicators(chart, rawData) {
+    if (!rawData || rawData.length === 0) return;
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
@@ -1066,8 +1084,21 @@ const tokenDetail = {
     }
   },
 
+  // Deduplicate and sort OHLCV data by timestamp (LWCV requires unique ascending times)
+  _dedup(data) {
+    const seen = new Set();
+    return data.filter(d => {
+      const t = Math.floor((d.timestamp || d.time) / 1000);
+      if (seen.has(t)) return false;
+      seen.add(t);
+      return true;
+    }).sort((a, b) => (a.timestamp || a.time) - (b.timestamp || b.time));
+  },
+
   // Render line chart with TradingView Lightweight Charts
   renderLineChart(container, data) {
+    data = this._dedup(data);
+    if (data.length === 0) return;
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
@@ -1077,7 +1108,14 @@ const tokenDetail = {
     }));
 
     const isPositive = seriesData[seriesData.length - 1].value >= seriesData[0].value;
-    const chart = this._createChart(container, false);
+    let chart;
+    try {
+      chart = this._createChart(container, false);
+    } catch (e) {
+      console.warn('[Chart] createChart failed:', e.message);
+      this.renderEmptyChart('Chart rendering failed — try refreshing');
+      return;
+    }
     const series = chart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: isPositive ? '#22c55e' : '#ef4444',
       topColor: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
@@ -1092,6 +1130,8 @@ const tokenDetail = {
 
   // Render candlestick chart with TradingView Lightweight Charts
   renderCandlestickChart(container, data) {
+    data = this._dedup(data);
+    if (data.length === 0) return;
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
@@ -1107,7 +1147,14 @@ const tokenDetail = {
       };
     });
 
-    const chart = this._createChart(container, false);
+    let chart;
+    try {
+      chart = this._createChart(container, false);
+    } catch (e) {
+      console.warn('[Chart] createChart failed:', e.message);
+      this.renderEmptyChart('Chart rendering failed — try refreshing');
+      return;
+    }
     const series = chart.addSeries(LightweightCharts.CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -1693,7 +1740,7 @@ const tokenDetail = {
 
   // ── Chart Expand Modal ──────────────────────────────────
 
-  openChartModal() {
+  async openChartModal() {
     if (this._modalOpen) return;
     this._modalOpen = true;
 
@@ -1703,6 +1750,9 @@ const tokenDetail = {
     this._syncModalControls();
     overlay.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+
+    // Yield so the modal container gets layout dimensions before LWCV creates the chart
+    await new Promise(r => requestAnimationFrame(r));
 
     this._renderModalChart();
     this._bindModalControls();
@@ -1908,6 +1958,8 @@ const tokenDetail = {
   },
 
   _renderModalLine(container, data) {
+    data = this._dedup(data);
+    if (data.length === 0) return;
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
@@ -1917,7 +1969,13 @@ const tokenDetail = {
     }));
 
     const isPositive = seriesData[seriesData.length - 1].value >= seriesData[0].value;
-    const chart = this._createChart(container, true);
+    let chart;
+    try {
+      chart = this._createChart(container, true);
+    } catch (e) {
+      console.warn('[Modal] createChart failed:', e.message);
+      return;
+    }
     const series = chart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: isPositive ? '#22c55e' : '#ef4444',
       topColor: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
@@ -1931,6 +1989,8 @@ const tokenDetail = {
   },
 
   _renderModalCandlestick(container, data) {
+    data = this._dedup(data);
+    if (data.length === 0) return;
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
@@ -1946,7 +2006,13 @@ const tokenDetail = {
       };
     });
 
-    const chart = this._createChart(container, true);
+    let chart;
+    try {
+      chart = this._createChart(container, true);
+    } catch (e) {
+      console.warn('[Modal] createChart failed:', e.message);
+      return;
+    }
     const series = chart.addSeries(LightweightCharts.CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -1963,7 +2029,10 @@ const tokenDetail = {
 
   async _loadModalChart(interval) {
     try {
+      // loadChart already re-renders the page chart and updates stats.
+      // It also sets this.chartData, which _renderModalChart reads.
       await this.loadChart(interval);
+      // Now render the modal chart with the updated data
       this._renderModalChart();
       if (this.chartData) this._updateModalStats(this.chartData);
     } catch (e) {

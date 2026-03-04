@@ -1,5 +1,5 @@
 // OpenDex Service Worker — lightweight app-shell caching
-const CACHE_NAME = 'opendex-v4';
+const CACHE_NAME = 'opendex-v5';
 
 // App shell: static assets worth caching for offline/fast loads
 const APP_SHELL = [
