@@ -16,6 +16,7 @@ const tokenDetail = {
   modalChart: null,
   _modalOpen: false,
   _modalEscHandler: null,
+  indicators: { vol: true, sma: false, ema: false, bb: false },
 
   // Get refresh interval from config (with fallback)
   get refreshIntervalMs() {
@@ -153,23 +154,28 @@ const tokenDetail = {
     bindHandler(watchlistBtn, 'click', watchlistHandler);
 
     // Chart type toggle (line/candle)
-    document.querySelectorAll('.chart-type-btn').forEach(btn => {
+    document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)').forEach(btn => {
       const handler = () => {
         document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        // Sync modal type buttons
+        document.querySelectorAll(`.modal-type-btn[data-type="${btn.dataset.type}"]`).forEach(b => b.classList.add('active'));
         this.chartType = btn.dataset.type;
         if (this.chartData) {
           this.renderChart(this.chartData);
+          if (this._modalOpen) this._renderModalChart();
         }
       };
       bindHandler(btn, 'click', handler);
     });
 
     // Chart metric toggle (price/mcap)
-    document.querySelectorAll('.chart-metric-btn').forEach(btn => {
+    document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(btn => {
       const handler = () => {
         document.querySelectorAll('.chart-metric-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        // Sync modal metric buttons
+        document.querySelectorAll(`.modal-metric-btn[data-metric="${btn.dataset.metric}"]`).forEach(b => b.classList.add('active'));
         this.chartMetric = btn.dataset.metric;
 
         // Update chart title
@@ -177,9 +183,15 @@ const tokenDetail = {
         if (titleEl) {
           titleEl.textContent = this.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
         }
+        const mt = document.getElementById('chart-modal-title');
+        if (mt) mt.textContent = this.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
         if (this.chartData) {
           this.renderChart(this.chartData);
           this.updateChartStats(this.chartData);
+          if (this._modalOpen) {
+            this._renderModalChart();
+            this._updateModalStats(this.chartData);
+          }
         }
       };
       bindHandler(btn, 'click', handler);
@@ -202,6 +214,24 @@ const tokenDetail = {
     if (expandBtn) {
       bindHandler(expandBtn, 'click', () => this.openChartModal());
     }
+
+    // Indicator toggle buttons
+    document.querySelectorAll('.indicator-btn:not(.modal-indicator-btn)').forEach(btn => {
+      const handler = () => {
+        const ind = btn.dataset.indicator;
+        this.indicators[ind] = !this.indicators[ind];
+        btn.classList.toggle('active', this.indicators[ind]);
+        // Sync modal buttons
+        document.querySelectorAll(`.modal-indicator-btn[data-indicator="${ind}"]`).forEach(b =>
+          b.classList.toggle('active', this.indicators[ind])
+        );
+        if (this.chartData) {
+          this.renderChart(this.chartData);
+          if (this._modalOpen) this._renderModalChart();
+        }
+      };
+      bindHandler(btn, 'click', handler);
+    });
 
     // Submission tabs
     document.querySelectorAll('.submissions-tab').forEach(tab => {
@@ -730,7 +760,7 @@ const tokenDetail = {
 
     // Remove any stale chart to free memory
     if (this.chart) {
-      this.chart.remove();
+      this._removeChart(this.chart);
       this.chart = null;
     }
     // Clear the chart container
@@ -880,6 +910,122 @@ const tokenDetail = {
     chart.remove();
   },
 
+  // ── TA Indicator Calculations ──────────────────────────
+
+  _calcSMA(closes, times, period) {
+    const result = [];
+    for (let i = period - 1; i < closes.length; i++) {
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) sum += closes[j];
+      result.push({ time: times[i], value: sum / period });
+    }
+    return result;
+  },
+
+  _calcEMA(closes, times, period) {
+    if (closes.length < period) return [];
+    const k = 2 / (period + 1);
+    // Seed with SMA of first `period` values
+    let sum = 0;
+    for (let i = 0; i < period; i++) sum += closes[i];
+    let ema = sum / period;
+    const result = [{ time: times[period - 1], value: ema }];
+    for (let i = period; i < closes.length; i++) {
+      ema = closes[i] * k + ema * (1 - k);
+      result.push({ time: times[i], value: ema });
+    }
+    return result;
+  },
+
+  _calcBollingerBands(closes, times, period = 20, mult = 2) {
+    const upper = [], middle = [], lower = [];
+    for (let i = period - 1; i < closes.length; i++) {
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) sum += closes[j];
+      const mean = sum / period;
+      let sqSum = 0;
+      for (let j = i - period + 1; j <= i; j++) sqSum += (closes[j] - mean) ** 2;
+      const stddev = Math.sqrt(sqSum / period);
+      const t = times[i];
+      upper.push({ time: t, value: mean + mult * stddev });
+      middle.push({ time: t, value: mean });
+      lower.push({ time: t, value: mean - mult * stddev });
+    }
+    return { upper, middle, lower };
+  },
+
+  // Add a simple line series to a chart
+  _addLineSeries(chart, data, color, lineWidth = 1.5, lineStyle) {
+    if (!data || data.length === 0) return;
+    const series = chart.addLineSeries({
+      color,
+      lineWidth,
+      lineStyle: lineStyle || 0,
+      priceScaleId: 'right',
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    series.setData(data);
+  },
+
+  // Add active indicators to a chart instance
+  _addIndicators(chart, rawData) {
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+
+    const closes = rawData.map(d => {
+      const c = d.close || d.price;
+      return isMcap && supply > 0 ? c * supply : c;
+    });
+    const times = rawData.map(d => Math.floor((d.timestamp || d.time) / 1000));
+
+    const hasAny = this.indicators.vol || this.indicators.sma || this.indicators.ema || this.indicators.bb;
+    if (!hasAny) return;
+
+    // Volume histogram
+    if (this.indicators.vol) {
+      const volSeries = chart.addHistogramSeries({
+        priceScaleId: 'volume',
+        priceFormat: { type: 'volume' },
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.7, bottom: 0 },
+      });
+      volSeries.setData(rawData.map((d, i) => ({
+        time: times[i],
+        value: d.volume || 0,
+        color: (d.close || d.price) >= (d.open || d.price)
+          ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+      })));
+      // Push price series up to make room for volume
+      chart.priceScale('right').applyOptions({
+        scaleMargins: { top: 0.05, bottom: 0.35 },
+      });
+    }
+
+    // SMA 7 + 25
+    if (this.indicators.sma) {
+      this._addLineSeries(chart, this._calcSMA(closes, times, 7), '#f59e0b', 1.5);
+      this._addLineSeries(chart, this._calcSMA(closes, times, 25), '#3b82f6', 1.5);
+    }
+
+    // EMA 7 + 25 (dashed)
+    if (this.indicators.ema) {
+      this._addLineSeries(chart, this._calcEMA(closes, times, 7), '#f59e0b', 1.5, 2);
+      this._addLineSeries(chart, this._calcEMA(closes, times, 25), '#3b82f6', 1.5, 2);
+    }
+
+    // Bollinger Bands (20, 2)
+    if (this.indicators.bb) {
+      const bb = this._calcBollingerBands(closes, times, 20, 2);
+      this._addLineSeries(chart, bb.upper, '#8b5cf6', 1, 2);
+      this._addLineSeries(chart, bb.middle, '#8b5cf6', 1);
+      this._addLineSeries(chart, bb.lower, '#8b5cf6', 1, 2);
+    }
+  },
+
   // Render chart
   renderChart(data) {
     const container = document.getElementById('price-chart');
@@ -936,6 +1082,7 @@ const tokenDetail = {
       lineWidth: 2,
     });
     series.setData(seriesData);
+    this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.chart = chart;
   },
@@ -967,6 +1114,7 @@ const tokenDetail = {
       wickDownColor: '#ef4444',
     });
     series.setData(seriesData);
+    this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.chart = chart;
   },
@@ -1586,6 +1734,9 @@ const tokenDetail = {
     document.querySelectorAll('.modal-timeframe-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.interval === this.currentInterval);
     });
+    document.querySelectorAll('.modal-indicator-btn').forEach(btn => {
+      btn.classList.toggle('active', this.indicators[btn.dataset.indicator]);
+    });
     const modalTitle = document.getElementById('chart-modal-title');
     if (modalTitle) {
       modalTitle.textContent = this.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
@@ -1682,6 +1833,25 @@ const tokenDetail = {
       });
     });
 
+    // Indicator toggle buttons
+    document.querySelectorAll('.modal-indicator-btn').forEach(btn => {
+      if (btn._mBound) return;
+      btn._mBound = true;
+      btn.addEventListener('click', () => {
+        const ind = btn.dataset.indicator;
+        self.indicators[ind] = !self.indicators[ind];
+        btn.classList.toggle('active', self.indicators[ind]);
+        // Sync page buttons
+        document.querySelectorAll(`.indicator-btn:not(.modal-indicator-btn)[data-indicator="${ind}"]`).forEach(b =>
+          b.classList.toggle('active', self.indicators[ind])
+        );
+        if (self.chartData) {
+          self.renderChart(self.chartData);
+          self._renderModalChart();
+        }
+      });
+    });
+
     // Zoom controls
     const zoomIn = document.getElementById('chart-zoom-in');
     if (zoomIn && !zoomIn._mBound) {
@@ -1752,6 +1922,7 @@ const tokenDetail = {
       lineWidth: 2,
     });
     series.setData(seriesData);
+    this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.modalChart = chart;
   },
@@ -1782,6 +1953,7 @@ const tokenDetail = {
       wickDownColor: '#ef4444',
     });
     series.setData(seriesData);
+    this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.modalChart = chart;
   },
