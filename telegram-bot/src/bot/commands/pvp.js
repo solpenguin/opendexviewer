@@ -1,6 +1,6 @@
 const { InlineKeyboard } = require('grammy');
 const tokensApi = require('../../api/tokens');
-const { escapeHtml, formatPrice, formatNumber } = require('../../utils/format');
+const { escapeHtml, formatNumber } = require('../../utils/format');
 const { isValidSolanaAddress } = require('../../utils/solana');
 const config = require('../../config');
 
@@ -25,7 +25,10 @@ module.exports = (bot) => {
     const mint = ctx.match?.trim();
     if (!mint || !isValidSolanaAddress(mint)) {
       return ctx.reply(
-        'Please provide a valid Solana contract address.\nUsage: /pvp &lt;CA&gt;',
+        '<b>PVP — Anti-Spoofing Check</b>\n\n' +
+        'Find tokens with similar names/tickers to detect copycats.\n\n' +
+        'Usage: /pvp &lt;contract address&gt;\n' +
+        'Example: /pvp <code>So11111111111111111111111111111111111111112</code>',
         { parse_mode: 'HTML' }
       );
     }
@@ -33,65 +36,93 @@ module.exports = (bot) => {
     const statusMsg = await ctx.reply('\u{1F50D} Checking for similar tokens...');
 
     try {
-      // Fetch token info and similar tokens in parallel
-      const [token, similarTokens] = await Promise.all([
+      // Fetch token info and similar tokens in parallel.
+      // Use allSettled so a getToken 404 doesn't kill the whole command —
+      // the similar-tokens endpoint resolves names via its own fallback chain.
+      const [tokenResult, similarResult] = await Promise.allSettled([
         tokensApi.getToken(mint),
         tokensApi.getSimilarTokens(mint)
       ]);
 
-      const tokenName = escapeHtml(token.name || 'Unknown');
-      const tokenSymbol = escapeHtml(token.symbol || '???');
+      // Extract token name/symbol (best-effort — may not be in DB)
+      const token = tokenResult.status === 'fulfilled' ? tokenResult.value : null;
+      const tokenName = escapeHtml(token?.name || 'Unknown Token');
+      const tokenSymbol = escapeHtml(token?.symbol || '???');
 
-      if (!similarTokens || similarTokens.length === 0) {
+      // The similar-tokens endpoint returns { results: [...], enriched: boolean }
+      if (similarResult.status === 'rejected') {
+        throw similarResult.reason;
+      }
+      const response = similarResult.value;
+      const results = (response && Array.isArray(response.results))
+        ? response.results
+        : (Array.isArray(response) ? response : []);
+
+      if (results.length === 0) {
+        const keyboard = new InlineKeyboard()
+          .url('OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${encodeURIComponent(mint)}`)
+          .url('Solscan', `https://solscan.io/token/${encodeURIComponent(mint)}`);
+
         await ctx.api.editMessageText(
           ctx.chat.id,
           statusMsg.message_id,
           `<b>${tokenName}</b> (${tokenSymbol})\n<code>${mint}</code>\n\n` +
           `\u2705 <b>No similar tokens found.</b>\n` +
           `This token's name and ticker appear to be unique on Solana.`,
-          { parse_mode: 'HTML' }
+          {
+            parse_mode: 'HTML',
+            reply_markup: keyboard,
+            link_preview_options: { is_disabled: true }
+          }
         );
         return;
       }
 
       // Build the similar tokens list
-      let lines = [
-        `<b>\u{1F50D} Similar Tokens for ${tokenName} (${tokenSymbol})</b>`,
+      const lines = [
+        `<b>\u26A0\uFE0F PVP Check: ${tokenName} (${tokenSymbol})</b>`,
         `<code>${mint}</code>`,
         '',
-        `\u26A0\uFE0F <b>${similarTokens.length} similar token${similarTokens.length > 1 ? 's' : ''} found</b> \u2014 verify the contract address before trading!`,
+        `<b>${results.length} similar token${results.length !== 1 ? 's' : ''} found</b> \u2014 verify the CA before trading!`,
         ''
       ];
 
-      similarTokens.forEach((t, i) => {
+      const keyboard = new InlineKeyboard();
+
+      results.forEach((t, i) => {
         const name = escapeHtml(t.name || 'Unknown');
         const symbol = escapeHtml(t.symbol || '???');
-        const addr = t.address;
+        const addr = t.address || '';
 
-        let stats = [];
-        if (t.marketCap) stats.push(`MCap ${formatNumber(t.marketCap)}`);
-        if (t.volume24h) stats.push(`Vol ${formatNumber(t.volume24h)}`);
+        const stats = [];
+        if (t.marketCap) stats.push(`MCap ${formatNumber(t.marketCap, '$')}`);
+        if (t.volume24h) stats.push(`Vol ${formatNumber(t.volume24h, '$')}`);
         const age = formatAge(t.pairCreatedAt);
-        if (age) stats.push(`Age ${age}`);
+        if (age) stats.push(age);
 
-        lines.push(`<b>${i + 1}. ${name}</b> (${symbol})`);
-        lines.push(`<code>${addr}</code>`);
+        const scoreStr = t.similarityScore
+          ? ` \u2022 ${(t.similarityScore * 100).toFixed(0)}% match`
+          : '';
+
+        lines.push(`<b>${i + 1}.</b> <b>${name}</b> (${symbol})${scoreStr}`);
+        lines.push(`   <code>${addr}</code>`);
         if (stats.length > 0) {
-          lines.push(stats.join(' \u2022 '));
+          lines.push(`   ${stats.join(' \u2022 ')}`);
         }
-        if (t.similarityScore) {
-          lines.push(`Similarity: ${(t.similarityScore * 100).toFixed(0)}%`);
-        }
-        lines.push(`\u{1FAE7} <a href="https://app.bubblemaps.io/sol/token/${encodeURIComponent(addr)}">Bubblemaps</a>`);
         lines.push('');
+
+        // Inline button: tap to view full token detail
+        if (addr) {
+          keyboard.text(`${i + 1}. ${t.symbol || '???'}`, `lookup:${addr}`).row();
+        }
       });
 
       lines.push('<i>Always verify the contract address to avoid spoofed tokens.</i>');
 
-      const safeMint = encodeURIComponent(mint);
-      const keyboard = new InlineKeyboard()
-        .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${safeMint}`)
-        .url('Solscan', `https://solscan.io/token/${safeMint}`);
+      // Bottom row: queried token links
+      keyboard
+        .url('OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${encodeURIComponent(mint)}`)
+        .url('Solscan', `https://solscan.io/token/${encodeURIComponent(mint)}`);
 
       await ctx.api.editMessageText(
         ctx.chat.id,
@@ -104,6 +135,7 @@ module.exports = (bot) => {
         }
       );
     } catch (error) {
+      console.error('[PVP] Command failed:', error.message);
       const errorMsg = error.response?.status === 404
         ? 'Token not found. Please check the contract address.'
         : 'Failed to fetch similar tokens. Please try again.';
