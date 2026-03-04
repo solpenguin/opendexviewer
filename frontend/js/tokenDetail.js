@@ -857,8 +857,7 @@ const tokenDetail = {
       : (v) => utils.formatPrice(v);
 
     const chart = LightweightCharts.createChart(container, {
-      width: container.clientWidth,
-      height: container.clientHeight,
+      autoSize: true,
       layout: {
         background: { type: 'solid', color: 'transparent' },
         textColor: '#6b6b73',
@@ -889,24 +888,12 @@ const tokenDetail = {
       handleScale: isModal,
     });
 
-    // Auto-resize with container
-    const ro = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) chart.applyOptions({ width, height });
-    });
-    ro.observe(container);
-    chart._resizeObserver = ro;
-
     return chart;
   },
 
   // Clean up a chart instance
   _removeChart(chart) {
     if (!chart) return;
-    if (chart._resizeObserver) {
-      chart._resizeObserver.disconnect();
-      chart._resizeObserver = null;
-    }
     chart.remove();
   },
 
