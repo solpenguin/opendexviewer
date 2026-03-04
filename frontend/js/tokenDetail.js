@@ -892,10 +892,7 @@ const tokenDetail = {
           fill: true,
           tension: 0.2,
           pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: lineColor,
-          pointHoverBorderColor: '#fff',
-          pointHoverBorderWidth: 2,
+          pointHoverRadius: 0,
           borderWidth: 2
         }]
       },
@@ -907,36 +904,7 @@ const tokenDetail = {
         },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(28, 28, 33, 0.95)',
-            titleColor: '#ffffff',
-            bodyColor: '#9ca3af',
-            borderColor: '#3a3a45',
-            borderWidth: 1,
-            padding: 14,
-            displayColors: false,
-            titleFont: {
-              size: 13,
-              weight: '600'
-            },
-            bodyFont: {
-              size: 14,
-              weight: '500'
-            },
-            callbacks: {
-              title: (items) => {
-                if (items.length) {
-                  return new Date(items[0].parsed.x).toLocaleString();
-                }
-                return '';
-              },
-              label: (context) => {
-                return `${metricLabel}: ${formatValue(context.parsed.y)}`;
-              }
-            }
-          }
+          tooltip: { enabled: false }
         },
         scales: {
           x: {
@@ -1041,42 +1009,7 @@ const tokenDetail = {
         },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            enabled: true,
-            backgroundColor: 'rgba(28, 28, 33, 0.95)',
-            titleColor: '#ffffff',
-            bodyColor: '#9ca3af',
-            borderColor: '#3a3a45',
-            borderWidth: 1,
-            padding: 14,
-            displayColors: false,
-            titleFont: {
-              size: 13,
-              weight: '600'
-            },
-            bodyFont: {
-              size: 13,
-              weight: '500'
-            },
-            callbacks: {
-              title: (items) => {
-                if (items.length && items[0].raw) {
-                  return new Date(items[0].raw.x).toLocaleString();
-                }
-                return '';
-              },
-              label: (context) => {
-                const d = context.raw;
-                if (!d) return '';
-                return [
-                  `Open: ${formatValue(d.o)}`,
-                  `High: ${formatValue(d.h)}`,
-                  `Low: ${formatValue(d.l)}`,
-                  `Close: ${formatValue(d.c)}`
-                ];
-              }
-            }
-          }
+          tooltip: { enabled: false }
         },
         scales: {
           x: {
@@ -1748,15 +1681,14 @@ const tokenDetail = {
     overlay.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 
-    this._renderModalChart();
-
-    // Switch chartTools to modal overlay canvas
+    // Switch chartTools to modal overlay canvas BEFORE rendering
+    // so _renderModalChart's attach() call operates on the correct canvas
     const modalOverlay = document.getElementById('modal-chart-overlay');
     if (typeof chartTools !== 'undefined' && modalOverlay) {
       chartTools.switchCanvas(modalOverlay);
-      if (this.modalChart) chartTools.attach(this.modalChart);
     }
 
+    this._renderModalChart();
     this._bindModalControls();
   },
 
@@ -1991,10 +1923,7 @@ const tokenDetail = {
           fill: true,
           tension: 0.2,
           pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: lineColor,
-          pointHoverBorderColor: '#fff',
-          pointHoverBorderWidth: 2,
+          pointHoverRadius: 0,
           borderWidth: 2
         }]
       },
@@ -2005,23 +1934,7 @@ const tokenDetail = {
         plugins: {
           legend: { display: false },
           zoom: zoomConfig,
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(28, 28, 33, 0.95)',
-            titleColor: '#ffffff',
-            bodyColor: '#9ca3af',
-            borderColor: '#3a3a45',
-            borderWidth: 1,
-            padding: 14,
-            displayColors: false,
-            titleFont: { size: 13, weight: '600' },
-            bodyFont: { size: 14, weight: '500' },
-            callbacks: {
-              title: (items) => items.length ? new Date(items[0].parsed.x).toLocaleString() : '',
-              label: (context) => `${metricLabel}: ${formatValue(context.parsed.y)}`
-            }
-          }
+          tooltip: { enabled: false }
         },
         scales: {
           x: {
@@ -2074,26 +1987,7 @@ const tokenDetail = {
         plugins: {
           legend: { display: false },
           zoom: zoomConfig,
-          tooltip: {
-            enabled: true,
-            backgroundColor: 'rgba(28, 28, 33, 0.95)',
-            titleColor: '#ffffff',
-            bodyColor: '#9ca3af',
-            borderColor: '#3a3a45',
-            borderWidth: 1,
-            padding: 14,
-            displayColors: false,
-            titleFont: { size: 13, weight: '600' },
-            bodyFont: { size: 13, weight: '500' },
-            callbacks: {
-              title: (items) => items.length && items[0].raw ? new Date(items[0].raw.x).toLocaleString() : '',
-              label: (context) => {
-                const d = context.raw;
-                if (!d) return '';
-                return [`Open: ${formatValue(d.o)}`, `High: ${formatValue(d.h)}`, `Low: ${formatValue(d.l)}`, `Close: ${formatValue(d.c)}`];
-              }
-            }
-          }
+          tooltip: { enabled: false }
         },
         scales: {
           x: {
