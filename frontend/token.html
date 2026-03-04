@@ -244,11 +244,34 @@
               </div>
             </div>
             <div class="chart-timeframes">
+              <button class="timeframe-btn" data-interval="5m">5M</button>
               <button class="timeframe-btn" data-interval="15m">15M</button>
+              <button class="timeframe-btn" data-interval="30m">30M</button>
               <button class="timeframe-btn active" data-interval="1h">1H</button>
               <button class="timeframe-btn" data-interval="4h">4H</button>
               <button class="timeframe-btn" data-interval="1d">1D</button>
               <button class="timeframe-btn" data-interval="1w">1W</button>
+            </div>
+            <div class="chart-tools">
+              <button class="chart-tool-btn" data-tool="crosshair" title="Crosshair">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+              </button>
+              <button class="chart-tool-btn" data-tool="hline" title="Horizontal Line">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="22" y2="12"/><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
+              </button>
+              <button class="chart-tool-btn" data-tool="trendline" title="Trend Line">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/></svg>
+              </button>
+              <button class="chart-tool-btn" data-tool="fib" title="Fibonacci Retracement">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="4" x2="22" y2="4" opacity="0.5"/><line x1="2" y1="8" x2="22" y2="8" opacity="0.6"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="16" x2="22" y2="16" opacity="0.6"/><line x1="2" y1="20" x2="22" y2="20" opacity="0.5"/></svg>
+              </button>
+              <span class="chart-tools-sep"></span>
+              <button class="chart-tool-btn" data-tool="undo" title="Undo Last">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
+              </button>
+              <button class="chart-tool-btn" data-tool="clear" title="Clear All">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           </div>
           <div class="chart-container">
@@ -261,6 +284,7 @@
               <button id="chart-retry-btn" class="chart-retry-btn">&#8635; Retry</button>
             </div>
             <canvas id="price-chart"></canvas>
+            <canvas id="chart-overlay"></canvas>
           </div>
           <div class="chart-stats">
             <div class="chart-stat">
@@ -457,6 +481,7 @@
   <script src="js/watchlist.js"></script>
   <script src="js/voting.js"></script>
   <script src="js/sentiment.js"></script>
+  <script src="js/chartTools.js"></script>
   <script src="js/tokenDetail.js"></script>
   <script src="js/announcements.js"></script>
   <script>

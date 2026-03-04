@@ -2298,8 +2298,10 @@ a:hover {
 /* Chart Section */
 .chart-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
@@ -2401,6 +2403,57 @@ a:hover {
 .timeframe-btn.active {
   background: var(--bg-elevated);
   color: var(--accent-primary);
+}
+
+/* Drawing Tools Toolbar */
+.chart-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--bg-tertiary);
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+}
+
+.chart-tools-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 0.25rem;
+}
+
+.chart-tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chart-tool-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.chart-tool-btn.active {
+  color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+/* Chart Overlay Canvas */
+#chart-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .chart-container {
@@ -5411,6 +5464,14 @@ a:hover {
   .chart-timeframes {
     width: 100%;
     justify-content: center;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chart-tools {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 
   .type-selector {
@@ -8735,6 +8796,15 @@ body.landscape .hero h1 {
 
   .chart-header {
     gap: 0.75rem;
+  }
+
+  .chart-tools {
+    gap: 0.125rem;
+  }
+
+  .chart-tool-btn {
+    width: 28px;
+    height: 28px;
   }
 }
 

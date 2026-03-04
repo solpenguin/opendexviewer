@@ -42,6 +42,7 @@ const tokenDetail = {
       : Promise.reject(new Error('GeckoTerminal client not available'));
 
     this.bindEvents();
+    if (typeof chartTools !== 'undefined') chartTools.init();
 
     try {
       await this.loadToken();
@@ -168,6 +169,7 @@ const tokenDetail = {
         document.querySelectorAll('.chart-metric-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.chartMetric = btn.dataset.metric;
+        if (typeof chartTools !== 'undefined') chartTools.clearAll();
         // Update chart title
         const titleEl = document.getElementById('chart-title');
         if (titleEl) {
@@ -187,6 +189,7 @@ const tokenDetail = {
         document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentInterval = btn.dataset.interval;
+        if (typeof chartTools !== 'undefined') chartTools.clearAll();
         this.loadChart(this.currentInterval);
       };
       bindHandler(btn, 'click', handler);
@@ -965,6 +968,7 @@ const tokenDetail = {
         }
       }
     });
+    if (typeof chartTools !== 'undefined') chartTools.attach(this.chart);
   },
 
   // Render candlestick chart using chartjs-chart-financial plugin
@@ -1104,6 +1108,7 @@ const tokenDetail = {
         }
       }
     });
+    if (typeof chartTools !== 'undefined') chartTools.attach(this.chart);
   },
 
   // Render empty chart placeholder

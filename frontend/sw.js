@@ -1,5 +1,5 @@
 // OpenDex Service Worker — lightweight app-shell caching
-const CACHE_NAME = 'opendex-v2';
+const CACHE_NAME = 'opendex-v3';
 
 // App shell: static assets worth caching for offline/fast loads
 const APP_SHELL = [
@@ -14,6 +14,7 @@ const APP_SHELL = [
   '/js/voting.js',
   '/js/bugReport.js',
   '/js/announcements.js',
+  '/js/chartTools.js',
   '/OpenDEX_Logo.png',
   '/manifest.json'
 ];
