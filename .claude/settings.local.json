@@ -79,7 +79,8 @@
       "Bash(grep -n \"href=\"\"/\"\"\" c:/VS/OPENDEX/opendexviewer/frontend/*.html)",
       "Bash(ls -la c:/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
       "WebFetch(domain:frontend-api-v3.pump.fun)",
-      "WebFetch(domain:unpkg.com)"
+      "WebFetch(domain:unpkg.com)",
+      "WebFetch(domain:tradingview.github.io)"
     ]
   }
 }

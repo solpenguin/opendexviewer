@@ -957,7 +957,7 @@ const tokenDetail = {
   // Add a simple line series to a chart
   _addLineSeries(chart, data, color, lineWidth = 1.5, lineStyle) {
     if (!data || data.length === 0) return;
-    const series = chart.addLineSeries({
+    const series = chart.addSeries(LightweightCharts.LineSeries, {
       color,
       lineWidth,
       lineStyle: lineStyle || 0,
@@ -984,7 +984,7 @@ const tokenDetail = {
 
     // Volume histogram
     if (this.indicators.vol) {
-      const volSeries = chart.addHistogramSeries({
+      const volSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
         priceScaleId: 'volume',
         priceFormat: { type: 'volume' },
         lastValueVisible: false,
@@ -1075,7 +1075,7 @@ const tokenDetail = {
 
     const isPositive = seriesData[seriesData.length - 1].value >= seriesData[0].value;
     const chart = this._createChart(container, false);
-    const series = chart.addAreaSeries({
+    const series = chart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: isPositive ? '#22c55e' : '#ef4444',
       topColor: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
       bottomColor: 'transparent',
@@ -1105,7 +1105,7 @@ const tokenDetail = {
     });
 
     const chart = this._createChart(container, false);
-    const series = chart.addCandlestickSeries({
+    const series = chart.addSeries(LightweightCharts.CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
@@ -1915,7 +1915,7 @@ const tokenDetail = {
 
     const isPositive = seriesData[seriesData.length - 1].value >= seriesData[0].value;
     const chart = this._createChart(container, true);
-    const series = chart.addAreaSeries({
+    const series = chart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: isPositive ? '#22c55e' : '#ef4444',
       topColor: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
       bottomColor: 'transparent',
@@ -1944,7 +1944,7 @@ const tokenDetail = {
     });
 
     const chart = this._createChart(container, true);
-    const series = chart.addCandlestickSeries({
+    const series = chart.addSeries(LightweightCharts.CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
