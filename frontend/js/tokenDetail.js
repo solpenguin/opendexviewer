@@ -151,6 +151,14 @@ const tokenDetail = {
     const addressEl = document.getElementById('token-address');
     bindHandler(addressEl, 'click', copyHandler);
 
+    // Share button
+    const shareBtn = document.getElementById('share-btn');
+    const shareHandler = async () => {
+      const copied = await utils.copyToClipboard(window.location.href);
+      if (copied) toast.success('Link copied to clipboard');
+    };
+    bindHandler(shareBtn, 'click', shareHandler);
+
     // Watchlist button
     const watchlistBtn = document.getElementById('watchlist-btn');
     const watchlistHandler = async () => {
