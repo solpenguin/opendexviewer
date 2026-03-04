@@ -197,6 +197,122 @@ class FibRetracementPrimitive {
   }
 }
 
+// ── Preview Primitive (anchor dot + dashed line to cursor) ──
+
+class DrawPreviewRenderer {
+  constructor(anchor, cursor, mode) {
+    this._anchor = anchor;
+    this._cursor = cursor;
+    this._mode = mode;
+  }
+
+  draw(target) {
+    target.useMediaCoordinateSpace(({ context: ctx }) => {
+      const a = this._anchor;
+      const c = this._cursor;
+      if (a.x == null || a.y == null) return;
+
+      // Anchor dot — pulsing ring + solid center
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 7, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(99, 102, 241, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#6366f1';
+      ctx.fill();
+
+      // Dashed line to cursor (if cursor coords available)
+      if (c.x != null && c.y != null) {
+        ctx.beginPath();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(c.x, c.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Small crosshair at cursor
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.8)';
+        ctx.fill();
+      }
+    });
+  }
+}
+
+class DrawPreviewPaneView {
+  constructor(source) {
+    this._source = source;
+    this._anchor = { x: null, y: null };
+    this._cursor = { x: null, y: null };
+  }
+
+  update() {
+    const src = this._source;
+    if (!src._series || !src._chart || !src._anchorPoint) return;
+
+    const ts = src._chart.timeScale();
+    this._anchor.x = ts.timeToCoordinate(src._anchorPoint.time);
+    this._anchor.y = src._series.priceToCoordinate(src._anchorPoint.price);
+
+    // Cursor uses raw pixel coords (from crosshair move), not time/price
+    if (src._cursorPixel) {
+      this._cursor.x = src._cursorPixel.x;
+      this._cursor.y = src._cursorPixel.y;
+    } else {
+      this._cursor.x = null;
+      this._cursor.y = null;
+    }
+  }
+
+  renderer() {
+    return new DrawPreviewRenderer(this._anchor, this._cursor, this._source._drawMode);
+  }
+}
+
+class DrawPreviewPrimitive {
+  constructor(anchorPoint, drawMode) {
+    this._anchorPoint = anchorPoint;
+    this._drawMode = drawMode;
+    this._cursorPixel = null;
+    this._chart = null;
+    this._series = null;
+    this._requestUpdate = null;
+    this._paneView = new DrawPreviewPaneView(this);
+  }
+
+  attached({ chart, series, requestUpdate }) {
+    this._chart = chart;
+    this._series = series;
+    this._requestUpdate = requestUpdate;
+    requestUpdate();
+  }
+
+  detached() {
+    this._chart = null;
+    this._series = null;
+    this._requestUpdate = null;
+  }
+
+  updateCursor(pixel) {
+    this._cursorPixel = pixel;
+    if (this._requestUpdate) this._requestUpdate();
+  }
+
+  updateAllViews() {
+    this._paneView.update();
+  }
+
+  paneViews() {
+    return [this._paneView];
+  }
+}
+
 // ── Drawing Tool Manager ───────────────────────────────
 
 const ChartDrawTools = {
@@ -208,7 +324,6 @@ const ChartDrawTools = {
   _clickHandler: null,
   _crosshairHandler: null,
   _escHandler: null,
-  _cursorPoint: null,
   _previewPrimitive: null,
 
   init(chart, series) {
@@ -244,7 +359,10 @@ const ChartDrawTools = {
 
       self._points.push({ time, price });
 
-      if (self._points.length === 2) {
+      if (self._points.length === 1) {
+        // First point placed — show preview anchor + subscribe to crosshair for live line
+        self._attachPreview(self._points[0]);
+      } else if (self._points.length === 2) {
         self._finishDrawing();
       }
     };
@@ -263,7 +381,35 @@ const ChartDrawTools = {
     this._updateButtons();
   },
 
+  _attachPreview(anchorPoint) {
+    this._removePreview();
+    this._previewPrimitive = new DrawPreviewPrimitive(anchorPoint, this._mode);
+    this._series.attachPrimitive(this._previewPrimitive);
+
+    // Track cursor via crosshair move for live preview line
+    const self = this;
+    this._crosshairHandler = (param) => {
+      if (self._previewPrimitive && param.point) {
+        self._previewPrimitive.updateCursor({ x: param.point.x, y: param.point.y });
+      }
+    };
+    this._chart.subscribeCrosshairMove(this._crosshairHandler);
+  },
+
+  _removePreview() {
+    if (this._previewPrimitive && this._series) {
+      try { this._series.detachPrimitive(this._previewPrimitive); } catch (_) {}
+      this._previewPrimitive = null;
+    }
+    if (this._crosshairHandler && this._chart) {
+      try { this._chart.unsubscribeCrosshairMove(this._crosshairHandler); } catch (_) {}
+      this._crosshairHandler = null;
+    }
+  },
+
   _finishDrawing() {
+    this._removePreview();
+
     const p1 = this._points[0];
     const p2 = this._points[1];
 
@@ -288,6 +434,7 @@ const ChartDrawTools = {
   },
 
   _cancelDrawing() {
+    this._removePreview();
     this._points = [];
     this._mode = null;
     this._unsubscribeEvents();
