@@ -212,7 +212,7 @@
           <div class="api-example">
             <div class="api-example-label">Example Request</div>
             <pre><code>curl -H "X-API-Key: YOUR_KEY" \
-  https://api.opendex.dev/api/v1/community/So11111111111111111111111111111111111111112</code></pre>
+  https://opendex-api-dy30.onrender.com/api/v1/community/So11111111111111111111111111111111111111112</code></pre>
           </div>
           <div class="api-example">
             <div class="api-example-label">Response</div>
@@ -228,6 +228,7 @@
       "twitter": { "url": "https://twitter.com/solana", "score": 12 },
       "telegram": null,
       "discord": { "url": "https://discord.gg/solana", "score": 8 },
+      "tiktok": null,
       "website": { "url": "https://solana.com", "score": 10 }
     }
   }
@@ -243,7 +244,7 @@
           <p class="api-endpoint-desc">Get all approved submissions for a token (not just top-voted)</p>
           <div class="api-example">
             <div class="api-example-label">Query Parameters</div>
-            <pre><code>type    (optional) - Filter by type: banner, twitter, telegram, discord, website</code></pre>
+            <pre><code>type    (optional) - Filter by type: banner, twitter, telegram, discord, tiktok, website</code></pre>
           </div>
         </div>
 
@@ -260,7 +261,7 @@
           <div class="api-example">
             <div class="api-example-label">Example Request</div>
             <pre><code>curl -H "X-API-Key: YOUR_KEY" \
-  "https://api.opendex.dev/api/v1/community/batch?mints=mint1,mint2,mint3"</code></pre>
+  "https://opendex-api-dy30.onrender.com/api/v1/community/batch?mints=mint1,mint2,mint3"</code></pre>
           </div>
         </div>
 
@@ -272,12 +273,60 @@
           <p class="api-endpoint-desc">Get information about your API key (usage stats, creation date)</p>
         </div>
 
+        <h3>Sentiment Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/sentiment/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Get bullish/bearish sentiment tally for a token</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>wallet   (optional) - Include your vote in the response</code></pre>
+          </div>
+          <div class="api-example">
+            <div class="api-example-label">Response</div>
+            <pre><code>{
+  "tally": { "bullish": 45, "bearish": 15, "score": 30 },
+  "userVote": { "sentiment": "bullish" }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/sentiment/:mint</code>
+          </div>
+          <p class="api-endpoint-desc">Cast a bullish or bearish vote (no holder verification required, wallet connection only)</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "voterWallet": "...", "sentiment": "bullish | bearish" }</code></pre>
+          </div>
+        </div>
+
+        <h3>OG Finder</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/ogfinder/search</code>
+          </div>
+          <p class="api-endpoint-desc">Search PumpFun tokens by name or symbol, sorted by creation date (oldest first)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>q   string   Search query (name or symbol)</code></pre>
+          </div>
+        </div>
+
         <h3>Rate Limits</h3>
         <p>API requests are rate limited to prevent abuse:</p>
         <ul class="api-rate-limits">
           <li><strong>100 requests/minute</strong> - Standard endpoints</li>
           <li><strong>10 requests/minute</strong> - Key registration</li>
         </ul>
+        <p>Batch endpoints (e.g., <code>/community/batch</code>) count as 1 request regardless of how many tokens are queried.</p>
 
         <h3>Error Codes</h3>
         <div class="api-error-codes">

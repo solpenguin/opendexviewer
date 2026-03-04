@@ -119,10 +119,14 @@
         <a href="#overview" class="docs-toc-link">Platform Overview</a>
         <a href="#token-explorer" class="docs-toc-link">Token Explorer</a>
         <a href="#token-detail" class="docs-toc-link">Token Detail Page</a>
+        <a href="#charting" class="docs-toc-link">Charts &amp; Technical Analysis</a>
         <a href="#community-submissions" class="docs-toc-link">Community Submissions</a>
         <a href="#voting-system" class="docs-toc-link">Voting &amp; Approval System</a>
         <a href="#sentiment" class="docs-toc-link">Community Sentiment</a>
         <a href="#watchlist" class="docs-toc-link">Watchlist</a>
+        <a href="#wallets" class="docs-toc-link">Supported Wallets</a>
+        <a href="#ogfinder" class="docs-toc-link">OG Finder</a>
+        <a href="#bug-reports" class="docs-toc-link">Bug Reports</a>
         <a href="#telegram-bot" class="docs-toc-link">Telegram Bot</a>
         <a href="#api-reference" class="docs-toc-link">API Reference</a>
         <a href="#rate-limits" class="docs-toc-link">Rate Limits</a>
@@ -236,10 +240,10 @@
 
       <div class="docs-content-block">
         <h3>Header</h3>
-        <p>Displays the token logo, name, symbol, mint address with a copy button, Solscan explorer link, watchlist toggle, and current price with 24h change badge. Price auto-refreshes every 5 minutes with a visible countdown.</p>
+        <p>Displays the token logo, name, symbol, mint address with a copy button, Solscan explorer link, Bubblemaps link, Share button (copies page URL to clipboard), watchlist toggle, and current price with 24h change badge. Price auto-refreshes every 5 minutes with a visible countdown.</p>
 
         <h3>Price Chart</h3>
-        <p>Interactive chart powered by GeckoTerminal OHLCV data. Toggle between <strong>Price</strong> and <strong>Market Cap</strong> metrics, switch between <strong>Line</strong> and <strong>Candlestick</strong> chart types, and choose from five timeframes: 15 minutes, 1 hour (default), 4 hours, 1 day, and 1 week. Chart stats (Open, High, Low, Close, Volume) are shown below.</p>
+        <p>Interactive chart powered by TradingView Lightweight Charts with GeckoTerminal OHLCV data. Toggle between <strong>Price</strong> and <strong>Market Cap</strong> metrics, switch between <strong>Line</strong> and <strong>Candlestick</strong> chart types, and choose from six timeframes: 5 minutes, 15 minutes, 1 hour (default), 4 hours, 1 day, and 1 week. Technical analysis indicators are available: Volume histogram, SMA (7/25), EMA (7/25), Bollinger Bands, and a Logarithmic scale toggle. Click the expand button to open a fullscreen modal with drawing tools. Chart stats (Open, High, Low, Close, Volume) are shown below.</p>
 
         <h3>Statistics</h3>
         <p>Market cap, 24h volume, total liquidity, holder count, total supply, circulating supply, and page views.</p>
@@ -261,6 +265,92 @@
       </div>
     </section>
 
+    <!-- Charts & Technical Analysis -->
+    <section class="about-section" id="charting">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <h2>Charts &amp; Technical Analysis</h2>
+        <p>Interactive charting with indicators and drawing tools</p>
+      </div>
+
+      <div class="docs-content-block">
+        <h3>Chart Engine</h3>
+        <p>Charts are powered by <strong>TradingView Lightweight Charts</strong> with OHLCV data from GeckoTerminal. The page chart supports basic viewing, while the expanded fullscreen modal supports pan/zoom, drawing tools, and all interactive controls.</p>
+
+        <h3>Chart Types &amp; Metrics</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Line (Area)</strong>
+            <span>Smooth area chart showing price trend with green/red coloring based on direction</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Candlestick</strong>
+            <span>OHLC candles with green (up) and red (down) coloring</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Price / Market Cap</strong>
+            <span>Toggle between raw token price and market cap (price &times; circulating supply)</span>
+          </div>
+        </div>
+
+        <h3>Timeframes</h3>
+        <p>Six intervals available: <strong>5M</strong>, <strong>15M</strong>, <strong>1H</strong> (default), <strong>4H</strong>, <strong>1D</strong>, and <strong>1W</strong>. Both the page chart and modal chart stay in sync.</p>
+
+        <h3>Technical Indicators</h3>
+        <p>Toggle indicators on/off using the pill buttons. Active indicators persist across timeframe changes.</p>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Vol</strong>
+            <span>Volume histogram overlay with green/red bars based on candle direction (enabled by default)</span>
+          </div>
+          <div class="docs-feature">
+            <strong>SMA</strong>
+            <span>Simple Moving Averages with 7-period (yellow) and 25-period (blue) lines</span>
+          </div>
+          <div class="docs-feature">
+            <strong>EMA</strong>
+            <span>Exponential Moving Averages with 7-period (yellow, dashed) and 25-period (blue, dashed) lines</span>
+          </div>
+          <div class="docs-feature">
+            <strong>BB</strong>
+            <span>Bollinger Bands (20-period, 2 standard deviations) with upper, middle, and lower bands in purple</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Log</strong>
+            <span>Logarithmic price scale &mdash; useful for tokens with large price ranges or exponential growth</span>
+          </div>
+        </div>
+
+        <h3>Expanded Modal</h3>
+        <p>Click the expand button to open the chart in a fullscreen modal. The modal adds interactive pan/zoom with scroll, zoom in/out/reset buttons, and drawing tools. All controls (type, metric, timeframe, indicators) are available in the modal and stay in sync with the page chart.</p>
+
+        <h3>Drawing Tools (Modal Only)</h3>
+        <p>Drawing tools are available in the expanded modal chart for technical analysis:</p>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Trendline</strong>
+            <span>Click two points on the chart to draw a straight line between them. A preview dot and dashed line follow your cursor after the first click.</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Fibonacci Retracement</strong>
+            <span>Click a high and low point to draw 7 standard retracement levels (0%, 23.6%, 38.2%, 50%, 61.8%, 78.6%, 100%) with color-coded labels.</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Clear</strong>
+            <span>Remove all drawings from the chart. Drawings also clear automatically when switching timeframe, chart type, or metric.</span>
+          </div>
+        </div>
+        <p>Press <strong>Escape</strong> during drawing mode to cancel without placing. Click a tool button again to toggle it off.</p>
+
+        <h3>Data Source</h3>
+        <p>Chart data is fetched directly from GeckoTerminal in the browser (not through the backend) to distribute API rate limits across users. If the direct connection fails, it falls back to the backend API automatically.</p>
+      </div>
+    </section>
+
     <!-- Community Submissions -->
     <section class="about-section" id="community-submissions">
       <div class="about-header">
@@ -278,7 +368,7 @@
 
       <div class="docs-content-block">
         <h3>Requirements</h3>
-        <p>You must connect a Solana wallet (Phantom or Solflare) and hold at least <strong>0.1%</strong> of the token's circulating supply. Your balance and share percentage are verified on-chain in real time. The submit page shows your holder status with a green checkmark or red error.</p>
+        <p>You must connect a Solana wallet (Phantom, Solflare, Backpack, Coinbase Wallet, Trust Wallet, Brave Wallet, or Exodus) and hold at least <strong>0.1%</strong> of the token's circulating supply. Your balance and share percentage are verified on-chain in real time. The submit page shows your holder status with a green checkmark or red error.</p>
 
         <h3>Submission Types</h3>
         <p>You can submit any combination of the following in a single form (up to 5 fields):</p>
@@ -465,6 +555,120 @@
       </div>
     </section>
 
+    <!-- Supported Wallets -->
+    <section class="about-section" id="wallets">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+        </div>
+        <h2>Supported Wallets</h2>
+        <p>Connect any of these Solana wallets to use community features</p>
+      </div>
+
+      <div class="docs-content-block">
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>Phantom</strong>
+            <span>Most popular Solana wallet &mdash; auto-detected if installed</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Solflare</strong>
+            <span>Feature-rich Solana wallet with hardware wallet support</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Backpack</strong>
+            <span>xNFT-compatible wallet by Coral</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Coinbase Wallet</strong>
+            <span>Multi-chain wallet by Coinbase</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Trust Wallet</strong>
+            <span>Multi-chain mobile wallet</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Brave Wallet</strong>
+            <span>Built-in wallet in the Brave browser</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Exodus</strong>
+            <span>Multi-asset desktop and mobile wallet</span>
+          </div>
+        </div>
+        <p>When you click "Connect Wallet," a selector modal shows which wallets are installed in your browser. Wallets not detected offer a download link. Connection state is persisted in localStorage and synced across browser tabs via BroadcastChannel.</p>
+      </div>
+    </section>
+
+    <!-- OG Finder -->
+    <section class="about-section" id="ogfinder">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <h2>OG Finder</h2>
+        <p>Find the original token among copycats</p>
+      </div>
+
+      <div class="docs-content-block">
+        <p>The OG Finder tool at <code>ogfinder.html</code> searches PumpFun tokens by name or symbol and sorts results by creation date (oldest first). This helps you find the original token when there are many tokens with similar or identical names.</p>
+        <p>Results show the token logo, name, symbol, contract address, and creation timestamp. Token logos are enriched from Helius metadata and the OpenDex database.</p>
+      </div>
+    </section>
+
+    <!-- Bug Reports -->
+    <section class="about-section" id="bug-reports">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <h2>Bug Reports</h2>
+        <p>Report issues directly from any page</p>
+      </div>
+
+      <div class="docs-content-block">
+        <p>A floating bug report button is available on every page. Click it to open a form where you can describe the issue. No wallet connection is required.</p>
+        <h3>Categories</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>UI Bug</strong>
+            <span>Visual glitches, layout issues, or broken styling</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Data Error</strong>
+            <span>Incorrect prices, missing tokens, or wrong statistics</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Broken Link</strong>
+            <span>Links that don't work or point to the wrong page</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Performance</strong>
+            <span>Slow loading, lag, or unresponsive UI</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Feature Request</strong>
+            <span>Suggestions for new features or improvements</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Other</strong>
+            <span>Anything else that doesn't fit the above categories</span>
+          </div>
+        </div>
+        <p>Reports include the page URL automatically and are sent to the backend for review by the team.</p>
+      </div>
+    </section>
+
     <!-- Telegram Bot -->
     <section class="about-section" id="telegram-bot">
       <div class="about-header">
@@ -588,7 +792,7 @@ filter   string   trending | new | gainers | losers | most_viewed</code></pre>
           <p class="api-endpoint-desc">Price chart data from GeckoTerminal</p>
           <div class="api-example">
             <div class="api-example-label">Query Parameters</div>
-            <pre><code>interval   string   15m | 1h | 4h | 1d | 1w</code></pre>
+            <pre><code>interval   string   5m | 15m | 1h | 4h | 1d | 1w</code></pre>
           </div>
         </div>
 
@@ -600,7 +804,7 @@ filter   string   trending | new | gainers | losers | most_viewed</code></pre>
           <p class="api-endpoint-desc">OHLCV (Open, High, Low, Close, Volume) candle data with timestamps</p>
           <div class="api-example">
             <div class="api-example-label">Query Parameters</div>
-            <pre><code>interval   string   15m | 1h | 4h | 1d | 1w</code></pre>
+            <pre><code>interval   string   5m | 15m | 1h | 4h | 1d | 1w</code></pre>
           </div>
         </div>
 
@@ -1065,6 +1269,10 @@ status   string   pending | approved | rejected | all</code></pre>
           <div class="docs-feature">
             <strong>Helius</strong>
             <span>Solana RPC &mdash; batch token metadata enrichment</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Birdeye</strong>
+            <span>Token metadata and pricing fallback</span>
           </div>
           <div class="docs-feature">
             <strong>Solana RPC</strong>
