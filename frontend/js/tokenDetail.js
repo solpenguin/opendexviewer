@@ -856,10 +856,17 @@ const tokenDetail = {
       ? (v) => utils.formatNumber(v)
       : (v) => utils.formatPrice(v);
 
+    // LWCV v5 crashes with "Value is null" if container has zero dimensions,
+    // which can happen if the DOM hasn't reflowed after display:block.
+    // Use parent dimensions or sensible fallbacks; ResizeObserver corrects later.
+    const w = container.clientWidth || container.parentElement?.clientWidth || 600;
+    const h = container.clientHeight || container.parentElement?.clientHeight || 280;
+
     const chart = LightweightCharts.createChart(container, {
-      autoSize: true,
+      width: w,
+      height: h,
       layout: {
-        background: { type: 'solid', color: 'transparent' },
+        background: { type: 'solid', color: '#00000000' },
         textColor: '#6b6b73',
         fontFamily: 'Inter, sans-serif',
         fontSize: 11
@@ -888,12 +895,21 @@ const tokenDetail = {
       handleScale: isModal,
     });
 
+    // Resize chart when container dimensions change
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) chart.applyOptions({ width, height });
+    });
+    ro.observe(container);
+    chart._ro = ro;
+
     return chart;
   },
 
   // Clean up a chart instance
   _removeChart(chart) {
     if (!chart) return;
+    if (chart._ro) { chart._ro.disconnect(); chart._ro = null; }
     chart.remove();
   },
 
