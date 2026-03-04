@@ -53,9 +53,9 @@ const directPumpfun = {
       const data = await res.json();
       this._available = true;
 
-      if (Array.isArray(data)) return data;
-      if (data && Array.isArray(data.data)) return data.data;
-      return [];
+      var arr = Array.isArray(data) ? data : (data && Array.isArray(data.data) ? data.data : []);
+      // Keep only PumpFun-native tokens (exclude Bonk launchpad etc.)
+      return arr.filter(function(t) { return !t.program || t.program === 'pump'; });
     } catch (err) {
       // TypeError / "Failed to fetch" indicates CORS or network failure —
       // disable direct calls for the session to avoid repeated latency.

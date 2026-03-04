@@ -42,8 +42,11 @@ router.get('/search', asyncHandler(async (req, res) => {
   const response = await cache.getOrSet(cacheKey, async () => {
     const rawTokens = await pumpfunService.searchTokens(query, 50);
 
+    // Filter to PumpFun-native tokens only (exclude Bonk launchpad etc.)
+    const pumpTokens = rawTokens.filter(t => !t.program || t.program === 'pump');
+
     // Normalize PumpFun response to consistent shape
-    const tokens = rawTokens.map(token => ({
+    const tokens = pumpTokens.map(token => ({
       mint: token.mint || token.address || '',
       name: token.name || '',
       symbol: token.symbol || '',

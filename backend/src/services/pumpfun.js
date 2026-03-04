@@ -72,19 +72,18 @@ async function searchTokens(searchTerm, limit = 50) {
 
     const data = await response.json();
 
-    // PumpFun returns an array of coin objects directly
+    let coins;
     if (Array.isArray(data)) {
-      return data;
+      coins = data;
+    } else if (data && Array.isArray(data.data)) {
+      coins = data.data;
+    } else {
+      console.warn('[PumpFun] Unexpected response shape:', typeof data);
+      return [];
     }
 
-    // Or it might be wrapped in a data property
-    if (data && Array.isArray(data.data)) {
-      return data.data;
-    }
-
-    // If it's some other shape, return empty
-    console.warn('[PumpFun] Unexpected response shape:', typeof data);
-    return [];
+    // Keep only PumpFun-native tokens (exclude Bonk launchpad etc.)
+    return coins.filter(t => !t.program || t.program === 'pump');
   });
 }
 
