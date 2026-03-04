@@ -17,6 +17,9 @@ const tokenDetail = {
   _modalOpen: false,
   _modalEscHandler: null,
   indicators: { vol: true, sma: false, ema: false, bb: false },
+  logScale: false,
+  _mainSeries: null,
+  _modalMainSeries: null,
 
   // Get refresh interval from config (with fallback)
   get refreshIntervalMs() {
@@ -230,6 +233,21 @@ const tokenDetail = {
     document.querySelectorAll('.indicator-btn:not(.modal-indicator-btn)').forEach(btn => {
       const handler = () => {
         const ind = btn.dataset.indicator;
+
+        // Log scale is a separate toggle, not a regular indicator
+        if (ind === 'log') {
+          this.logScale = !this.logScale;
+          btn.classList.toggle('active', this.logScale);
+          document.querySelectorAll('.modal-indicator-btn[data-indicator="log"]').forEach(b =>
+            b.classList.toggle('active', this.logScale)
+          );
+          if (this.chartData) {
+            this.renderChart(this.chartData);
+            if (this._modalOpen) this._renderModalChart();
+          }
+          return;
+        }
+
         this.indicators[ind] = !this.indicators[ind];
         btn.classList.toggle('active', this.indicators[ind]);
         // Sync modal buttons
@@ -862,22 +880,18 @@ const tokenDetail = {
   },
 
   // Create a TradingView Lightweight Chart instance.
-  // LWCV v5 throws "Value is null" when the container has zero dimensions,
-  // so we use explicit pixel values with sensible fallbacks.
   _createChart(container, isModal = false) {
     const formatValue = this.chartMetric === 'mcap'
       ? (v) => utils.formatNumber(v)
       : (v) => utils.formatPrice(v);
 
-    // Force a synchronous layout reflow so clientWidth/Height reflect the
-    // actual rendered size — even if #token-content was just toggled to
-    // display:block in the same event-loop tick.
-    void container.offsetWidth;
-
-    // Determine dimensions with cascading fallbacks.
+    // Read dimensions from the PARENT (.chart-container / .chart-modal-container)
+    // which has explicit CSS height. The chart div itself may report 0 before
+    // LWCV populates it.  Force a reflow first so values are up-to-date.
     const parent = container.parentElement;
-    const w = container.clientWidth || (parent && parent.clientWidth) || 600;
-    const h = container.clientHeight || (parent && parent.clientHeight) || 280;
+    void (parent || container).offsetWidth;
+    const w = (parent && parent.clientWidth) || container.clientWidth || 600;
+    const h = (parent && parent.clientHeight) || container.clientHeight || 280;
 
     const chart = LightweightCharts.createChart(container, {
       width: w,
@@ -894,6 +908,7 @@ const tokenDetail = {
       },
       rightPriceScale: {
         borderVisible: false,
+        mode: this.logScale ? LightweightCharts.PriceScaleMode.Logarithmic : LightweightCharts.PriceScaleMode.Normal,
       },
       timeScale: {
         borderVisible: false,
@@ -912,19 +927,30 @@ const tokenDetail = {
       handleScale: isModal,
     });
 
-    // Resize chart when container dimensions change.
-    // Skip the first callback (fires immediately on observe() before LWCV
-    // finishes internal canvas setup) since we already passed explicit dims.
-    let roSkipFirst = true;
-    const ro = new ResizeObserver(entries => {
-      if (roSkipFirst) { roSkipFirst = false; return; }
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) {
-        try { chart.applyOptions({ width, height }); } catch (_) {}
-      }
+    // Observe the PARENT container for resize — NOT the chart div itself.
+    // Observing the chart div causes a feedback loop: LWCV's internal DOM
+    // changes trigger ResizeObserver → applyOptions → LWCV rAF render while
+    // still initializing → "Value is null" crash.  The parent has stable
+    // CSS dimensions and only resizes on genuine layout changes.
+    const observed = parent || container;
+    let roRaf = 0;
+    const ro = new ResizeObserver(() => {
+      // Debounce: LWCV rendering is expensive and ResizeObserver can fire
+      // in rapid bursts during layout thrashing.
+      if (roRaf) return;
+      roRaf = requestAnimationFrame(() => {
+        roRaf = 0;
+        const nw = observed.clientWidth;
+        const nh = observed.clientHeight;
+        if (nw > 0 && nh > 0) {
+          try { chart.resize(nw, nh); } catch (_) {}
+        }
+      });
     });
-    ro.observe(container);
+    ro.observe(observed);
     chart._ro = ro;
+    // Store a cleanup function that cancels any pending rAF
+    chart._roCleanup = () => { if (roRaf) { cancelAnimationFrame(roRaf); roRaf = 0; } };
 
     return chart;
   },
@@ -932,8 +958,9 @@ const tokenDetail = {
   // Clean up a chart instance
   _removeChart(chart) {
     if (!chart) return;
+    if (chart._roCleanup) { chart._roCleanup(); chart._roCleanup = null; }
     if (chart._ro) { chart._ro.disconnect(); chart._ro = null; }
-    chart.remove();
+    try { chart.remove(); } catch (_) {}
   },
 
   // ── TA Indicator Calculations ──────────────────────────
@@ -1132,6 +1159,7 @@ const tokenDetail = {
     this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.chart = chart;
+    this._mainSeries = series;
   },
 
   // Render candlestick chart with TradingView Lightweight Charts
@@ -1173,6 +1201,7 @@ const tokenDetail = {
     this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.chart = chart;
+    this._mainSeries = series;
   },
 
   // Render empty chart placeholder
@@ -1772,10 +1801,13 @@ const tokenDetail = {
     if (overlay) overlay.style.display = 'none';
     document.body.style.overflow = '';
 
+    if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.destroy();
+
     if (this.modalChart) {
       this._removeChart(this.modalChart);
       this.modalChart = null;
     }
+    this._modalMainSeries = null;
 
     if (this._modalEscHandler) {
       document.removeEventListener('keydown', this._modalEscHandler);
@@ -1794,7 +1826,12 @@ const tokenDetail = {
       btn.classList.toggle('active', btn.dataset.interval === this.currentInterval);
     });
     document.querySelectorAll('.modal-indicator-btn').forEach(btn => {
-      btn.classList.toggle('active', this.indicators[btn.dataset.indicator]);
+      const ind = btn.dataset.indicator;
+      if (ind === 'log') {
+        btn.classList.toggle('active', this.logScale);
+      } else {
+        btn.classList.toggle('active', this.indicators[ind]);
+      }
     });
     const modalTitle = document.getElementById('chart-modal-title');
     if (modalTitle) {
@@ -1898,6 +1935,21 @@ const tokenDetail = {
       btn._mBound = true;
       btn.addEventListener('click', () => {
         const ind = btn.dataset.indicator;
+
+        // Log scale is a separate toggle
+        if (ind === 'log') {
+          self.logScale = !self.logScale;
+          btn.classList.toggle('active', self.logScale);
+          document.querySelectorAll('.indicator-btn:not(.modal-indicator-btn)[data-indicator="log"]').forEach(b =>
+            b.classList.toggle('active', self.logScale)
+          );
+          if (self.chartData) {
+            self.renderChart(self.chartData);
+            self._renderModalChart();
+          }
+          return;
+        }
+
         self.indicators[ind] = !self.indicators[ind];
         btn.classList.toggle('active', self.indicators[ind]);
         // Sync page buttons
@@ -1910,6 +1962,29 @@ const tokenDetail = {
         }
       });
     });
+
+    // Draw tool buttons (modal only)
+    const trendBtn = document.getElementById('chart-tool-trend');
+    if (trendBtn && !trendBtn._mBound) {
+      trendBtn._mBound = true;
+      trendBtn.addEventListener('click', () => {
+        if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.setMode('trend');
+      });
+    }
+    const fibBtn = document.getElementById('chart-tool-fib');
+    if (fibBtn && !fibBtn._mBound) {
+      fibBtn._mBound = true;
+      fibBtn.addEventListener('click', () => {
+        if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.setMode('fib');
+      });
+    }
+    const clearBtn = document.getElementById('chart-tool-clear');
+    if (clearBtn && !clearBtn._mBound) {
+      clearBtn._mBound = true;
+      clearBtn.addEventListener('click', () => {
+        if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.clear();
+      });
+    }
 
     // Zoom controls
     const zoomIn = document.getElementById('chart-zoom-in');
@@ -1947,10 +2022,14 @@ const tokenDetail = {
     const container = document.getElementById('modal-price-chart');
     if (!container) return;
 
+    // Destroy draw tools before re-creating chart (clears drawings on timeframe/type change)
+    if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.destroy();
+
     if (this.modalChart) {
       this._removeChart(this.modalChart);
       this.modalChart = null;
     }
+    this._modalMainSeries = null;
     container.innerHTML = '';
 
     if (!this.chartData?.data?.length || this.chartData.data.length < 3) return;
@@ -1960,6 +2039,11 @@ const tokenDetail = {
       this._renderModalCandlestick(container, chartData);
     } else {
       this._renderModalLine(container, chartData);
+    }
+
+    // Initialize draw tools with the new modal chart + series
+    if (typeof ChartDrawTools !== 'undefined' && this.modalChart && this._modalMainSeries) {
+      ChartDrawTools.init(this.modalChart, this._modalMainSeries);
     }
   },
 
@@ -1992,6 +2076,7 @@ const tokenDetail = {
     this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.modalChart = chart;
+    this._modalMainSeries = series;
   },
 
   _renderModalCandlestick(container, data) {
@@ -2031,6 +2116,7 @@ const tokenDetail = {
     this._addIndicators(chart, data);
     chart.timeScale().fitContent();
     this.modalChart = chart;
+    this._modalMainSeries = series;
   },
 
   async _loadModalChart(interval) {

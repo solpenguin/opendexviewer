@@ -32,7 +32,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="css/styles.css">
-  <script src="https://unpkg.com/lightweight-charts@5.0.4/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <header class="header">
@@ -247,7 +247,7 @@
             <div class="chart-timeframes">
               <button class="timeframe-btn" data-interval="5m">5M</button>
               <button class="timeframe-btn" data-interval="15m">15M</button>
-              <button class="timeframe-btn" data-interval="30m">30M</button>
+
               <button class="timeframe-btn active" data-interval="1h">1H</button>
               <button class="timeframe-btn" data-interval="4h">4H</button>
               <button class="timeframe-btn" data-interval="1d">1D</button>
@@ -258,6 +258,7 @@
               <button class="indicator-btn" data-indicator="sma">SMA</button>
               <button class="indicator-btn" data-indicator="ema">EMA</button>
               <button class="indicator-btn" data-indicator="bb">BB</button>
+              <button class="indicator-btn" data-indicator="log">Log</button>
             </div>
           </div>
           <div class="chart-container">
@@ -471,7 +472,7 @@
           <div class="chart-timeframes chart-modal-timeframes">
             <button class="timeframe-btn modal-timeframe-btn" data-interval="5m">5M</button>
             <button class="timeframe-btn modal-timeframe-btn" data-interval="15m">15M</button>
-            <button class="timeframe-btn modal-timeframe-btn" data-interval="30m">30M</button>
+
             <button class="timeframe-btn modal-timeframe-btn" data-interval="1h">1H</button>
             <button class="timeframe-btn modal-timeframe-btn" data-interval="4h">4H</button>
             <button class="timeframe-btn modal-timeframe-btn" data-interval="1d">1D</button>
@@ -482,8 +483,20 @@
             <button class="indicator-btn modal-indicator-btn" data-indicator="sma">SMA</button>
             <button class="indicator-btn modal-indicator-btn" data-indicator="ema">EMA</button>
             <button class="indicator-btn modal-indicator-btn" data-indicator="bb">BB</button>
+            <button class="indicator-btn modal-indicator-btn" data-indicator="log">Log</button>
           </div>
           <div class="chart-modal-right-controls">
+            <div class="chart-draw-tools">
+              <button id="chart-tool-trend" class="chart-draw-btn" title="Trendline">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4"/></svg>
+              </button>
+              <button id="chart-tool-fib" class="chart-draw-btn" title="Fibonacci Retracement">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10" stroke-dasharray="4 3"/><line x1="3" y1="14" x2="21" y2="14" stroke-dasharray="4 3"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              </button>
+              <button id="chart-tool-clear" class="chart-draw-btn" title="Clear Drawings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              </button>
+            </div>
             <div class="chart-zoom-controls">
               <button id="chart-zoom-in" class="chart-zoom-btn" title="Zoom In">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
@@ -535,6 +548,7 @@
   <script src="js/watchlist.js"></script>
   <script src="js/voting.js"></script>
   <script src="js/sentiment.js"></script>
+  <script src="js/chartDrawTools.js"></script>
   <script src="js/tokenDetail.js"></script>
   <script src="js/announcements.js"></script>
   <script>
