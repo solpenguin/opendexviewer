@@ -45,7 +45,6 @@ const tokenDetail = {
       : Promise.reject(new Error('GeckoTerminal client not available'));
 
     this.bindEvents();
-    if (typeof chartTools !== 'undefined') chartTools.init();
 
     try {
       await this.loadToken();
@@ -172,7 +171,7 @@ const tokenDetail = {
         document.querySelectorAll('.chart-metric-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.chartMetric = btn.dataset.metric;
-        if (typeof chartTools !== 'undefined') chartTools.clearAll();
+
         // Update chart title
         const titleEl = document.getElementById('chart-title');
         if (titleEl) {
@@ -192,7 +191,7 @@ const tokenDetail = {
         document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentInterval = btn.dataset.interval;
-        if (typeof chartTools !== 'undefined') chartTools.clearAll();
+
         this.loadChart(this.currentInterval);
       };
       bindHandler(btn, 'click', handler);
@@ -729,11 +728,14 @@ const tokenDetail = {
   renderChartError(error) {
     console.error('[Chart] GeckoTerminal fetch failed:', error?.message || error);
 
-    // Destroy any stale chart to free memory and clear the canvas
+    // Remove any stale chart to free memory
     if (this.chart) {
-      this.chart.destroy();
+      this.chart.remove();
       this.chart = null;
     }
+    // Clear the chart container
+    const chartEl = document.getElementById('price-chart');
+    if (chartEl) chartEl.innerHTML = '';
 
     const errorEl = document.getElementById('chart-error');
     if (!errorEl) return;
@@ -818,15 +820,81 @@ const tokenDetail = {
     if (lows.length  > 0) lowEl.textContent  = utils.formatPrice(Math.min(...lows));
   },
 
+  // Create a TradingView Lightweight Chart instance
+  _createChart(container, isModal = false) {
+    const formatValue = this.chartMetric === 'mcap'
+      ? (v) => utils.formatNumber(v)
+      : (v) => utils.formatPrice(v);
+
+    const chart = LightweightCharts.createChart(container, {
+      width: container.clientWidth,
+      height: container.clientHeight,
+      layout: {
+        background: { type: 'solid', color: 'transparent' },
+        textColor: '#6b6b73',
+        fontFamily: 'Inter, sans-serif',
+        fontSize: 11
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: 'rgba(255, 255, 255, 0.04)' }
+      },
+      rightPriceScale: {
+        borderVisible: false,
+      },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: true,
+        secondsVisible: false
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { color: 'rgba(255, 255, 255, 0.15)', style: LightweightCharts.LineStyle.Dashed, width: 1, labelBackgroundColor: 'rgba(99, 102, 241, 0.85)' },
+        horzLine: { color: 'rgba(255, 255, 255, 0.15)', style: LightweightCharts.LineStyle.Dashed, width: 1, labelBackgroundColor: 'rgba(99, 102, 241, 0.85)' }
+      },
+      localization: {
+        priceFormatter: formatValue
+      },
+      handleScroll: isModal,
+      handleScale: isModal,
+    });
+
+    // Auto-resize with container
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) chart.applyOptions({ width, height });
+    });
+    ro.observe(container);
+    chart._resizeObserver = ro;
+
+    return chart;
+  },
+
+  // Clean up a chart instance
+  _removeChart(chart) {
+    if (!chart) return;
+    if (chart._resizeObserver) {
+      chart._resizeObserver.disconnect();
+      chart._resizeObserver = null;
+    }
+    chart.remove();
+  },
+
   // Render chart
   renderChart(data) {
-    const ctx = document.getElementById('price-chart');
-    if (!ctx) return;
+    const container = document.getElementById('price-chart');
+    if (!container) return;
 
-    // Destroy existing chart
+    // Remove existing chart
     if (this.chart) {
-      this.chart.destroy();
+      this._removeChart(this.chart);
+      this.chart = null;
     }
+    container.innerHTML = '';
+
+    // Hide empty state
+    const emptyEl = document.getElementById('chart-empty');
+    if (emptyEl) emptyEl.style.display = 'none';
 
     // If no data, show placeholder
     if (!data || !data.data || data.data.length === 0) {
@@ -843,277 +911,81 @@ const tokenDetail = {
     }
 
     if (this.chartType === 'candle' && chartData[0].open !== undefined) {
-      this.renderCandlestickChart(ctx, chartData);
+      this.renderCandlestickChart(container, chartData);
     } else {
-      this.renderLineChart(ctx, chartData);
+      this.renderLineChart(container, chartData);
     }
   },
 
-  // Render line chart
-  renderLineChart(ctx, data) {
-    const labels = data.map(d => new Date(d.timestamp || d.time));
-
-    // Get values based on selected metric
-    const isMcap = this.chartMetric === 'mcap';
-    let values;
-
-    if (isMcap) {
-      // Calculate market cap from price * supply (if available)
-      const supply = this.token?.supply || this.token?.circulatingSupply || 0;
-      if (supply > 0) {
-        values = data.map(d => (d.close || d.price) * supply);
-      } else {
-        // Fallback: use price if no supply data
-        values = data.map(d => d.close || d.price);
-      }
-    } else {
-      values = data.map(d => d.close || d.price);
-    }
-
-    // Determine if values went up or down overall
-    const isPositive = values[values.length - 1] >= values[0];
-    const lineColor = isPositive ? '#22c55e' : '#ef4444';
-    const fillColor = isPositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-
-    const metricLabel = isMcap ? 'Market Cap' : 'Price';
-    const formatValue = isMcap
-      ? (value) => utils.formatNumber(value)
-      : (value) => utils.formatPrice(value);
-
-    this.chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: metricLabel,
-          data: values,
-          borderColor: lineColor,
-          backgroundColor: fillColor,
-          fill: true,
-          tension: 0.2,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          borderWidth: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          duration: 300
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: false }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            display: true,
-            grid: {
-              display: false
-            },
-            ticks: {
-              color: '#6b6b73',
-              maxRotation: 0,
-              autoSkip: true,
-              maxTicksLimit: 6,
-              font: {
-                size: 11
-              }
-            }
-          },
-          y: {
-            position: 'right',
-            grid: {
-              color: 'rgba(255, 255, 255, 0.04)',
-              drawBorder: false
-            },
-            ticks: {
-              color: '#6b6b73',
-              callback: value => formatValue(value),
-              font: {
-                size: 11
-              },
-              maxTicksLimit: 6
-            }
-          }
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index'
-        }
-      }
-    });
-    if (typeof chartTools !== 'undefined') chartTools.attach(this.chart);
-  },
-
-  // Render candlestick chart using chartjs-chart-financial plugin
-  renderCandlestickChart(ctx, data) {
-    // Get values based on selected metric (price or market cap)
+  // Render line chart with TradingView Lightweight Charts
+  renderLineChart(container, data) {
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
-    // Transform data into OHLC format for candlestick chart
-    const candleData = data.map(d => {
+    const seriesData = data.map(d => ({
+      time: Math.floor((d.timestamp || d.time) / 1000),
+      value: isMcap && supply > 0 ? (d.close || d.price) * supply : (d.close || d.price)
+    }));
+
+    const isPositive = seriesData[seriesData.length - 1].value >= seriesData[0].value;
+    const chart = this._createChart(container, false);
+    const series = chart.addAreaSeries({
+      lineColor: isPositive ? '#22c55e' : '#ef4444',
+      topColor: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+      bottomColor: 'transparent',
+      lineWidth: 2,
+    });
+    series.setData(seriesData);
+    chart.timeScale().fitContent();
+    this.chart = chart;
+  },
+
+  // Render candlestick chart with TradingView Lightweight Charts
+  renderCandlestickChart(container, data) {
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+
+    const seriesData = data.map(d => {
       let o = d.open || d.price;
       let h = d.high || d.price;
       let l = d.low || d.price;
       let c = d.close || d.price;
-
-      // Convert to market cap if needed
-      if (isMcap && supply > 0) {
-        o *= supply;
-        h *= supply;
-        l *= supply;
-        c *= supply;
-      }
-
+      if (isMcap && supply > 0) { o *= supply; h *= supply; l *= supply; c *= supply; }
       return {
-        x: new Date(d.timestamp || d.time).getTime(),
-        o: o,
-        h: h,
-        l: l,
-        c: c
+        time: Math.floor((d.timestamp || d.time) / 1000),
+        open: o, high: h, low: l, close: c
       };
     });
 
-    const metricLabel = isMcap ? 'Market Cap' : 'Price';
-    const formatValue = isMcap
-      ? (value) => utils.formatNumber(value)
-      : (value) => utils.formatPrice(value);
-
-    this.chart = new Chart(ctx, {
-      type: 'candlestick',
-      data: {
-        datasets: [{
-          label: metricLabel,
-          data: candleData,
-          color: {
-            up: '#22c55e',      // Green for bullish candles
-            down: '#ef4444',   // Red for bearish candles
-            unchanged: '#6b6b73'
-          },
-          borderColor: {
-            up: '#22c55e',
-            down: '#ef4444',
-            unchanged: '#6b6b73'
-          }
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          duration: 300
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: false }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            display: true,
-            grid: {
-              display: false
-            },
-            ticks: {
-              color: '#6b6b73',
-              maxRotation: 0,
-              autoSkip: true,
-              maxTicksLimit: 6,
-              font: {
-                size: 11
-              }
-            }
-          },
-          y: {
-            position: 'right',
-            grid: {
-              color: 'rgba(255, 255, 255, 0.04)',
-              drawBorder: false
-            },
-            ticks: {
-              color: '#6b6b73',
-              callback: value => formatValue(value),
-              font: {
-                size: 11
-              },
-              maxTicksLimit: 6
-            }
-          }
-        },
-        interaction: {
-          intersect: false,
-          mode: 'nearest'
-        }
-      }
+    const chart = this._createChart(container, false);
+    const series = chart.addCandlestickSeries({
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
     });
-    if (typeof chartTools !== 'undefined') chartTools.attach(this.chart);
+    series.setData(seriesData);
+    chart.timeScale().fitContent();
+    this.chart = chart;
   },
 
   // Render empty chart placeholder
-  // isNewToken: shows a more friendly message with accent color
   renderEmptyChart(message = 'No chart data available', isNewToken = false) {
-    const ctx = document.getElementById('price-chart');
-    if (!ctx) return;
+    const container = document.getElementById('price-chart');
+    if (container) container.innerHTML = '';
 
     if (this.chart) {
-      this.chart.destroy();
+      this._removeChart(this.chart);
+      this.chart = null;
     }
 
-    // For new tokens, show a subtle animated pulse line
-    const lineColor = isNewToken ? '#3b82f6' : '#2a2a30';
-    const textColor = isNewToken ? '#60a5fa' : '#6b6b73';
-
-    this.chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: ['', '', '', '', '', '', ''],
-        datasets: [{
-          data: isNewToken ? [1, 1.2, 0.9, 1.1, 1, 1.15, 1.05] : [0, 0, 0, 0, 0, 0, 0],
-          borderColor: lineColor,
-          borderWidth: isNewToken ? 2 : 1,
-          borderDash: isNewToken ? [5, 5] : [],
-          fill: false,
-          tension: 0.4,
-          pointRadius: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: isNewToken ? {
-          duration: 2000,
-          easing: 'easeInOutQuart'
-        } : { duration: 0 },
-        plugins: {
-          legend: { display: false },
-          title: {
-            display: true,
-            text: message,
-            color: textColor,
-            font: {
-              size: isNewToken ? 16 : 14,
-              weight: isNewToken ? '500' : 'normal'
-            },
-            padding: { top: 10, bottom: 20 }
-          },
-          subtitle: isNewToken ? {
-            display: true,
-            text: 'Check back soon for price history',
-            color: '#6b6b73',
-            font: { size: 12 },
-            padding: { bottom: 10 }
-          } : { display: false }
-        },
-        scales: {
-          x: { display: false },
-          y: { display: false }
-        }
-      }
-    });
+    const emptyEl = document.getElementById('chart-empty');
+    if (!emptyEl) return;
+    emptyEl.style.display = 'flex';
+    emptyEl.textContent = isNewToken ? message + ' Check back soon for price history.' : message;
+    emptyEl.style.color = isNewToken ? '#60a5fa' : '#6b6b73';
   },
 
   // Update the combined community section (banner + links)
@@ -1646,9 +1518,9 @@ const tokenDetail = {
     }
 
     // Destroy chart safely
-    if (this.chart && typeof this.chart.destroy === 'function') {
+    if (this.chart) {
       try {
-        this.chart.destroy();
+        this._removeChart(this.chart);
       } catch (e) {
         console.warn('Chart destruction failed:', e.message);
       }
@@ -1681,13 +1553,6 @@ const tokenDetail = {
     overlay.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 
-    // Switch chartTools to modal overlay canvas BEFORE rendering
-    // so _renderModalChart's attach() call operates on the correct canvas
-    const modalOverlay = document.getElementById('modal-chart-overlay');
-    if (typeof chartTools !== 'undefined' && modalOverlay) {
-      chartTools.switchCanvas(modalOverlay);
-    }
-
     this._renderModalChart();
     this._bindModalControls();
   },
@@ -1701,15 +1566,8 @@ const tokenDetail = {
     document.body.style.overflow = '';
 
     if (this.modalChart) {
-      this.modalChart.destroy();
+      this._removeChart(this.modalChart);
       this.modalChart = null;
-    }
-
-    // Switch chartTools back to page canvas
-    const pageOverlay = document.getElementById('chart-overlay');
-    if (typeof chartTools !== 'undefined' && pageOverlay) {
-      chartTools.switchCanvas(pageOverlay);
-      if (this.chart) chartTools.attach(this.chart);
     }
 
     if (this._modalEscHandler) {
@@ -1772,7 +1630,7 @@ const tokenDetail = {
         document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(b => {
           b.classList.toggle('active', b.dataset.metric === self.chartMetric);
         });
-        if (typeof chartTools !== 'undefined') chartTools.clearAll();
+
         const titleText = self.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
         const pt = document.getElementById('chart-title');
         if (pt) pt.textContent = titleText;
@@ -1819,20 +1677,8 @@ const tokenDetail = {
         document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)').forEach(b => {
           b.classList.toggle('active', b.dataset.interval === interval);
         });
-        if (typeof chartTools !== 'undefined') chartTools.clearAll();
-        self._loadModalChart(interval);
-      });
-    });
 
-    // Drawing tool buttons
-    document.querySelectorAll('.modal-tool-btn[data-tool]').forEach(btn => {
-      if (btn._mBound) return;
-      btn._mBound = true;
-      btn.addEventListener('click', () => {
-        const tool = btn.dataset.tool;
-        if (tool === 'clear') { if (typeof chartTools !== 'undefined') chartTools.clearAll(); return; }
-        if (tool === 'undo')  { if (typeof chartTools !== 'undefined') chartTools.undo(); return; }
-        if (typeof chartTools !== 'undefined') chartTools.setTool(tool);
+        self._loadModalChart(interval);
       });
     });
 
@@ -1840,171 +1686,104 @@ const tokenDetail = {
     const zoomIn = document.getElementById('chart-zoom-in');
     if (zoomIn && !zoomIn._mBound) {
       zoomIn._mBound = true;
-      zoomIn.addEventListener('click', () => { if (self.modalChart) self.modalChart.zoom(1.2); });
+      zoomIn.addEventListener('click', () => {
+        if (!self.modalChart) return;
+        const range = self.modalChart.timeScale().getVisibleLogicalRange();
+        if (!range) return;
+        const span = range.to - range.from;
+        const shrink = span * 0.2;
+        self.modalChart.timeScale().setVisibleLogicalRange({ from: range.from + shrink, to: range.to - shrink });
+      });
     }
     const zoomOut = document.getElementById('chart-zoom-out');
     if (zoomOut && !zoomOut._mBound) {
       zoomOut._mBound = true;
-      zoomOut.addEventListener('click', () => { if (self.modalChart) self.modalChart.zoom(0.8); });
+      zoomOut.addEventListener('click', () => {
+        if (!self.modalChart) return;
+        const range = self.modalChart.timeScale().getVisibleLogicalRange();
+        if (!range) return;
+        const span = range.to - range.from;
+        const grow = span * 0.2;
+        self.modalChart.timeScale().setVisibleLogicalRange({ from: range.from - grow, to: range.to + grow });
+      });
     }
     const zoomReset = document.getElementById('chart-zoom-reset');
     if (zoomReset && !zoomReset._mBound) {
       zoomReset._mBound = true;
-      zoomReset.addEventListener('click', () => { if (self.modalChart) self.modalChart.resetZoom(); });
+      zoomReset.addEventListener('click', () => { if (self.modalChart) self.modalChart.timeScale().fitContent(); });
     }
   },
 
   _renderModalChart() {
-    const ctx = document.getElementById('modal-price-chart');
-    if (!ctx) return;
+    const container = document.getElementById('modal-price-chart');
+    if (!container) return;
 
     if (this.modalChart) {
-      this.modalChart.destroy();
+      this._removeChart(this.modalChart);
       this.modalChart = null;
     }
+    container.innerHTML = '';
 
     if (!this.chartData?.data?.length || this.chartData.data.length < 3) return;
 
     const chartData = this.chartData.data;
-    const zoomConfig = {
-      zoom: {
-        wheel: { enabled: true },
-        pinch: { enabled: true },
-        mode: 'x'
-      },
-      pan: {
-        enabled: true,
-        mode: 'x'
-      },
-      limits: {
-        x: { minRange: 3 }
-      }
-    };
-
     if (this.chartType === 'candle' && chartData[0].open !== undefined) {
-      this._renderModalCandlestick(ctx, chartData, zoomConfig);
+      this._renderModalCandlestick(container, chartData);
     } else {
-      this._renderModalLine(ctx, chartData, zoomConfig);
-    }
-
-    // Re-attach chartTools to the modal chart
-    const modalOverlay = document.getElementById('modal-chart-overlay');
-    if (typeof chartTools !== 'undefined' && modalOverlay && this.modalChart) {
-      chartTools.attach(this.modalChart);
+      this._renderModalLine(container, chartData);
     }
   },
 
-  _renderModalLine(ctx, data, zoomConfig) {
-    const labels = data.map(d => new Date(d.timestamp || d.time));
+  _renderModalLine(container, data) {
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
-    let values;
-    if (isMcap && supply > 0) {
-      values = data.map(d => (d.close || d.price) * supply);
-    } else {
-      values = data.map(d => d.close || d.price);
-    }
 
-    const isPositive = values[values.length - 1] >= values[0];
-    const lineColor = isPositive ? '#22c55e' : '#ef4444';
-    const fillColor = isPositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-    const metricLabel = isMcap ? 'Market Cap' : 'Price';
-    const formatValue = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
+    const seriesData = data.map(d => ({
+      time: Math.floor((d.timestamp || d.time) / 1000),
+      value: isMcap && supply > 0 ? (d.close || d.price) * supply : (d.close || d.price)
+    }));
 
-    this.modalChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: metricLabel,
-          data: values,
-          borderColor: lineColor,
-          backgroundColor: fillColor,
-          fill: true,
-          tension: 0.2,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          borderWidth: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 300 },
-        plugins: {
-          legend: { display: false },
-          zoom: zoomConfig,
-          tooltip: { enabled: false }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            display: true,
-            grid: { display: false },
-            ticks: { color: '#6b6b73', maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 11 } }
-          },
-          y: {
-            position: 'right',
-            grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
-            ticks: { color: '#6b6b73', callback: value => formatValue(value), font: { size: 11 }, maxTicksLimit: 8 }
-          }
-        },
-        interaction: { intersect: false, mode: 'index' }
-      }
+    const isPositive = seriesData[seriesData.length - 1].value >= seriesData[0].value;
+    const chart = this._createChart(container, true);
+    const series = chart.addAreaSeries({
+      lineColor: isPositive ? '#22c55e' : '#ef4444',
+      topColor: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+      bottomColor: 'transparent',
+      lineWidth: 2,
     });
+    series.setData(seriesData);
+    chart.timeScale().fitContent();
+    this.modalChart = chart;
   },
 
-  _renderModalCandlestick(ctx, data, zoomConfig) {
+  _renderModalCandlestick(container, data) {
     const isMcap = this.chartMetric === 'mcap';
     const supply = this.token?.supply || this.token?.circulatingSupply || 0;
 
-    const candleData = data.map(d => {
+    const seriesData = data.map(d => {
       let o = d.open || d.price;
       let h = d.high || d.price;
       let l = d.low || d.price;
       let c = d.close || d.price;
       if (isMcap && supply > 0) { o *= supply; h *= supply; l *= supply; c *= supply; }
-      return { x: new Date(d.timestamp || d.time).getTime(), o, h, l, c };
+      return {
+        time: Math.floor((d.timestamp || d.time) / 1000),
+        open: o, high: h, low: l, close: c
+      };
     });
 
-    const metricLabel = isMcap ? 'Market Cap' : 'Price';
-    const formatValue = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
-
-    this.modalChart = new Chart(ctx, {
-      type: 'candlestick',
-      data: {
-        datasets: [{
-          label: metricLabel,
-          data: candleData,
-          color: { up: '#22c55e', down: '#ef4444', unchanged: '#6b6b73' },
-          borderColor: { up: '#22c55e', down: '#ef4444', unchanged: '#6b6b73' }
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 300 },
-        plugins: {
-          legend: { display: false },
-          zoom: zoomConfig,
-          tooltip: { enabled: false }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            display: true,
-            grid: { display: false },
-            ticks: { color: '#6b6b73', maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 11 } }
-          },
-          y: {
-            position: 'right',
-            grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
-            ticks: { color: '#6b6b73', callback: value => formatValue(value), font: { size: 11 }, maxTicksLimit: 8 }
-          }
-        },
-        interaction: { intersect: false, mode: 'nearest' }
-      }
+    const chart = this._createChart(container, true);
+    const series = chart.addCandlestickSeries({
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
     });
+    series.setData(seriesData);
+    chart.timeScale().fitContent();
+    this.modalChart = chart;
   },
 
   async _loadModalChart(interval) {
