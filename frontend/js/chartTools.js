@@ -48,6 +48,40 @@ var chartTools = {
   },
 
   /**
+   * Switch the overlay to a different canvas element (e.g. page ↔ modal).
+   * Binds event listeners to the new canvas and restores active tool state.
+   * @param {HTMLCanvasElement} canvasEl
+   */
+  switchCanvas: function(canvasEl) {
+    // Reset pointer-events on old canvas
+    if (this.canvas) {
+      this.canvas.style.pointerEvents = 'none';
+      this.canvas.style.cursor = '';
+      this.canvas.style.touchAction = '';
+    }
+
+    this.canvas = canvasEl;
+    if (!canvasEl) return;
+    this.ctx = canvasEl.getContext('2d');
+
+    // Bind events on the new canvas
+    var self = this;
+    canvasEl.addEventListener('mousemove', function(e) { self._onMouseMove(e); });
+    canvasEl.addEventListener('mouseleave', function() { self._onMouseLeave(); });
+    canvasEl.addEventListener('click', function(e) { self._onClick(e); });
+    canvasEl.addEventListener('touchstart', function(e) { self._onTouchStart(e); }, { passive: false });
+    canvasEl.addEventListener('touchmove', function(e) { self._onTouchMove(e); }, { passive: false });
+    canvasEl.addEventListener('touchend', function(e) { self._onTouchEnd(e); }, { passive: false });
+
+    // Restore active tool state on new canvas
+    if (this.activeTool) {
+      canvasEl.style.pointerEvents = 'auto';
+      canvasEl.style.cursor = 'crosshair';
+      canvasEl.style.touchAction = 'none';
+    }
+  },
+
+  /**
    * Attach to a Chart.js instance. Call after every chart render.
    * @param {Chart} chartInstance
    */

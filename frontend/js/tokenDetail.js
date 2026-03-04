@@ -13,6 +13,9 @@ const tokenDetail = {
   freshnessInterval: null,
   lastPriceUpdate: null,
   _chartPreload: null, // In-flight promise for the default chart interval; reused by loadChart()
+  modalChart: null,
+  _modalOpen: false,
+  _modalEscHandler: null,
 
   // Get refresh interval from config (with fallback)
   get refreshIntervalMs() {
@@ -194,6 +197,12 @@ const tokenDetail = {
       };
       bindHandler(btn, 'click', handler);
     });
+
+    // Chart expand button
+    const expandBtn = document.getElementById('chart-expand-btn');
+    if (expandBtn) {
+      bindHandler(expandBtn, 'click', () => this.openChartModal());
+    }
 
     // Submission tabs
     document.querySelectorAll('.submissions-tab').forEach(tab => {
@@ -1721,6 +1730,423 @@ const tokenDetail = {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
     }
+
+    // Close modal if open
+    if (this._modalOpen) this.closeChartModal();
+  },
+
+  // ── Chart Expand Modal ──────────────────────────────────
+
+  openChartModal() {
+    if (this._modalOpen) return;
+    this._modalOpen = true;
+
+    const overlay = document.getElementById('chart-modal-overlay');
+    if (!overlay) return;
+
+    this._syncModalControls();
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    this._renderModalChart();
+
+    // Switch chartTools to modal overlay canvas
+    const modalOverlay = document.getElementById('modal-chart-overlay');
+    if (typeof chartTools !== 'undefined' && modalOverlay) {
+      chartTools.switchCanvas(modalOverlay);
+      if (this.modalChart) chartTools.attach(this.modalChart);
+    }
+
+    this._bindModalControls();
+  },
+
+  closeChartModal() {
+    if (!this._modalOpen) return;
+    this._modalOpen = false;
+
+    const overlay = document.getElementById('chart-modal-overlay');
+    if (overlay) overlay.style.display = 'none';
+    document.body.style.overflow = '';
+
+    if (this.modalChart) {
+      this.modalChart.destroy();
+      this.modalChart = null;
+    }
+
+    // Switch chartTools back to page canvas
+    const pageOverlay = document.getElementById('chart-overlay');
+    if (typeof chartTools !== 'undefined' && pageOverlay) {
+      chartTools.switchCanvas(pageOverlay);
+      if (this.chart) chartTools.attach(this.chart);
+    }
+
+    if (this._modalEscHandler) {
+      document.removeEventListener('keydown', this._modalEscHandler);
+      this._modalEscHandler = null;
+    }
+  },
+
+  _syncModalControls() {
+    document.querySelectorAll('.modal-metric-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.metric === this.chartMetric);
+    });
+    document.querySelectorAll('.modal-type-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.type === this.chartType);
+    });
+    document.querySelectorAll('.modal-timeframe-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.interval === this.currentInterval);
+    });
+    const modalTitle = document.getElementById('chart-modal-title');
+    if (modalTitle) {
+      modalTitle.textContent = this.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
+    }
+    if (this.chartData) this._updateModalStats(this.chartData);
+  },
+
+  _bindModalControls() {
+    const self = this;
+
+    // Close button
+    const closeBtn = document.getElementById('chart-modal-close');
+    if (closeBtn && !closeBtn._mBound) {
+      closeBtn._mBound = true;
+      closeBtn.addEventListener('click', () => self.closeChartModal());
+    }
+
+    // Background click
+    const overlay = document.getElementById('chart-modal-overlay');
+    if (overlay && !overlay._mBound) {
+      overlay._mBound = true;
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) self.closeChartModal();
+      });
+    }
+
+    // Escape key
+    this._modalEscHandler = (e) => {
+      if (e.key === 'Escape' && self._modalOpen) self.closeChartModal();
+    };
+    document.addEventListener('keydown', this._modalEscHandler);
+
+    // Metric buttons
+    document.querySelectorAll('.modal-metric-btn').forEach(btn => {
+      if (btn._mBound) return;
+      btn._mBound = true;
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.modal-metric-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        self.chartMetric = btn.dataset.metric;
+        // Sync page buttons
+        document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(b => {
+          b.classList.toggle('active', b.dataset.metric === self.chartMetric);
+        });
+        if (typeof chartTools !== 'undefined') chartTools.clearAll();
+        const titleText = self.chartMetric === 'mcap' ? 'Market Cap Chart' : 'Price Chart';
+        const pt = document.getElementById('chart-title');
+        if (pt) pt.textContent = titleText;
+        const mt = document.getElementById('chart-modal-title');
+        if (mt) mt.textContent = titleText;
+        if (self.chartData) {
+          self.renderChart(self.chartData);
+          self._renderModalChart();
+          self.updateChartStats(self.chartData);
+          self._updateModalStats(self.chartData);
+        }
+      });
+    });
+
+    // Type buttons
+    document.querySelectorAll('.modal-type-btn').forEach(btn => {
+      if (btn._mBound) return;
+      btn._mBound = true;
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.modal-type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        self.chartType = btn.dataset.type;
+        // Sync page buttons
+        document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)').forEach(b => {
+          b.classList.toggle('active', b.dataset.type === self.chartType);
+        });
+        if (self.chartData) {
+          self.renderChart(self.chartData);
+          self._renderModalChart();
+        }
+      });
+    });
+
+    // Timeframe buttons
+    document.querySelectorAll('.modal-timeframe-btn').forEach(btn => {
+      if (btn._mBound) return;
+      btn._mBound = true;
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.modal-timeframe-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const interval = btn.dataset.interval;
+        self.currentInterval = interval;
+        // Sync page buttons
+        document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)').forEach(b => {
+          b.classList.toggle('active', b.dataset.interval === interval);
+        });
+        if (typeof chartTools !== 'undefined') chartTools.clearAll();
+        self._loadModalChart(interval);
+      });
+    });
+
+    // Drawing tool buttons
+    document.querySelectorAll('.modal-tool-btn[data-tool]').forEach(btn => {
+      if (btn._mBound) return;
+      btn._mBound = true;
+      btn.addEventListener('click', () => {
+        const tool = btn.dataset.tool;
+        if (tool === 'clear') { if (typeof chartTools !== 'undefined') chartTools.clearAll(); return; }
+        if (tool === 'undo')  { if (typeof chartTools !== 'undefined') chartTools.undo(); return; }
+        if (typeof chartTools !== 'undefined') chartTools.setTool(tool);
+      });
+    });
+
+    // Zoom controls
+    const zoomIn = document.getElementById('chart-zoom-in');
+    if (zoomIn && !zoomIn._mBound) {
+      zoomIn._mBound = true;
+      zoomIn.addEventListener('click', () => { if (self.modalChart) self.modalChart.zoom(1.2); });
+    }
+    const zoomOut = document.getElementById('chart-zoom-out');
+    if (zoomOut && !zoomOut._mBound) {
+      zoomOut._mBound = true;
+      zoomOut.addEventListener('click', () => { if (self.modalChart) self.modalChart.zoom(0.8); });
+    }
+    const zoomReset = document.getElementById('chart-zoom-reset');
+    if (zoomReset && !zoomReset._mBound) {
+      zoomReset._mBound = true;
+      zoomReset.addEventListener('click', () => { if (self.modalChart) self.modalChart.resetZoom(); });
+    }
+  },
+
+  _renderModalChart() {
+    const ctx = document.getElementById('modal-price-chart');
+    if (!ctx) return;
+
+    if (this.modalChart) {
+      this.modalChart.destroy();
+      this.modalChart = null;
+    }
+
+    if (!this.chartData?.data?.length || this.chartData.data.length < 3) return;
+
+    const chartData = this.chartData.data;
+    const zoomConfig = {
+      zoom: {
+        wheel: { enabled: true },
+        pinch: { enabled: true },
+        mode: 'x'
+      },
+      pan: {
+        enabled: true,
+        mode: 'x'
+      },
+      limits: {
+        x: { minRange: 3 }
+      }
+    };
+
+    if (this.chartType === 'candle' && chartData[0].open !== undefined) {
+      this._renderModalCandlestick(ctx, chartData, zoomConfig);
+    } else {
+      this._renderModalLine(ctx, chartData, zoomConfig);
+    }
+
+    // Re-attach chartTools to the modal chart
+    const modalOverlay = document.getElementById('modal-chart-overlay');
+    if (typeof chartTools !== 'undefined' && modalOverlay && this.modalChart) {
+      chartTools.attach(this.modalChart);
+    }
+  },
+
+  _renderModalLine(ctx, data, zoomConfig) {
+    const labels = data.map(d => new Date(d.timestamp || d.time));
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+    let values;
+    if (isMcap && supply > 0) {
+      values = data.map(d => (d.close || d.price) * supply);
+    } else {
+      values = data.map(d => d.close || d.price);
+    }
+
+    const isPositive = values[values.length - 1] >= values[0];
+    const lineColor = isPositive ? '#22c55e' : '#ef4444';
+    const fillColor = isPositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+    const metricLabel = isMcap ? 'Market Cap' : 'Price';
+    const formatValue = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
+
+    this.modalChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: metricLabel,
+          data: values,
+          borderColor: lineColor,
+          backgroundColor: fillColor,
+          fill: true,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: lineColor,
+          pointHoverBorderColor: '#fff',
+          pointHoverBorderWidth: 2,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: false },
+          zoom: zoomConfig,
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(28, 28, 33, 0.95)',
+            titleColor: '#ffffff',
+            bodyColor: '#9ca3af',
+            borderColor: '#3a3a45',
+            borderWidth: 1,
+            padding: 14,
+            displayColors: false,
+            titleFont: { size: 13, weight: '600' },
+            bodyFont: { size: 14, weight: '500' },
+            callbacks: {
+              title: (items) => items.length ? new Date(items[0].parsed.x).toLocaleString() : '',
+              label: (context) => `${metricLabel}: ${formatValue(context.parsed.y)}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            display: true,
+            grid: { display: false },
+            ticks: { color: '#6b6b73', maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 11 } }
+          },
+          y: {
+            position: 'right',
+            grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
+            ticks: { color: '#6b6b73', callback: value => formatValue(value), font: { size: 11 }, maxTicksLimit: 8 }
+          }
+        },
+        interaction: { intersect: false, mode: 'index' }
+      }
+    });
+  },
+
+  _renderModalCandlestick(ctx, data, zoomConfig) {
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+
+    const candleData = data.map(d => {
+      let o = d.open || d.price;
+      let h = d.high || d.price;
+      let l = d.low || d.price;
+      let c = d.close || d.price;
+      if (isMcap && supply > 0) { o *= supply; h *= supply; l *= supply; c *= supply; }
+      return { x: new Date(d.timestamp || d.time).getTime(), o, h, l, c };
+    });
+
+    const metricLabel = isMcap ? 'Market Cap' : 'Price';
+    const formatValue = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
+
+    this.modalChart = new Chart(ctx, {
+      type: 'candlestick',
+      data: {
+        datasets: [{
+          label: metricLabel,
+          data: candleData,
+          color: { up: '#22c55e', down: '#ef4444', unchanged: '#6b6b73' },
+          borderColor: { up: '#22c55e', down: '#ef4444', unchanged: '#6b6b73' }
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: false },
+          zoom: zoomConfig,
+          tooltip: {
+            enabled: true,
+            backgroundColor: 'rgba(28, 28, 33, 0.95)',
+            titleColor: '#ffffff',
+            bodyColor: '#9ca3af',
+            borderColor: '#3a3a45',
+            borderWidth: 1,
+            padding: 14,
+            displayColors: false,
+            titleFont: { size: 13, weight: '600' },
+            bodyFont: { size: 13, weight: '500' },
+            callbacks: {
+              title: (items) => items.length && items[0].raw ? new Date(items[0].raw.x).toLocaleString() : '',
+              label: (context) => {
+                const d = context.raw;
+                if (!d) return '';
+                return [`Open: ${formatValue(d.o)}`, `High: ${formatValue(d.h)}`, `Low: ${formatValue(d.l)}`, `Close: ${formatValue(d.c)}`];
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            display: true,
+            grid: { display: false },
+            ticks: { color: '#6b6b73', maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 11 } }
+          },
+          y: {
+            position: 'right',
+            grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
+            ticks: { color: '#6b6b73', callback: value => formatValue(value), font: { size: 11 }, maxTicksLimit: 8 }
+          }
+        },
+        interaction: { intersect: false, mode: 'nearest' }
+      }
+    });
+  },
+
+  async _loadModalChart(interval) {
+    try {
+      await this.loadChart(interval);
+      this._renderModalChart();
+      if (this.chartData) this._updateModalStats(this.chartData);
+    } catch (e) {
+      console.warn('[Modal] Failed to load chart:', e.message);
+    }
+  },
+
+  _updateModalStats(data) {
+    if (!data?.data?.length) return;
+    const allData = data.data;
+    const lastCandle = allData[allData.length - 1];
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+
+    const highValues = allData.map(d => d.high || d.price || 0).filter(v => v > 0);
+    const lowValues = allData.map(d => d.low || d.price || 0).filter(v => v > 0);
+    let high = highValues.length > 0 ? Math.max(...highValues) : 0;
+    let low = lowValues.length > 0 ? Math.min(...lowValues) : 0;
+    let open = allData[0]?.open || allData[0]?.price || 0;
+    let close = lastCandle?.close || lastCandle?.price || 0;
+    const totalVolume = allData.reduce((sum, d) => sum + (d.volume || 0), 0);
+
+    if (isMcap && supply > 0) { high *= supply; low *= supply; open *= supply; close *= supply; }
+    const fmt = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
+
+    const el = (id) => document.getElementById(id);
+    if (el('modal-chart-open'))   el('modal-chart-open').textContent = fmt(open);
+    if (el('modal-chart-high'))   el('modal-chart-high').textContent = fmt(high);
+    if (el('modal-chart-low'))    el('modal-chart-low').textContent = fmt(low);
+    if (el('modal-chart-close'))  el('modal-chart-close').textContent = fmt(close);
+    if (el('modal-chart-volume')) el('modal-chart-volume').textContent = utils.formatNumber(totalVolume);
   }
 };
 
