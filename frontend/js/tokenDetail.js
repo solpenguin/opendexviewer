@@ -912,10 +912,16 @@ const tokenDetail = {
       handleScale: isModal,
     });
 
-    // Resize chart when container dimensions change
+    // Resize chart when container dimensions change.
+    // Skip the first callback (fires immediately on observe() before LWCV
+    // finishes internal canvas setup) since we already passed explicit dims.
+    let roSkipFirst = true;
     const ro = new ResizeObserver(entries => {
+      if (roSkipFirst) { roSkipFirst = false; return; }
       const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) chart.applyOptions({ width, height });
+      if (width > 0 && height > 0) {
+        try { chart.applyOptions({ width, height }); } catch (_) {}
+      }
     });
     ro.observe(container);
     chart._ro = ro;
