@@ -2468,6 +2468,28 @@ a:hover {
 .holders-supply-value.supply-good { color: var(--success, #10b981); }
 .holders-supply-value.supply-caution { color: var(--warning, #f59e0b); }
 
+.holder-label {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm, 4px);
+  vertical-align: middle;
+  margin-left: 0.375rem;
+  letter-spacing: 0.02em;
+}
+.lp-label {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+.burnt-label {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+tr.holder-excluded {
+  opacity: 0.55;
+}
+
 .holders-expand-btn {
   display: flex;
   align-items: center;

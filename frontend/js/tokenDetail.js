@@ -944,9 +944,13 @@ const tokenDetail = {
           : usdVal.toFixed(2))
         : '--';
       const barW = maxPct > 0 ? ((h.percentage || 0) / maxPct) * 100 : 0;
-      return `<tr>
+      const label = h.isLP ? ' <span class="holder-label lp-label" title="Liquidity Pool">💧LP</span>'
+        : h.isBurnt ? ' <span class="holder-label burnt-label" title="Burn Wallet">🔥Burn</span>'
+        : '';
+      const rowClass = h.isLP || h.isBurnt ? ' class="holder-excluded"' : '';
+      return `<tr${rowClass}>
         <td>${h.rank}</td>
-        <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a></td>
+        <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a>${label}</td>
         <td class="text-right mono">${bal}</td>
         <td class="text-right mono">${valStr}</td>
         <td class="text-right mono">${pct}</td>

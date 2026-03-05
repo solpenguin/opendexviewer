@@ -568,6 +568,62 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
   }
 }
 
+/**
+ * Get total locked token amount from Streamflow vesting contracts.
+ * Queries on-chain Streamflow program accounts filtered by token mint,
+ * then sums (deposited - withdrawn) for all active (non-closed) streams.
+ *
+ * @param {string} mintAddress - Token mint address
+ * @param {number} decimals - Token decimals for converting raw amounts
+ * @returns {Promise<number>} - Total locked amount in UI units (0 if none found)
+ */
+async function getStreamflowLockedAmount(mintAddress, decimals = 0) {
+  const STREAMFLOW_PROGRAM = 'strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m';
+  const STREAM_ACC_SIZE = 1104;
+  const MINT_OFFSET = 177;
+  const WITHDRAWN_OFFSET = 17;
+  const NET_DEPOSITED_OFFSET = 417;
+  const CLOSED_OFFSET = 671;
+
+  try {
+    const result = await rpcCall('getProgramAccounts', [
+      STREAMFLOW_PROGRAM,
+      {
+        encoding: 'base64',
+        filters: [
+          { dataSize: STREAM_ACC_SIZE },
+          { memcmp: { offset: MINT_OFFSET, bytes: mintAddress } }
+        ],
+        // Fetch only bytes 0-672 — enough for withdrawn (17), deposited (417), closed (671)
+        dataSlice: { offset: 0, length: 672 }
+      }
+    ]);
+
+    if (!result || result.length === 0) return 0;
+
+    const divisor = Math.pow(10, decimals);
+    let totalLocked = 0;
+
+    for (const account of result) {
+      const data = Buffer.from(account.account.data[0], 'base64');
+      // Skip closed streams
+      if (data.length > CLOSED_OFFSET && data[CLOSED_OFFSET] !== 0) continue;
+      const withdrawn = Number(data.readBigUInt64LE(WITHDRAWN_OFFSET));
+      const deposited = Number(data.readBigUInt64LE(NET_DEPOSITED_OFFSET));
+      const remaining = deposited - withdrawn;
+      if (remaining > 0) {
+        totalLocked += remaining / divisor;
+      }
+    }
+
+    console.log(`[Solana] Streamflow locked for ${mintAddress}: ${totalLocked} (${result.length} contracts found)`);
+    return totalLocked;
+  } catch (error) {
+    console.error('[Solana] getStreamflowLockedAmount error:', error.message);
+    return 0;
+  }
+}
+
 module.exports = {
   rpcCall,
   getAccountInfo,
@@ -583,6 +639,7 @@ module.exports = {
   getTokenLargestAccountsDAS,
   getTokenMetadata,
   getTokenMetadataBatch,
+  getStreamflowLockedAmount,
   isHeliusConfigured,
   checkHealth
 };

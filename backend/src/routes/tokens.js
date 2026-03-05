@@ -1401,49 +1401,57 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       ? parseFloat(mintData.supply) / Math.pow(10, decimals)
       : totalSupply;
 
-    // Known burn addresses
-    const burnAddresses = new Set([
+    // Classify top holder accounts:
+    // - Burnt: tokens sent to known dead/burn wallet addresses
+    // - LP: tokens held by liquidity pool programs (Raydium, Orca, Meteora, etc.)
+    // - Locked: Streamflow vesting contracts (queried by mint address)
+    const BURN_WALLETS = new Set([
       '1nc1nerator11111111111111111111111111111111',
-      '1111111111111111111111111111111111111111111'
+      '1111111111111111111111111111111111111111111',
+      'burnedFi11111111111111111111111111111111111'
     ]);
-    const burntAmount = largestAccounts
-      .filter(a => burnAddresses.has(a.address))
-      .reduce((s, a) => s + a.uiAmount, 0);
-
-    // Check which top holders are locked via Streamflow or other vesting programs.
-    // Step 1: Batch-fetch token accounts to get their wallet (authority) addresses.
-    // Step 2: Batch-fetch those wallet addresses to check if they're PDAs owned by
-    //         a known locking program (Streamflow escrow accounts are PDAs).
-    const LOCK_PROGRAMS = new Set([
-      'strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m',  // Streamflow
-      'aSTRM2NKoKxNnkmLWk9sz3k74gKBk9t7bpPrTGxMszH',  // Streamflow Aligned Unlocks
+    const LP_PROGRAMS = new Set([
+      '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',  // Raydium AMM v4
+      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',  // Raydium CLMM
+      'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C',  // Raydium CPMM
+      'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',  // Orca Whirlpool
+      'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',  // Meteora DLMM
+      'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',  // Meteora Pools
+      '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',  // Lifinity v2
+      '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',  // Orca Token Swap v2
     ]);
+    let burntAmount = 0;
     let lockedAmount = 0;
+    const lpIndices = new Set(); // indices into largestAccounts that are LP wallets
+    const burntIndices = new Set();
     try {
-      // Step 1: Get token account details (to find the wallet/authority for each)
+      // Step 1: Resolve token accounts → wallet owners
       const accountAddresses = largestAccounts.slice(0, 20).map(a => a.address);
       const tokenAccounts = await solanaService.getMultipleAccounts(accountAddresses);
       if (tokenAccounts?.value) {
-        // Collect unique wallet authorities
-        const walletToIndex = new Map(); // wallet -> [indices into largestAccounts]
+        const walletToIndices = new Map();
         tokenAccounts.value.forEach((acct, i) => {
           const wallet = acct?.data?.parsed?.info?.owner;
           if (!wallet) return;
-          if (!walletToIndex.has(wallet)) walletToIndex.set(wallet, []);
-          walletToIndex.get(wallet).push(i);
+          if (BURN_WALLETS.has(wallet)) {
+            burntAmount += largestAccounts[i].uiAmount;
+            burntIndices.add(i);
+            return;
+          }
+          if (!walletToIndices.has(wallet)) walletToIndices.set(wallet, []);
+          walletToIndices.get(wallet).push(i);
         });
 
-        // Step 2: Check if wallet addresses are PDAs owned by locking programs
-        const wallets = [...walletToIndex.keys()];
+        // Step 2: Check wallet accounts' on-chain owner to detect LP programs
+        const wallets = [...walletToIndices.keys()];
         if (wallets.length > 0) {
           const walletAccounts = await solanaService.getMultipleAccounts(wallets);
           if (walletAccounts?.value) {
             walletAccounts.value.forEach((acct, wi) => {
-              // acct.owner is the Solana program that owns this account
-              if (acct && LOCK_PROGRAMS.has(acct.owner)) {
-                const indices = walletToIndex.get(wallets[wi]);
-                for (const idx of indices) {
-                  lockedAmount += largestAccounts[idx].uiAmount;
+              if (!acct) return;
+              if (LP_PROGRAMS.has(acct.owner)) {
+                for (const idx of walletToIndices.get(wallets[wi])) {
+                  lpIndices.add(idx);
                 }
               }
             });
@@ -1451,46 +1459,54 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
         }
       }
     } catch (err) {
-      console.warn('[Tokens] Failed to check locked accounts:', err.message);
+      console.warn('[Tokens] Failed to classify holder accounts:', err.message);
+    }
+    try {
+      // Locked detection: query Streamflow program accounts filtered by token mint
+      lockedAmount = await solanaService.getStreamflowLockedAmount(mint, decimals);
+    } catch (err) {
+      console.warn('[Tokens] Failed to check Streamflow locks:', err.message);
     }
 
     supply = {
       total: currentSupply,
       burnt: burntAmount,
-      burntPct: currentSupply > 0 && burntAmount > 0 ? (burntAmount / (currentSupply + burntAmount)) * 100 : 0,
+      burntPct: currentSupply > 0 && burntAmount > 0 ? (burntAmount / currentSupply) * 100 : 0,
       locked: lockedAmount,
       lockedPct: currentSupply > 0 && lockedAmount > 0 ? (lockedAmount / currentSupply) * 100 : 0
     };
 
-    // Calculate percentages if supply is known
+    // Build holders list with LP/burnt flags
     const holders = largestAccounts.map((a, i) => ({
       rank: i + 1,
       address: a.address,
       balance: a.uiAmount,
-      percentage: totalSupply > 0 ? (a.uiAmount / totalSupply) * 100 : null
+      percentage: totalSupply > 0 ? (a.uiAmount / totalSupply) * 100 : null,
+      isLP: lpIndices.has(i),
+      isBurnt: burntIndices.has(i)
     })).filter(h => h.balance > 0);
 
-    // Concentration metrics
+    // Concentration metrics — exclude LP and burnt wallets
+    const realHolders = holders.filter(h => !h.isLP && !h.isBurnt);
     let metrics = null;
-    if (totalSupply > 0 && holders.length > 0) {
-      const top5Pct = holders.slice(0, 5).reduce((s, h) => s + (h.percentage || 0), 0);
-      const top10Pct = holders.slice(0, 10).reduce((s, h) => s + (h.percentage || 0), 0);
-      const top20Pct = holders.reduce((s, h) => s + (h.percentage || 0), 0);
+    if (totalSupply > 0 && realHolders.length > 0) {
+      const top5Pct = realHolders.slice(0, 5).reduce((s, h) => s + (h.percentage || 0), 0);
+      const top10Pct = realHolders.slice(0, 10).reduce((s, h) => s + (h.percentage || 0), 0);
+      const top20Pct = realHolders.reduce((s, h) => s + (h.percentage || 0), 0);
 
       // Herfindahl-Hirschman Index (0-10000 scale) — higher = more concentrated
-      const herfindahl = holders.reduce((s, h) => s + Math.pow(h.percentage || 0, 2), 0);
+      const herfindahl = realHolders.reduce((s, h) => s + Math.pow(h.percentage || 0, 2), 0);
 
       // #1 holder dominance — what % of top-20 holdings belong to the single largest holder
-      const top1Pct = holders[0]?.percentage || 0;
+      const top1Pct = realHolders[0]?.percentage || 0;
       const dominance = top20Pct > 0 ? (top1Pct / top20Pct) * 100 : 0;
 
-      // Average holding among top 20
-      const avgBalance = holders.reduce((s, h) => s + h.balance, 0) / holders.length;
-      const avgPct = top20Pct / holders.length;
+      // Average holding among real holders (excl LP/burnt)
+      const avgBalance = realHolders.reduce((s, h) => s + h.balance, 0) / realHolders.length;
+      const avgPct = top20Pct / realHolders.length;
 
       // Concentration risk rating
-      // Based on top-10 concentration and #1 holder share
-      let riskLevel = 'low';    // green — well distributed
+      let riskLevel = 'low';
       if (top10Pct > 70 || top1Pct > 30) riskLevel = 'high';
       else if (top10Pct > 40 || top1Pct > 15) riskLevel = 'medium';
 
@@ -1504,7 +1520,7 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
         avgBalance: avgBalance,
         avgPct: Math.round(avgPct * 100) / 100,
         riskLevel: riskLevel,
-        holderCount: holders.length
+        holderCount: realHolders.length
       };
     }
 
