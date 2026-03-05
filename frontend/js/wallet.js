@@ -254,20 +254,40 @@ const wallet = {
           mobileSection.className = 'wallet-selector-section';
           mobileSection.style.cssText = 'padding: 0.75rem 0;';
 
-          // Option 1: Open in Wallet Browser
+          // Option 1: Connect via Desktop (primary option on mobile)
           const opt1 = document.createElement('div');
           opt1.style.cssText = 'margin-bottom: 1.25rem;';
 
           const opt1Title = document.createElement('h4');
           opt1Title.style.cssText = 'color: var(--text-primary); margin-bottom: 0.5rem; font-size: 0.95rem;';
-          opt1Title.textContent = 'Open in Wallet Browser';
+          opt1Title.textContent = 'Connect via Desktop';
 
           const opt1Desc = document.createElement('p');
-          opt1Desc.style.cssText = 'color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem; line-height: 1.4;';
-          opt1Desc.textContent = 'Open your wallet app (Phantom, Solflare, etc.) and use its built-in browser to visit this page.';
+          opt1Desc.style.cssText = 'color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4;';
+          opt1Desc.textContent = 'Visit OpenDex on desktop, connect your wallet, then use "Link Mobile Device" from the wallet menu to generate a QR code you can scan.';
 
           opt1.appendChild(opt1Title);
           opt1.appendChild(opt1Desc);
+          mobileSection.appendChild(opt1);
+
+          // Divider
+          const divider = document.createElement('hr');
+          divider.style.cssText = 'border: none; border-top: 1px solid var(--border-color); margin: 1rem 0;';
+          mobileSection.appendChild(divider);
+
+          // Option 2: Open in Wallet Browser
+          const opt2 = document.createElement('div');
+
+          const opt2Title = document.createElement('h4');
+          opt2Title.style.cssText = 'color: var(--text-primary); margin-bottom: 0.5rem; font-size: 0.95rem;';
+          opt2Title.textContent = 'Open in Wallet Browser';
+
+          const opt2Desc = document.createElement('p');
+          opt2Desc.style.cssText = 'color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem; line-height: 1.4;';
+          opt2Desc.textContent = 'Open your wallet app (Phantom, Solflare, etc.) and use its built-in browser to visit this page.';
+
+          opt2.appendChild(opt2Title);
+          opt2.appendChild(opt2Desc);
 
           // QR code of current page URL
           if (typeof qrcode !== 'undefined') {
@@ -278,35 +298,15 @@ const wallet = {
               qr.addData(window.location.href);
               qr.make();
               qrContainer.innerHTML = qr.createSvgTag(4);
-              opt1.appendChild(qrContainer);
+              opt2.appendChild(qrContainer);
 
               const qrHint = document.createElement('p');
               qrHint.style.cssText = 'text-align: center; color: var(--text-tertiary); font-size: 0.75rem; margin-top: 0.5rem;';
               qrHint.textContent = 'Scan to copy this page URL';
-              opt1.appendChild(qrHint);
+              opt2.appendChild(qrHint);
             } catch (_) {}
           }
 
-          mobileSection.appendChild(opt1);
-
-          // Divider
-          const divider = document.createElement('hr');
-          divider.style.cssText = 'border: none; border-top: 1px solid var(--border-color); margin: 1rem 0;';
-          mobileSection.appendChild(divider);
-
-          // Option 2: Connect via Desktop
-          const opt2 = document.createElement('div');
-
-          const opt2Title = document.createElement('h4');
-          opt2Title.style.cssText = 'color: var(--text-primary); margin-bottom: 0.5rem; font-size: 0.95rem;';
-          opt2Title.textContent = 'Connect via Desktop';
-
-          const opt2Desc = document.createElement('p');
-          opt2Desc.style.cssText = 'color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4;';
-          opt2Desc.textContent = 'Visit OpenDex on desktop, connect your wallet, then use "Link Mobile Device" from the wallet menu to generate a QR code you can scan.';
-
-          opt2.appendChild(opt2Title);
-          opt2.appendChild(opt2Desc);
           mobileSection.appendChild(opt2);
 
           content.appendChild(mobileSection);
@@ -764,7 +764,7 @@ const wallet = {
     if (existing) existing.remove();
 
     const modal = document.createElement('div');
-    modal.className = 'device-link-modal wallet-selector';
+    modal.className = 'device-link-modal wallet-selector-modal';
 
     const overlay = document.createElement('div');
     overlay.className = 'wallet-selector-overlay';
