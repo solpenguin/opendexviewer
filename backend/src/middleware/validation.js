@@ -206,6 +206,11 @@ function validateSubmission(req, res, next) {
   const { tokenMint, submissionType, contentUrl } = req.body;
   const validTypes = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
 
+  // Fall back to device session wallet if not provided in body
+  if (!req.body.submitterWallet && req.deviceWallet) {
+    req.body.submitterWallet = req.deviceWallet;
+  }
+
   // Required fields
   if (!tokenMint || !submissionType || !contentUrl) {
     return res.status(400).json({
@@ -276,7 +281,9 @@ function validateSubmission(req, res, next) {
 
 // Validate vote input
 function validateVote(req, res, next) {
-  const { submissionId, voterWallet, voteType } = req.body;
+  const { submissionId, voteType } = req.body;
+  // Fall back to device session wallet if not provided in body
+  const voterWallet = req.body.voterWallet || req.deviceWallet;
 
   if (!submissionId || !voterWallet || !voteType) {
     return res.status(400).json({
@@ -284,6 +291,9 @@ function validateVote(req, res, next) {
       required: ['submissionId', 'voterWallet', 'voteType']
     });
   }
+
+  // Inject resolved wallet back into body for downstream handlers
+  req.body.voterWallet = voterWallet;
 
   if (typeof submissionId !== 'number' && isNaN(parseInt(submissionId))) {
     return res.status(400).json({ error: 'Invalid submission ID' });
@@ -734,7 +744,9 @@ async function validateVoteSignature(req, res, next) {
  * Used before signature verification
  */
 function validateBatchVotes(req, res, next) {
-  const { votes, voterWallet } = req.body;
+  const { votes } = req.body;
+  // Fall back to device session wallet if not provided in body
+  const voterWallet = req.body.voterWallet || req.deviceWallet;
 
   // Validate required fields
   if (!votes || !voterWallet) {
@@ -743,6 +755,9 @@ function validateBatchVotes(req, res, next) {
       required: ['votes', 'voterWallet']
     });
   }
+
+  // Inject resolved wallet back into body for downstream handlers
+  req.body.voterWallet = voterWallet;
 
   // Validate votes is an array
   if (!Array.isArray(votes) || votes.length === 0) {
@@ -955,9 +970,14 @@ async function validateSubmissionSignature(req, res, next) {
  * Used before signature verification
  */
 function validateBatchSubmissions(req, res, next) {
-  const { tokenMint, submissions, submitterWallet, category } = req.body;
+  const { tokenMint, submissions, category } = req.body;
+  // Fall back to device session wallet if not provided in body
+  const submitterWallet = req.body.submitterWallet || req.deviceWallet;
   const validTypes = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website'];
   const validCategories = ['tech', 'meme'];
+
+  // Inject resolved wallet back into body for downstream handlers
+  if (submitterWallet) req.body.submitterWallet = submitterWallet;
 
   // Validate required fields
   if (!tokenMint || !submissions || !submitterWallet) {
@@ -1508,6 +1528,33 @@ async function validateAdminSession(req, res, next) {
   }
 }
 
+// Generate device session token (same format as admin session)
+function generateDeviceSessionToken() {
+  const crypto = require('crypto');
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Middleware to resolve wallet from device session (non-blocking)
+async function validateDeviceSession(req, res, next) {
+  const db = require('../services/database');
+  const sessionToken = req.header('X-Device-Session');
+
+  if (!sessionToken) return next();
+  if (!/^[a-f0-9]{64}$/i.test(sessionToken)) return next();
+
+  try {
+    const session = await db.getDeviceSession(sessionToken);
+    if (session && session.activated) {
+      req.deviceSession = session;
+      req.deviceWallet = session.wallet_address;
+    }
+  } catch (_) {
+    // Silent — device session is supplementary auth
+  }
+
+  next();
+}
+
 module.exports = {
   validateMint,
   validateWallet,
@@ -1552,6 +1599,9 @@ module.exports = {
   verifyAdminPassword,
   validateAdminSession,
   ADMIN_SESSION_DURATION_MS,
+  // Device session functions
+  generateDeviceSessionToken,
+  validateDeviceSession,
   // Cleanup
   stopSignatureCleanup,
   // Constants

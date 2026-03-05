@@ -22,7 +22,8 @@ router.get('/cooldown/:wallet', defaultLimiter, asyncHandler(async (req, res) =>
 // Body: { callerWallet }
 router.post('/:mint', walletLimiter, validateMint, validateCallSignature, asyncHandler(async (req, res) => {
   const { mint } = req.params;
-  const { callerWallet } = req.body;
+  // Fall back to device session wallet if not provided in body
+  const callerWallet = req.body.callerWallet || req.deviceWallet;
 
   if (!callerWallet) {
     return res.status(400).json({ error: 'callerWallet required' });

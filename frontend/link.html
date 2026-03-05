@@ -3,23 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Hackathon - OpenDex</title>
-  <meta name="description" content="Track tokens competing in the Pump.fun Build in Public Hackathon. Live market data and leaderboard on OpenDex.">
+  <title>Link Device - OpenDex</title>
+  <meta name="description" content="Link your mobile device to your OpenDex wallet.">
   <meta name="theme-color" content="#07080a">
-
-  <!-- Open Graph -->
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="OpenDex">
-  <meta property="og:title" content="Hackathon - OpenDex">
-  <meta property="og:description" content="Track tokens competing in the Pump.fun Build in Public Hackathon. Live market data and leaderboard on OpenDex.">
-  <meta property="og:image" content="https://opendex.online/OpenDexBanner2.png">
-  <meta property="og:url" content="https://opendex.online/hackathon">
-
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Hackathon - OpenDex">
-  <meta name="twitter:description" content="Track tokens competing in the Pump.fun Build in Public Hackathon. Live market data and leaderboard on OpenDex.">
-  <meta name="twitter:image" content="https://opendex.online/OpenDexBanner2.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="OpenDEX_Logo.png">
@@ -52,9 +38,9 @@
         <a href="submit.html" class="nav-link">Submit</a>
         <a href="community.html" class="nav-link">Community</a>
         <div class="nav-dropdown">
-          <a href="#" class="nav-link nav-dropdown-toggle active">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
+          <a href="#" class="nav-link nav-dropdown-toggle">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
           <div class="nav-dropdown-menu">
-            <a href="hackathon.html" class="nav-dropdown-item active">Hackathon</a>
+            <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
             <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
           </div>
         </div>
@@ -70,12 +56,6 @@
       </nav>
 
       <div class="header-actions">
-        <button id="install-app-btn" class="btn btn-ghost btn-sm" style="display:none;" aria-label="Install app">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Install
-        </button>
         <button id="connect-wallet" class="btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="5" width="20" height="14" rx="2"/>
@@ -86,71 +66,19 @@
       </div>
     </div>
   </header>
-  <div id="announcement-banner"></div>
 
-  <main class="main hackathon-page">
-    <!-- Hero -->
-    <section class="submit-hero hackathon-hero">
-      <div class="submit-hero-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-        </svg>
+  <main class="main" style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+    <div id="link-container" style="text-align: center; max-width: 420px; padding: 2rem;">
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <span>Verifying device link...</span>
       </div>
-      <h1>Build in Public Hackathon</h1>
-      <p>Tracking tokens competing in the Pump.fun $3M Hackathon</p>
-      <a href="https://hackathon.pump.fun/" target="_blank" rel="noopener" class="btn btn-accent" style="margin-top: 1rem;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-          <polyline points="15 3 21 3 21 9"/>
-          <line x1="10" y1="14" x2="21" y2="3"/>
-        </svg>
-        Learn More
-      </a>
-    </section>
-
-    <!-- Token Table -->
-    <section class="community-section">
-      <div class="hackathon-table-header">
-        <div class="hackathon-table-title-row">
-          <svg class="hackathon-title-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <h2 class="hackathon-table-title">Competing Tokens</h2>
-          <span id="hackathon-count" class="hackathon-count"></span>
-        </div>
-        <span id="hackathon-updated" class="hackathon-updated"></span>
-      </div>
-
-      <div class="community-table-container">
-        <table class="token-table community-table hackathon-table">
-          <thead>
-            <tr>
-              <th class="cell-rank">#</th>
-              <th class="cell-token">Token</th>
-              <th class="cell-price">Price</th>
-              <th class="cell-mcap">Market Cap</th>
-              <th class="cell-volume">24h Volume</th>
-            </tr>
-          </thead>
-          <tbody id="hackathon-table-body">
-            <tr class="loading-row">
-              <td colspan="5">
-                <div class="loading-state">
-                  <div class="loading-spinner"></div>
-                  <span>Loading hackathon tokens...</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </div>
   </main>
 
   <footer class="footer">
     <div class="footer-content">
-      <div class="footer-left">
-        <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
-        <p class="footer-tagline">Community-powered Solana analytics</p>
-      </div>
+      <p>&copy; 2025 OpenDex — Open Source Solana Explorer</p>
       <div class="footer-links">
         <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
@@ -171,27 +99,85 @@
   <script src="js/bugReport.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="js/wallet.js"></script>
-  <script src="js/announcements.js"></script>
-  <script src="js/hackathon.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
     (function() {
-      var deferredPrompt;
-      var installBtn = document.getElementById('install-app-btn');
-      if (!installBtn) return;
-      if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
-      window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        deferredPrompt = e;
-        installBtn.style.display = '';
-      });
-      installBtn.addEventListener('click', function() {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
-      });
-      window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
+      var container = document.getElementById('link-container');
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get('token');
+
+      function showError(msg) {
+        container.innerHTML = '';
+        var iconDiv = document.createElement('div');
+        iconDiv.style.cssText = 'color: #ef4444; margin-bottom: 1rem;';
+        iconDiv.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 0.5rem;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        var h2 = document.createElement('h2');
+        h2.style.cssText = 'margin: 0 0 0.5rem; font-size: 1.25rem;';
+        h2.textContent = 'Link Failed';
+        var p = document.createElement('p');
+        p.style.cssText = 'color: var(--text-secondary); margin: 0 0 1.5rem;';
+        p.textContent = msg; // Safe: textContent escapes HTML
+        var a = document.createElement('a');
+        a.href = '/';
+        a.className = 'btn btn-primary';
+        a.textContent = 'Go to Home';
+        container.appendChild(iconDiv);
+        container.appendChild(h2);
+        container.appendChild(p);
+        container.appendChild(a);
+      }
+
+      function showSuccess(walletAddress) {
+        var truncated = walletAddress.slice(0, 4) + '...' + walletAddress.slice(-4);
+        container.innerHTML = '';
+        var iconDiv = document.createElement('div');
+        iconDiv.style.cssText = 'color: #22c55e; margin-bottom: 1rem;';
+        iconDiv.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 0.5rem;"><circle cx="12" cy="12" r="10"/><polyline points="16 10 11 15 8 12"/></svg>';
+        var h2 = document.createElement('h2');
+        h2.style.cssText = 'margin: 0 0 0.5rem; font-size: 1.25rem;';
+        h2.textContent = 'Device Linked!';
+        var p1 = document.createElement('p');
+        p1.style.cssText = 'color: var(--text-secondary); margin: 0 0 0.5rem;';
+        p1.textContent = 'Connected to wallet';
+        var p2 = document.createElement('p');
+        p2.style.cssText = 'font-family: var(--font-mono); color: var(--accent); margin: 0 0 1rem;';
+        p2.textContent = truncated;
+        var p3 = document.createElement('p');
+        p3.style.cssText = 'color: var(--text-tertiary); font-size: 0.85rem;';
+        p3.textContent = 'Redirecting to home...';
+        container.appendChild(iconDiv);
+        container.appendChild(h2);
+        container.appendChild(p1);
+        container.appendChild(p2);
+        container.appendChild(p3);
+        setTimeout(function() { window.location.href = '/'; }, 2000);
+      }
+
+      // Validate token format
+      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
+        showError('Invalid or missing link token. Please generate a new link from your desktop.');
+        return;
+      }
+
+      // Verify and activate the token
+      fetch(API_BASE_URL + '/api/auth/device-session/verify?token=' + encodeURIComponent(token))
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (!data.success) {
+            showError(data.message || 'This link has expired or is invalid. Please generate a new one from your desktop.');
+            return;
+          }
+          // Store session in localStorage
+          localStorage.setItem('opendex_device_session', token);
+          localStorage.setItem('opendex_device_wallet', data.data.walletAddress);
+          showSuccess(data.data.walletAddress);
+        })
+        .catch(function() {
+          showError('Could not verify the link. Please check your connection and try again.');
+        });
     })();
+
+    // Dropdown toggle for mobile
     (function() {
       var dropdowns = document.querySelectorAll('.nav-dropdown');
       dropdowns.forEach(function(dd) {

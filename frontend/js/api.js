@@ -213,13 +213,20 @@ const api = {
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
       try {
+        // Inject device session header if present and no real wallet is connected
+        const headers = {
+          'Content-Type': 'application/json',
+          ...options.headers
+        };
+        const deviceSession = localStorage.getItem('opendex_device_session');
+        if (deviceSession && !headers['X-Device-Session']) {
+          headers['X-Device-Session'] = deviceSession;
+        }
+
         const response = await fetch(url, {
           ...options,
           signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-          }
+          headers
         });
 
         clearTimeout(timeoutId);
@@ -794,6 +801,22 @@ const api = {
   admin: {
     async getDevelopmentMode() {
       return api.request('/admin/settings/development-mode');
+    }
+  },
+
+  // Device session endpoints (mobile device linking)
+  deviceSession: {
+    async verify(token) {
+      return api.request(`/api/auth/device-session/verify?token=${encodeURIComponent(token)}`);
+    },
+
+    async revoke() {
+      const token = localStorage.getItem('opendex_device_session');
+      if (!token) return;
+      return api.request('/api/auth/device-session', {
+        method: 'DELETE',
+        headers: { 'X-Device-Session': token }
+      });
     }
   }
 };

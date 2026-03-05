@@ -21,6 +21,7 @@ const callRoutes = require('./routes/calls');
 const bugReportRoutes = require('./routes/bugReports');
 const hackathonRoutes = require('./routes/hackathon');
 const ogfinderRoutes = require('./routes/ogfinder');
+const deviceAuthRoutes = require('./routes/deviceAuth');
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -66,6 +67,13 @@ function startFallbackCleanup() {
         }
       })
       .catch(err => console.error('[Cleanup] Failed to clean up sessions:', err.message));
+    db.cleanupExpiredDeviceSessions()
+      .then(count => {
+        if (count > 0) {
+          console.log(`[Cleanup] Removed ${count} expired device sessions on startup`);
+        }
+      })
+      .catch(err => console.error('[Cleanup] Failed to clean up device sessions:', err.message));
   }
 
   // Schedule periodic cleanup with failure limit
@@ -82,9 +90,13 @@ function startFallbackCleanup() {
 
     try {
       const count = await db.cleanupExpiredAdminSessions();
+      const deviceCount = await db.cleanupExpiredDeviceSessions();
       cleanupFailureCount = 0; // Reset on success
       if (count > 0) {
         console.log(`[Cleanup] Removed ${count} expired admin sessions`);
+      }
+      if (deviceCount > 0) {
+        console.log(`[Cleanup] Removed ${deviceCount} expired device sessions`);
       }
     } catch (err) {
       cleanupFailureCount++;
@@ -141,7 +153,7 @@ app.use((req, res, next) => {
     console.log(`[CORS] Preflight: origin="${origin}" allowed=${allowed} corsOrigins=${JSON.stringify(corsOrigins)}`);
     if (allowed && normalizedOrigin) {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Admin-Session');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Admin-Session, X-Device-Session');
       res.setHeader('Access-Control-Max-Age', '86400');
     }
     return res.status(204).end();
@@ -256,6 +268,10 @@ app.use((req, res, next) => {
 // Rate limiting for API routes
 app.use('/api/', defaultLimiter);
 
+// Device session middleware — resolves wallet from X-Device-Session header (non-blocking)
+const { validateDeviceSession } = require('./middleware/validation');
+app.use('/api/', validateDeviceSession);
+
 // Health check routes (no rate limiting)
 app.use('/health', healthRoutes);
 
@@ -270,6 +286,7 @@ app.use('/api/calls', callRoutes);
 app.use('/api/bug-reports', bugReportRoutes);
 app.use('/api/hackathon', hackathonRoutes);
 app.use('/api/ogfinder', ogfinderRoutes);
+app.use('/api/auth/device-session', deviceAuthRoutes);
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);

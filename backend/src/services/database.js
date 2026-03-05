@@ -288,6 +288,23 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(session_token);
       CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
 
+      -- Device sessions table for mobile device linking
+      CREATE TABLE IF NOT EXISTS device_sessions (
+        id SERIAL PRIMARY KEY,
+        session_token VARCHAR(64) UNIQUE NOT NULL,
+        wallet_address VARCHAR(44) NOT NULL,
+        activated BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        activated_at TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        ip_address VARCHAR(45),
+        user_agent TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_device_sessions_token ON device_sessions(session_token);
+      CREATE INDEX IF NOT EXISTS idx_device_sessions_wallet ON device_sessions(wallet_address);
+      CREATE INDEX IF NOT EXISTS idx_device_sessions_expires ON device_sessions(expires_at);
+
       -- Token views table for tracking page views
       CREATE TABLE IF NOT EXISTS token_views (
         id SERIAL PRIMARY KEY,
@@ -1210,6 +1227,92 @@ async function cleanupExpiredAdminSessions() {
 
   const result = await pool.query(
     `DELETE FROM admin_sessions WHERE expires_at < NOW()`
+  );
+  return result.rowCount;
+}
+
+// ==========================================
+// Device Session operations (mobile device linking)
+// ==========================================
+
+const DEVICE_SESSION_ACTIVATION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes to scan QR
+const DEVICE_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function createDeviceSession(sessionToken, walletAddress, activationExpiresAt, ipAddress = null, userAgent = null) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `INSERT INTO device_sessions (session_token, wallet_address, expires_at, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, session_token, wallet_address, created_at, expires_at`,
+    [sessionToken, walletAddress, activationExpiresAt, ipAddress, userAgent]
+  );
+  return result.rows[0];
+}
+
+async function getDeviceSession(sessionToken) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `SELECT * FROM device_sessions
+     WHERE session_token = $1 AND expires_at > NOW()`,
+    [sessionToken]
+  );
+  return result.rows[0];
+}
+
+async function activateDeviceSession(sessionToken) {
+  if (!pool) return null;
+
+  const newExpiry = new Date(Date.now() + DEVICE_SESSION_DURATION_MS);
+  const result = await pool.query(
+    `UPDATE device_sessions
+     SET activated = TRUE, activated_at = NOW(), expires_at = $2
+     WHERE session_token = $1 AND activated = FALSE AND expires_at > NOW()
+     RETURNING *`,
+    [sessionToken, newExpiry]
+  );
+  return result.rows[0];
+}
+
+async function deleteDeviceSession(sessionToken) {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `DELETE FROM device_sessions WHERE session_token = $1 RETURNING *`,
+    [sessionToken]
+  );
+  return result.rows[0];
+}
+
+async function deleteDeviceSessionsByWallet(walletAddress) {
+  if (!pool) return 0;
+
+  const result = await pool.query(
+    `DELETE FROM device_sessions WHERE wallet_address = $1`,
+    [walletAddress]
+  );
+  return result.rowCount;
+}
+
+async function getDeviceSessionsByWallet(walletAddress) {
+  if (!pool) return [];
+
+  const result = await pool.query(
+    `SELECT id, created_at, activated, activated_at, expires_at
+     FROM device_sessions
+     WHERE wallet_address = $1 AND expires_at > NOW()
+     ORDER BY created_at DESC`,
+    [walletAddress]
+  );
+  return result.rows;
+}
+
+async function cleanupExpiredDeviceSessions() {
+  if (!pool) return 0;
+
+  const result = await pool.query(
+    `DELETE FROM device_sessions WHERE expires_at < NOW()`
   );
   return result.rowCount;
 }
@@ -2589,6 +2692,16 @@ module.exports = {
   // Database schema management
   getDatabaseSchemaStatus,
   repairDatabaseSchema,
+  // Device session operations
+  createDeviceSession,
+  getDeviceSession,
+  activateDeviceSession,
+  deleteDeviceSession,
+  deleteDeviceSessionsByWallet,
+  getDeviceSessionsByWallet,
+  cleanupExpiredDeviceSessions,
+  DEVICE_SESSION_ACTIVATION_WINDOW_MS,
+  DEVICE_SESSION_DURATION_MS,
   // Constants
   AUTO_APPROVE_THRESHOLD,
   AUTO_REJECT_THRESHOLD,
