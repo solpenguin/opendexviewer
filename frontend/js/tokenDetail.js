@@ -295,10 +295,17 @@ const tokenDetail = {
     };
     bindHandler(similarRefreshBtn, 'click', similarRefreshHandler);
 
-    // Holders refresh button
+    // Holders refresh button — only allow if data is >1 minute stale
     const holdersRefreshBtn = document.getElementById('holders-refresh');
     const holdersRefreshHandler = () => {
       if (this._holdersRefreshing) return;
+      const elapsed = this._holdersUpdatedAt ? Date.now() - this._holdersUpdatedAt : Infinity;
+      if (elapsed < 60000) {
+        const secs = Math.ceil((60000 - elapsed) / 1000);
+        const updatedEl = document.getElementById('holders-updated');
+        if (updatedEl) updatedEl.textContent = `Refresh available in ${secs}s`;
+        return;
+      }
       this._holdersRefreshing = true;
       this.loadHolderAnalytics(true).finally(() => {
         this._holdersRefreshing = false;
@@ -775,7 +782,7 @@ const tokenDetail = {
     }
   },
 
-  // Load holder analytics (fresh = true bypasses frontend cache)
+  // Load holder analytics (fresh = true bypasses both frontend + backend cache)
   async loadHolderAnalytics(fresh = false) {
     const section = document.getElementById('holders-section');
     const refreshBtn = document.getElementById('holders-refresh');
@@ -786,7 +793,7 @@ const tokenDetail = {
     }
 
     try {
-      const data = await api.tokens.getHolders(this.mint);
+      const data = await api.tokens.getHolders(this.mint, { fresh });
       if (!data) return;
 
       // Show the section — even on RPC errors we display a message
@@ -872,18 +879,24 @@ const tokenDetail = {
         const burntEl = document.getElementById('holders-burnt');
         if (supplyRow) {
           supplyRow.style.display = '';
+          const fmtAmount = (v) => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B'
+            : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M'
+            : v >= 1e3 ? (v / 1e3).toFixed(2) + 'K'
+            : v.toFixed(2);
           if (lockedEl) {
-            lockedEl.textContent = data.supply.freezeAuthority ? 'Freeze Authority Set' : 'No Freeze Authority';
-            lockedEl.className = 'holders-supply-value ' + (data.supply.freezeAuthority ? 'supply-caution' : 'supply-good');
+            const lk = data.supply.locked;
+            if (lk > 0) {
+              lockedEl.textContent = fmtAmount(lk) + ' (' + data.supply.lockedPct.toFixed(1) + '%)';
+              lockedEl.className = 'holders-supply-value supply-good';
+            } else {
+              lockedEl.textContent = 'None detected';
+              lockedEl.className = 'holders-supply-value';
+            }
           }
           if (burntEl) {
             const b = data.supply.burnt;
             if (b > 0) {
-              const fmt = b >= 1e9 ? (b / 1e9).toFixed(2) + 'B'
-                : b >= 1e6 ? (b / 1e6).toFixed(2) + 'M'
-                : b >= 1e3 ? (b / 1e3).toFixed(2) + 'K'
-                : b.toFixed(2);
-              burntEl.textContent = fmt + ' (' + data.supply.burntPct.toFixed(1) + '%)';
+              burntEl.textContent = fmtAmount(b) + ' (' + data.supply.burntPct.toFixed(1) + '%)';
             } else {
               burntEl.textContent = 'None';
             }

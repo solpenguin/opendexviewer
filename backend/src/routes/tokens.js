@@ -1362,8 +1362,11 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
   const cacheKey = `holders:${mint}`;
 
   try {
-    const cached = await cache.get(cacheKey);
-    if (cached) return res.json(cached);
+    // Allow ?fresh=true to bypass cache (rate-limited by frontend to 1 per minute)
+    if (req.query.fresh !== 'true') {
+      const cached = await cache.get(cacheKey);
+      if (cached) return res.json(cached);
+    }
 
     // Get largest accounts, supply, and mint account info in parallel.
     // Try standard RPC first (fast, pre-sorted), fall back to Helius DAS if it fails.
@@ -1390,37 +1393,74 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       ? parseFloat(supplyResult.value.uiAmountString || supplyResult.value.uiAmount || 0)
       : null;
 
-    // Parse mint account for supply details (locked / burnt)
+    // Parse supply details + check for locked/burnt tokens among top holders
     let supply = null;
     const mintData = mintAccount?.value?.data?.parsed?.info;
-    if (mintData) {
-      const decimals = mintData.decimals || 0;
-      const currentSupply = parseFloat(mintData.supply) / Math.pow(10, decimals);
-      // Burnt = difference between initial max supply and current circulating supply
-      // For SPL tokens, burning reduces the mint supply directly
-      // We detect burnt tokens by checking if any tokens were sent to the system burn address
-      // A simpler approach: check holder list for known burn addresses
-      const burnAddresses = [
-        '1nc1nerator11111111111111111111111111111111',
-        '1111111111111111111111111111111111111111111'
-      ];
-      const burntAmount = largestAccounts
-        .filter(a => burnAddresses.includes(a.address))
-        .reduce((s, a) => s + a.uiAmount, 0);
+    const decimals = mintData?.decimals || supplyResult?.value?.decimals || 0;
+    const currentSupply = mintData
+      ? parseFloat(mintData.supply) / Math.pow(10, decimals)
+      : totalSupply;
 
-      // Locked = tokens held by known lock/vesting program accounts
-      // We check if freeze authority is set (indicates lockable token)
-      const freezeAuthority = mintData.freezeAuthority || null;
-      const mintAuthority = mintData.mintAuthority || null;
+    // Known burn addresses
+    const burnAddresses = new Set([
+      '1nc1nerator11111111111111111111111111111111',
+      '1111111111111111111111111111111111111111111'
+    ]);
+    const burntAmount = largestAccounts
+      .filter(a => burnAddresses.has(a.address))
+      .reduce((s, a) => s + a.uiAmount, 0);
 
-      supply = {
-        total: currentSupply,
-        burnt: burntAmount,
-        burntPct: currentSupply > 0 && burntAmount > 0 ? (burntAmount / (currentSupply + burntAmount)) * 100 : 0,
-        freezeAuthority: !!freezeAuthority,
-        mintAuthority: !!mintAuthority
-      };
+    // Check which top holders are locked via Streamflow or other vesting programs.
+    // Step 1: Batch-fetch token accounts to get their wallet (authority) addresses.
+    // Step 2: Batch-fetch those wallet addresses to check if they're PDAs owned by
+    //         a known locking program (Streamflow escrow accounts are PDAs).
+    const LOCK_PROGRAMS = new Set([
+      'strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m',  // Streamflow
+      'aSTRM2NKoKxNnkmLWk9sz3k74gKBk9t7bpPrTGxMszH',  // Streamflow Aligned Unlocks
+    ]);
+    let lockedAmount = 0;
+    try {
+      // Step 1: Get token account details (to find the wallet/authority for each)
+      const accountAddresses = largestAccounts.slice(0, 20).map(a => a.address);
+      const tokenAccounts = await solanaService.getMultipleAccounts(accountAddresses);
+      if (tokenAccounts?.value) {
+        // Collect unique wallet authorities
+        const walletToIndex = new Map(); // wallet -> [indices into largestAccounts]
+        tokenAccounts.value.forEach((acct, i) => {
+          const wallet = acct?.data?.parsed?.info?.owner;
+          if (!wallet) return;
+          if (!walletToIndex.has(wallet)) walletToIndex.set(wallet, []);
+          walletToIndex.get(wallet).push(i);
+        });
+
+        // Step 2: Check if wallet addresses are PDAs owned by locking programs
+        const wallets = [...walletToIndex.keys()];
+        if (wallets.length > 0) {
+          const walletAccounts = await solanaService.getMultipleAccounts(wallets);
+          if (walletAccounts?.value) {
+            walletAccounts.value.forEach((acct, wi) => {
+              // acct.owner is the Solana program that owns this account
+              if (acct && LOCK_PROGRAMS.has(acct.owner)) {
+                const indices = walletToIndex.get(wallets[wi]);
+                for (const idx of indices) {
+                  lockedAmount += largestAccounts[idx].uiAmount;
+                }
+              }
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Tokens] Failed to check locked accounts:', err.message);
     }
+
+    supply = {
+      total: currentSupply,
+      burnt: burntAmount,
+      burntPct: currentSupply > 0 && burntAmount > 0 ? (burntAmount / (currentSupply + burntAmount)) * 100 : 0,
+      locked: lockedAmount,
+      lockedPct: currentSupply > 0 && lockedAmount > 0 ? (lockedAmount / currentSupply) * 100 : 0
+    };
 
     // Calculate percentages if supply is known
     const holders = largestAccounts.map((a, i) => ({

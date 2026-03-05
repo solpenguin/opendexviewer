@@ -482,11 +482,12 @@ const api = {
       );
     },
 
-    async getHolders(mint) {
+    async getHolders(mint, { fresh = false } = {}) {
       const cacheKey = `tokens:holders:${mint}`;
+      const url = fresh ? `/api/tokens/${mint}/holders?fresh=true` : `/api/tokens/${mint}/holders`;
       return apiCache.getOrFetch(
         cacheKey,
-        () => api.request(`/api/tokens/${mint}/holders`),
+        () => api.request(url),
         apiCache.TTL.pools, // reuse pools TTL (5min)
         true
       );
