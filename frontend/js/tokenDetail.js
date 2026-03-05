@@ -1993,6 +1993,13 @@ const tokenDetail = {
         if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.clear();
       });
     }
+    const cancelBtn = document.getElementById('chart-tool-cancel');
+    if (cancelBtn && !cancelBtn._mBound) {
+      cancelBtn._mBound = true;
+      cancelBtn.addEventListener('click', () => {
+        if (typeof ChartDrawTools !== 'undefined') ChartDrawTools._cancelDrawing();
+      });
+    }
 
     // Zoom controls
     const zoomIn = document.getElementById('chart-zoom-in');

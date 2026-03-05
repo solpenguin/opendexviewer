@@ -2557,6 +2557,21 @@ a:hover {
   color: var(--accent-primary);
 }
 
+.chart-draw-cancel {
+  color: #ef4444;
+}
+
+.chart-draw-cancel:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* Drawing mode active: visual indicator on chart */
+.chart-modal-container.drawing-active {
+  touch-action: none;
+  cursor: crosshair;
+}
+
 .chart-zoom-controls {
   display: flex;
   align-items: center;
@@ -11170,14 +11185,24 @@ body.landscape .hero h1 {
     gap: 0.25rem;
   }
 
+  .chart-draw-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .chart-draw-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
   .chart-zoom-btn {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
   }
 
   .chart-modal-close {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
   }
 
   /* Chart stats: smaller on mobile */

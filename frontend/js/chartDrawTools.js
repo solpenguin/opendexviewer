@@ -325,6 +325,9 @@ const ChartDrawTools = {
   _crosshairHandler: null,
   _escHandler: null,
   _previewPrimitive: null,
+  _touchHandlers: null,   // { start, move, end } for mobile drawing
+  _chartContainer: null,  // DOM element for touch events
+  _touchHandled: false,   // prevents duplicate point from LWCV click after touch
 
   init(chart, series) {
     this.destroy();
@@ -333,6 +336,16 @@ const ChartDrawTools = {
     this._drawings = [];
     this._points = [];
     this._mode = null;
+
+    // Find the chart's container element for touch events
+    // LWCV v5 exposes chartElement(), fall back to the modal-price-chart div
+    let chartEl = null;
+    try { chartEl = chart.chartElement(); } catch (_) {}
+    this._chartContainer = chartEl || document.getElementById('modal-price-chart');
+  },
+
+  _isTouchDevice() {
+    return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   },
 
   setMode(mode) {
@@ -349,8 +362,10 @@ const ChartDrawTools = {
 
     const self = this;
 
-    // Subscribe to chart clicks for point placement
+    // Subscribe to chart clicks for point placement (desktop)
     this._clickHandler = (param) => {
+      // Skip if touch already handled this interaction
+      if (self._touchHandled) { self._touchHandled = false; return; }
       if (!param.time || !param.point) return;
 
       const price = self._series.coordinateToPrice(param.point.y);
@@ -368,6 +383,12 @@ const ChartDrawTools = {
     };
     this._chart.subscribeClick(this._clickHandler);
 
+    // Mobile touch events — bridge touch to drawing actions
+    this._attachTouchHandlers();
+
+    // Disable chart scroll/scale during drawing on mobile
+    this._setChartInteraction(false);
+
     // ESC cancels drawing
     this._escHandler = (e) => {
       if (e.key === 'Escape') {
@@ -377,8 +398,119 @@ const ChartDrawTools = {
     };
     document.addEventListener('keydown', this._escHandler, true);
 
-    // Update button states
+    // Update button states + show cancel button
     this._updateButtons();
+  },
+
+  // Convert touch coordinates to chart-relative pixel coords
+  _touchToChartPoint(touch) {
+    const container = this._chartContainer;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    };
+  },
+
+  _attachTouchHandlers() {
+    const container = this._chartContainer;
+    if (!container) return;
+
+    const self = this;
+    let touchMoved = false;
+
+    const onTouchStart = (e) => {
+      if (!self._mode) return;
+      touchMoved = false;
+      // Prevent scroll/zoom while drawing
+      e.preventDefault();
+    };
+
+    const onTouchMove = (e) => {
+      if (!self._mode) return;
+      touchMoved = true;
+      e.preventDefault();
+
+      // Update preview line during drag (after first point placed)
+      if (self._previewPrimitive && e.touches.length === 1) {
+        const pt = self._touchToChartPoint(e.touches[0]);
+        if (pt) {
+          self._previewPrimitive.updateCursor(pt);
+        }
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      if (!self._mode) return;
+      e.preventDefault();
+
+      // Use changedTouches for the final position
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+
+      const pt = self._touchToChartPoint(touch);
+      if (!pt) return;
+
+      // If user dragged significantly after first point, use the drag endpoint as second point
+      if (self._points.length === 1 && touchMoved) {
+        const price = self._series.coordinateToPrice(pt.y);
+        const ts = self._chart.timeScale();
+        const time = ts.coordinateToTime(pt.x);
+        if (price != null && time != null) {
+          self._touchHandled = true;
+          self._points.push({ time, price });
+          self._finishDrawing();
+        }
+        return;
+      }
+
+      // Tap to place point (same as click)
+      const price = self._series.coordinateToPrice(pt.y);
+      const ts = self._chart.timeScale();
+      const time = ts.coordinateToTime(pt.x);
+      if (price == null || time == null) return;
+
+      self._touchHandled = true;
+      self._points.push({ time, price });
+
+      if (self._points.length === 1) {
+        self._attachPreview(self._points[0]);
+      } else if (self._points.length === 2) {
+        self._finishDrawing();
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: false });
+
+    this._touchHandlers = { start: onTouchStart, move: onTouchMove, end: onTouchEnd };
+  },
+
+  _removeTouchHandlers() {
+    const container = this._chartContainer;
+    if (!container || !this._touchHandlers) return;
+    container.removeEventListener('touchstart', this._touchHandlers.start);
+    container.removeEventListener('touchmove', this._touchHandlers.move);
+    container.removeEventListener('touchend', this._touchHandlers.end);
+    this._touchHandlers = null;
+  },
+
+  // Disable/enable chart pan/zoom (prevents conflict with drawing gestures)
+  _setChartInteraction(enabled) {
+    if (!this._chart) return;
+    try {
+      this._chart.applyOptions({
+        handleScroll: enabled,
+        handleScale: enabled,
+      });
+    } catch (_) {}
+    // Toggle CSS class for touch-action: none and crosshair cursor
+    const modalContainer = document.getElementById('chart-modal-container');
+    if (modalContainer) {
+      modalContainer.classList.toggle('drawing-active', !enabled);
+    }
   },
 
   _attachPreview(anchorPoint) {
@@ -386,7 +518,7 @@ const ChartDrawTools = {
     this._previewPrimitive = new DrawPreviewPrimitive(anchorPoint, this._mode);
     this._series.attachPrimitive(this._previewPrimitive);
 
-    // Track cursor via crosshair move for live preview line
+    // Track cursor via crosshair move for live preview line (desktop)
     const self = this;
     this._crosshairHandler = (param) => {
       if (self._previewPrimitive && param.point) {
@@ -430,14 +562,17 @@ const ChartDrawTools = {
     this._points = [];
     this._mode = null;
     this._unsubscribeEvents();
+    this._setChartInteraction(true);
     this._updateButtons();
   },
 
   _cancelDrawing() {
     this._removePreview();
     this._points = [];
+    const wasActive = this._mode !== null;
     this._mode = null;
     this._unsubscribeEvents();
+    if (wasActive) this._setChartInteraction(true);
     this._updateButtons();
   },
 
@@ -450,6 +585,7 @@ const ChartDrawTools = {
       document.removeEventListener('keydown', this._escHandler, true);
       this._escHandler = null;
     }
+    this._removeTouchHandlers();
   },
 
   _updateButtons() {
@@ -457,6 +593,12 @@ const ChartDrawTools = {
     const fibBtn = document.getElementById('chart-tool-fib');
     if (trendBtn) trendBtn.classList.toggle('active', this._mode === 'trend');
     if (fibBtn) fibBtn.classList.toggle('active', this._mode === 'fib');
+
+    // Show/hide cancel button (mobile helper — no ESC key on mobile)
+    const cancelBtn = document.getElementById('chart-tool-cancel');
+    if (cancelBtn) {
+      cancelBtn.style.display = this._mode ? '' : 'none';
+    }
   },
 
   clear() {
@@ -477,5 +619,6 @@ const ChartDrawTools = {
     this._drawings = [];
     this._chart = null;
     this._series = null;
+    this._chartContainer = null;
   }
 };
