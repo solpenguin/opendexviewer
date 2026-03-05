@@ -5539,40 +5539,7 @@ a:hover {
 }
 
 @media (max-width: 768px) {
-  .header-content {
-    flex-wrap: wrap;
-    height: auto;
-    padding: 1rem;
-    gap: 1rem;
-  }
-
-  .nav {
-    order: 3;
-    width: 100%;
-    justify-content: center;
-    flex-wrap: nowrap;
-    overflow: visible;
-    padding-bottom: 2px;
-  }
-
-  .nav-dropdown-menu {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%) translateY(4px);
-  }
-
-  .nav-dropdown:hover .nav-dropdown-menu,
-  .nav-dropdown:focus-within .nav-dropdown-menu,
-  .nav-dropdown.open .nav-dropdown-menu {
-    transform: translateX(-50%) translateY(0);
-  }
-
-  .nav-dropdown-item {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    padding: 0.5rem 1rem;
-  }
+  /* Note: .header-content and .nav are now styled in the hamburger menu section below */
 
   .main {
     padding: 1.5rem 1rem;
@@ -8024,23 +7991,12 @@ select {
 @media (max-width: 480px) {
   /* Even more compact at 480px */
   .header-content {
-    padding: 0.5rem;
-    flex-wrap: wrap;
+    padding: 0.5rem 0.75rem;
     gap: 0.5rem;
   }
 
   .header-left {
     flex: 1;
-  }
-
-  /* Hide text on buttons, show icon only */
-  .header-actions .btn span:not(.btn-icon):not(:has(svg)) {
-    display: none;
-  }
-
-  #connect-wallet {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8125rem;
   }
 }
 
@@ -8596,23 +8552,7 @@ body.landscape .hero h1 {
     height: 28px;
   }
 
-  /* Navigation stacking */
-  .nav {
-    order: 3;
-    width: 100%;
-    justify-content: center;
-    overflow: visible;
-    gap: 0.25rem;
-    padding: 0.25rem 0;
-  }
-
-  .nav-link {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8125rem;
-    min-height: 44px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
+  /* Note: .nav is now hidden behind hamburger menu at 768px+ */
 
   /* Search optimizations */
   .search-wrapper {
@@ -11000,5 +10940,313 @@ body.landscape .hero h1 {
 
   .landing-cta-card {
     padding: 2rem 1.5rem;
+  }
+}
+
+/* =============================================
+   MOBILE HAMBURGER MENU & NAVIGATION
+   ============================================= */
+
+/* Hamburger toggle button — hidden on desktop */
+.nav-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+
+.nav-hamburger:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav-hamburger svg {
+  pointer-events: none;
+}
+
+/* The ✕ icon is hidden by default, hamburger icon is shown */
+.nav-hamburger .icon-close {
+  display: none;
+}
+
+.nav-hamburger.active .icon-hamburger {
+  display: none;
+}
+
+.nav-hamburger.active .icon-close {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  /* Show hamburger button */
+  .nav-hamburger {
+    display: flex;
+  }
+
+  /* Nav becomes a vertical slide-down panel */
+  .nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    flex-direction: column;
+    padding: 0.5rem 1rem 1rem;
+    gap: 0.125rem;
+    z-index: 1100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+
+    /* Hidden by default */
+    display: none;
+    order: unset;
+    width: auto;
+    overflow: visible;
+  }
+
+  .nav.open {
+    display: flex;
+  }
+
+  .nav-link {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+  }
+
+  .nav-link:hover,
+  .nav-link.active {
+    background: var(--bg-tertiary);
+  }
+
+  .nav-link.active::after {
+    display: none;
+  }
+
+  /* Dropdown menus inside mobile nav — inline, not absolute */
+  .nav-dropdown-menu {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 0 0 0 1rem;
+    min-width: 0;
+    display: none;
+  }
+
+  .nav-dropdown-menu::before {
+    display: none;
+  }
+
+  /* Show dropdown when parent is open */
+  .nav-dropdown.open .nav-dropdown-menu,
+  .nav-dropdown:focus-within .nav-dropdown-menu {
+    display: flex;
+    flex-direction: column;
+    transform: none;
+  }
+
+  /* On mobile, always require tap to open dropdown (don't use hover) */
+  .nav-dropdown:hover .nav-dropdown-menu {
+    display: none;
+  }
+
+  .nav-dropdown.open:hover .nav-dropdown-menu {
+    display: flex;
+  }
+
+  .nav-dropdown-item {
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    border-radius: var(--radius-md);
+  }
+
+  .nav-dropdown-item:hover {
+    background: var(--bg-hover);
+  }
+
+  /* Header layout: logo + hamburger + actions in single row */
+  .header-content {
+    flex-wrap: nowrap;
+    height: auto;
+    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+    position: relative;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+}
+
+/* =============================================
+   CONNECT WALLET — COMPACT ON MOBILE
+   ============================================= */
+
+@media (max-width: 600px) {
+  /* Hide "Connect Wallet" / "Install" text, show icon only */
+  #connect-wallet,
+  #install-app-btn {
+    font-size: 0;
+    padding: 0.5rem 0.625rem;
+    min-width: 40px;
+    gap: 0;
+  }
+
+  #connect-wallet svg,
+  #install-app-btn svg {
+    font-size: 1rem; /* reset for children */
+  }
+}
+
+
+/* =============================================
+   CHART MODAL — COMPACT HEADER ON MOBILE
+   ============================================= */
+
+@media (max-width: 600px) {
+  .chart-modal-header {
+    padding: 0.5rem 0.625rem;
+    gap: 0.375rem;
+  }
+
+  .chart-modal-title {
+    font-size: 0.875rem;
+  }
+
+  .chart-modal-title-row {
+    gap: 0.375rem;
+  }
+
+  /* Timeframes + indicators: horizontal scroll, single line */
+  .chart-modal-timeframes,
+  .chart-modal-indicators {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0.25rem;
+    padding-bottom: 2px;
+  }
+
+  .chart-modal-timeframes::-webkit-scrollbar,
+  .chart-modal-indicators::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-modal-timeframes .timeframe-btn,
+  .chart-modal-indicators .indicator-btn {
+    flex-shrink: 0;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    min-height: 32px;
+  }
+
+  /* Modal metric/type buttons compact */
+  .chart-modal-title-row .chart-metric-btn,
+  .chart-modal-title-row .chart-type-btn {
+    padding: 0.25rem 0.5rem;
+    min-height: 30px;
+  }
+
+  /* Right controls: tighter */
+  .chart-modal-right-controls {
+    gap: 0.25rem;
+  }
+
+  .chart-zoom-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .chart-modal-close {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Chart stats: smaller on mobile */
+  .chart-modal-stats {
+    padding: 0.375rem 0.625rem;
+    gap: 0.375rem 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .chart-modal-stats .label {
+    font-size: 0.625rem;
+  }
+
+  .chart-modal-stats .value {
+    font-size: 0.75rem;
+  }
+}
+
+/* =============================================
+   TOKEN HEADER — ACTION BUTTONS OVERFLOW FIX
+   ============================================= */
+
+@media (max-width: 480px) {
+  .token-address-row {
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  /* Address truncation tighter */
+  .token-address {
+    max-width: 140px;
+    font-size: 0.75rem;
+  }
+
+  /* Icon buttons smaller on tiny screens */
+  .token-address-row .btn-icon {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+  }
+
+  .token-address-row .btn-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* =============================================
+   PAGE CHART — INDICATORS SCROLL ON MOBILE
+   ============================================= */
+
+@media (max-width: 600px) {
+  .chart-indicators {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0.25rem;
+  }
+
+  .chart-indicators::-webkit-scrollbar {
+    display: none;
+  }
+
+  .indicator-btn {
+    flex-shrink: 0;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.8125rem;
+    min-height: 34px;
   }
 }
