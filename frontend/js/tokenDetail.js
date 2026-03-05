@@ -306,6 +306,22 @@ const tokenDetail = {
     };
     bindHandler(holdersRefreshBtn, 'click', holdersRefreshHandler);
 
+    // Holders expand/collapse button
+    const holdersExpandBtn = document.getElementById('holders-expand');
+    const holdersExpandHandler = () => {
+      if (!this._holdersData) return;
+      this._holdersExpanded = !this._holdersExpanded;
+      const total = this._holdersData.length;
+      const limit = this._holdersExpanded ? total : 10;
+      this._renderHoldersTable(this._holdersData, limit);
+      if (holdersExpandBtn) {
+        holdersExpandBtn.innerHTML = this._holdersExpanded
+          ? 'Show Top 10 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
+          : `Show All ${total} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+      }
+    };
+    bindHandler(holdersExpandBtn, 'click', holdersExpandHandler);
+
     // Submit link with token pre-filled (use encodeURIComponent for safety)
     const submitLink = document.getElementById('submit-link');
     if (submitLink) {
@@ -833,62 +849,81 @@ const tokenDetail = {
         }
       }
 
-      // Render concentration bar
-      const barEl = document.getElementById('holders-bar');
-      if (barEl && holders.length > 0) {
-        const colors = [
-          'var(--accent-primary)', 'var(--accent-secondary, #8b5cf6)',
-          '#f59e0b', '#ef4444', '#10b981', '#6366f1',
-          '#ec4899', '#14b8a6', '#f97316', '#84cc16'
-        ];
-        let html = '';
-        const topN = holders.slice(0, 10);
-        const topNPct = topN.reduce((s, h) => s + (h.percentage || 0), 0);
-        topN.forEach((h, i) => {
-          if (h.percentage > 0.5) {
-            html += `<div class="holders-bar-seg" style="width:${h.percentage}%;background:${colors[i % colors.length]}" title="#${h.rank} — ${h.percentage.toFixed(2)}%"></div>`;
+      // Render locked / burnt supply info
+      if (data.supply) {
+        const supplyRow = document.getElementById('holders-supply-row');
+        const lockedEl = document.getElementById('holders-locked');
+        const burntEl = document.getElementById('holders-burnt');
+        if (supplyRow) {
+          supplyRow.style.display = '';
+          if (lockedEl) {
+            lockedEl.textContent = data.supply.freezeAuthority ? 'Freeze Authority Set' : 'No Freeze Authority';
+            lockedEl.className = 'holders-supply-value ' + (data.supply.freezeAuthority ? 'supply-caution' : 'supply-good');
           }
-        });
-        if (topNPct < 100) {
-          html += `<div class="holders-bar-seg holders-bar-rest" style="width:${100 - topNPct}%" title="Others — ${(100 - topNPct).toFixed(2)}%"></div>`;
+          if (burntEl) {
+            const b = data.supply.burnt;
+            if (b > 0) {
+              const fmt = b >= 1e9 ? (b / 1e9).toFixed(2) + 'B'
+                : b >= 1e6 ? (b / 1e6).toFixed(2) + 'M'
+                : b >= 1e3 ? (b / 1e3).toFixed(2) + 'K'
+                : b.toFixed(2);
+              burntEl.textContent = fmt + ' (' + data.supply.burntPct.toFixed(1) + '%)';
+            } else {
+              burntEl.textContent = 'None';
+            }
+          }
         }
-        barEl.innerHTML = html;
       }
 
       // Render table
+      this._holdersData = holders; // Store for expand/collapse
       const tbody = document.getElementById('holders-tbody');
       if (tbody) {
-        const price = this.token && this.token.price ? this.token.price : 0;
-        const maxPct = holders.length > 0 ? holders[0].percentage || 0 : 0;
-        tbody.innerHTML = holders.slice(0, 10).map(h => {
-          const shortAddr = h.address.slice(0, 4) + '...' + h.address.slice(-4);
-          const pct = h.percentage != null ? h.percentage.toFixed(2) + '%' : '--';
-          const bal = h.balance >= 1e9 ? (h.balance / 1e9).toFixed(2) + 'B'
-            : h.balance >= 1e6 ? (h.balance / 1e6).toFixed(2) + 'M'
-            : h.balance >= 1e3 ? (h.balance / 1e3).toFixed(2) + 'K'
-            : h.balance.toFixed(2);
-          const usdVal = price > 0 ? h.balance * price : 0;
-          const valStr = usdVal > 0
-            ? '$' + (usdVal >= 1e6 ? (usdVal / 1e6).toFixed(2) + 'M'
-              : usdVal >= 1e3 ? (usdVal / 1e3).toFixed(2) + 'K'
-              : usdVal.toFixed(2))
-            : '--';
-          const barW = maxPct > 0 ? ((h.percentage || 0) / maxPct) * 100 : 0;
-          return `<tr>
-            <td>${h.rank}</td>
-            <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a></td>
-            <td class="text-right mono">${bal}</td>
-            <td class="text-right mono">${valStr}</td>
-            <td class="text-right mono">${pct}</td>
-            <td class="holders-share-col"><div class="holders-share-bar" style="width:${barW.toFixed(1)}%"></div></td>
-          </tr>`;
-        }).join('');
+        this._holdersExpanded = false;
+        this._renderHoldersTable(holders, 10);
+        // Show expand button if more than 10 holders
+        const expandBtn = document.getElementById('holders-expand');
+        if (expandBtn && holders.length > 10) {
+          expandBtn.style.display = '';
+          expandBtn.innerHTML = `Show All ${holders.length} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+        }
       }
     } catch (error) {
       console.warn('[TokenDetail] Holder analytics failed:', error.message);
     } finally {
       if (refreshBtn) refreshBtn.classList.remove('spinning');
     }
+  },
+
+  // Render holder table rows with given limit
+  _renderHoldersTable(holders, limit) {
+    const tbody = document.getElementById('holders-tbody');
+    if (!tbody) return;
+    const price = this.token && this.token.price ? this.token.price : 0;
+    const maxPct = holders.length > 0 ? holders[0].percentage || 0 : 0;
+    tbody.innerHTML = holders.slice(0, limit).map(h => {
+      const shortAddr = h.address.slice(0, 4) + '...' + h.address.slice(-4);
+      const pct = h.percentage != null ? h.percentage.toFixed(2) + '%' : '--';
+      const bal = h.balance >= 1e9 ? (h.balance / 1e9).toFixed(2) + 'B'
+        : h.balance >= 1e6 ? (h.balance / 1e6).toFixed(2) + 'M'
+        : h.balance >= 1e3 ? (h.balance / 1e3).toFixed(2) + 'K'
+        : h.balance.toFixed(2);
+      const usdVal = price > 0 ? h.balance * price : 0;
+      const valStr = usdVal > 0
+        ? '$' + (usdVal >= 1e6 ? (usdVal / 1e6).toFixed(2) + 'M'
+          : usdVal >= 1e3 ? (usdVal / 1e3).toFixed(2) + 'K'
+          : usdVal.toFixed(2))
+        : '--';
+      const barW = maxPct > 0 ? ((h.percentage || 0) / maxPct) * 100 : 0;
+      return `<tr>
+        <td>${h.rank}</td>
+        <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a></td>
+        <td class="text-right mono">${bal}</td>
+        <td class="text-right mono">${valStr}</td>
+        <td class="text-right mono">${pct}</td>
+        <td class="holders-share-col"><div class="holders-share-bar" style="width:${barW.toFixed(1)}%"></div></td>
+      </tr>`;
+    }).join('');
   },
 
   // Keep the "Updated X ago" text ticking

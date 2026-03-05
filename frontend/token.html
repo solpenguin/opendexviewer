@@ -440,8 +440,17 @@
               <span class="holder-metric-value" id="holders-avg">--</span>
             </div>
           </div>
-          <!-- Concentration Bar -->
-          <div class="holders-concentration-bar" id="holders-bar"></div>
+          <!-- Supply Info (Locked / Burnt) -->
+          <div class="holders-supply-row" id="holders-supply-row" style="display:none;">
+            <div class="holders-supply-item">
+              <span class="holders-supply-label">Locked</span>
+              <span class="holders-supply-value" id="holders-locked">--</span>
+            </div>
+            <div class="holders-supply-item">
+              <span class="holders-supply-label">Burnt</span>
+              <span class="holders-supply-value" id="holders-burnt">--</span>
+            </div>
+          </div>
           <!-- Top Holders Table -->
           <div class="holders-table-wrap">
             <table class="holders-table" id="holders-table">
@@ -458,6 +467,12 @@
               <tbody id="holders-tbody"></tbody>
             </table>
           </div>
+          <button class="holders-expand-btn" id="holders-expand" style="display:none;">
+            Show All
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
         </section>
 
         <!-- Trade Section -->

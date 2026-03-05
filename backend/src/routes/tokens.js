@@ -1365,19 +1365,52 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     const cached = await cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    // Get largest accounts and supply in parallel
-    const [largestAccounts, supplyResult] = await Promise.all([
+    // Get largest accounts, supply, and mint account info in parallel
+    const [largestAccounts, supplyResult, mintAccount] = await Promise.all([
       solanaService.getTokenLargestAccounts(mint),
-      solanaService.getTokenSupply(mint).catch(() => null)
+      solanaService.getTokenSupply(mint).catch(() => null),
+      solanaService.getAccountInfo(mint).catch(() => null)
     ]);
 
     if (!largestAccounts || largestAccounts.length === 0) {
-      return res.json({ holders: [], totalSupply: null, metrics: null });
+      return res.json({ holders: [], totalSupply: null, metrics: null, supply: null });
     }
 
     const totalSupply = supplyResult?.value
       ? parseFloat(supplyResult.value.uiAmountString || supplyResult.value.uiAmount || 0)
       : null;
+
+    // Parse mint account for supply details (locked / burnt)
+    let supply = null;
+    const mintData = mintAccount?.value?.data?.parsed?.info;
+    if (mintData) {
+      const decimals = mintData.decimals || 0;
+      const currentSupply = parseFloat(mintData.supply) / Math.pow(10, decimals);
+      // Burnt = difference between initial max supply and current circulating supply
+      // For SPL tokens, burning reduces the mint supply directly
+      // We detect burnt tokens by checking if any tokens were sent to the system burn address
+      // A simpler approach: check holder list for known burn addresses
+      const burnAddresses = [
+        '1nc1nerator11111111111111111111111111111111',
+        '1111111111111111111111111111111111111111111'
+      ];
+      const burntAmount = largestAccounts
+        .filter(a => burnAddresses.includes(a.address))
+        .reduce((s, a) => s + a.uiAmount, 0);
+
+      // Locked = tokens held by known lock/vesting program accounts
+      // We check if freeze authority is set (indicates lockable token)
+      const freezeAuthority = mintData.freezeAuthority || null;
+      const mintAuthority = mintData.mintAuthority || null;
+
+      supply = {
+        total: currentSupply,
+        burnt: burntAmount,
+        burntPct: currentSupply > 0 && burntAmount > 0 ? (burntAmount / (currentSupply + burntAmount)) * 100 : 0,
+        freezeAuthority: !!freezeAuthority,
+        mintAuthority: !!mintAuthority
+      };
+    }
 
     // Calculate percentages if supply is known
     const holders = largestAccounts.map((a, i) => ({
@@ -1425,7 +1458,7 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       };
     }
 
-    const result = { holders, totalSupply, metrics };
+    const result = { holders, totalSupply, metrics, supply };
     await cache.set(cacheKey, result, TTL.HOUR);
     res.json(result);
   } catch (error) {
