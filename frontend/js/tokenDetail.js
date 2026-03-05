@@ -73,7 +73,8 @@ const tokenDetail = {
         this.loadPools(),
         this.loadSubmissions(),
         sentiment.loadForToken(this.mint), // Load community sentiment
-        this.loadSimilarTokens() // Load similar tokens (anti-spoofing)
+        this.loadSimilarTokens(), // Load similar tokens (anti-spoofing)
+        this.loadHolderAnalytics() // Load holder concentration data
       ]);
       await voting.initForPage(); // Initialize voting after submissions are rendered
 
@@ -293,6 +294,17 @@ const tokenDetail = {
       });
     };
     bindHandler(similarRefreshBtn, 'click', similarRefreshHandler);
+
+    // Holders refresh button
+    const holdersRefreshBtn = document.getElementById('holders-refresh');
+    const holdersRefreshHandler = () => {
+      if (this._holdersRefreshing) return;
+      this._holdersRefreshing = true;
+      this.loadHolderAnalytics(true).finally(() => {
+        this._holdersRefreshing = false;
+      });
+    };
+    bindHandler(holdersRefreshBtn, 'click', holdersRefreshHandler);
 
     // Submit link with token pre-filled (use encodeURIComponent for safety)
     const submitLink = document.getElementById('submit-link');
@@ -745,6 +757,152 @@ const tokenDetail = {
         });
       });
     }
+  },
+
+  // Load holder analytics (fresh = true bypasses frontend cache)
+  async loadHolderAnalytics(fresh = false) {
+    const section = document.getElementById('holders-section');
+    const refreshBtn = document.getElementById('holders-refresh');
+
+    if (fresh) {
+      apiCache.clearPattern(`tokens:holders:${this.mint}`);
+      if (refreshBtn) refreshBtn.classList.add('spinning');
+    }
+
+    try {
+      const data = await api.tokens.getHolders(this.mint);
+      if (!data || !data.holders || data.holders.length === 0) return;
+
+      if (section) section.style.display = '';
+
+      // Update "last updated" timestamp
+      const updatedEl = document.getElementById('holders-updated');
+      if (updatedEl) {
+        this._holdersUpdatedAt = Date.now();
+        updatedEl.textContent = 'Updated just now';
+        this._startHoldersTimestampTimer();
+      }
+
+      // Render concentration metrics
+      const { metrics, holders } = data;
+      if (metrics) {
+        const t5 = document.getElementById('holders-top5');
+        const t10 = document.getElementById('holders-top10');
+        const t20 = document.getElementById('holders-top20');
+        const t1 = document.getElementById('holders-top1');
+        const hhi = document.getElementById('holders-hhi');
+        const avg = document.getElementById('holders-avg');
+        if (t5) t5.textContent = metrics.top5Pct.toFixed(1) + '%';
+        if (t10) t10.textContent = metrics.top10Pct.toFixed(1) + '%';
+        if (t20) t20.textContent = metrics.top20Pct.toFixed(1) + '%';
+        if (t1) t1.textContent = metrics.top1Pct.toFixed(1) + '%';
+        if (hhi) hhi.textContent = metrics.herfindahl.toFixed(0);
+        if (avg) {
+          const ab = metrics.avgBalance;
+          avg.textContent = ab >= 1e9 ? (ab / 1e9).toFixed(1) + 'B'
+            : ab >= 1e6 ? (ab / 1e6).toFixed(1) + 'M'
+            : ab >= 1e3 ? (ab / 1e3).toFixed(1) + 'K'
+            : ab.toFixed(1);
+        }
+
+        // Color-code percentage metrics (green = distributed, red = concentrated)
+        [t5, t10, t20, t1].forEach(el => {
+          if (!el) return;
+          el.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
+          const val = parseFloat(el.textContent);
+          if (val > 80) el.classList.add('concentration-high');
+          else if (val > 50) el.classList.add('concentration-medium');
+          else el.classList.add('concentration-low');
+        });
+
+        // Color-code HHI (0-10000 scale)
+        if (hhi) {
+          hhi.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
+          if (metrics.herfindahl > 2500) hhi.classList.add('concentration-high');
+          else if (metrics.herfindahl > 1500) hhi.classList.add('concentration-medium');
+          else hhi.classList.add('concentration-low');
+        }
+
+        // Render risk badge
+        const riskRow = document.getElementById('holders-risk-row');
+        const riskBadge = document.getElementById('holders-risk-badge');
+        if (riskRow && riskBadge && metrics.riskLevel) {
+          riskRow.style.display = '';
+          riskBadge.textContent = metrics.riskLevel.charAt(0).toUpperCase() + metrics.riskLevel.slice(1);
+          riskBadge.className = 'holders-risk-badge risk-' + metrics.riskLevel;
+        }
+      }
+
+      // Render concentration bar
+      const barEl = document.getElementById('holders-bar');
+      if (barEl && holders.length > 0) {
+        const colors = [
+          'var(--accent-primary)', 'var(--accent-secondary, #8b5cf6)',
+          '#f59e0b', '#ef4444', '#10b981', '#6366f1',
+          '#ec4899', '#14b8a6', '#f97316', '#84cc16'
+        ];
+        let html = '';
+        const topN = holders.slice(0, 10);
+        const topNPct = topN.reduce((s, h) => s + (h.percentage || 0), 0);
+        topN.forEach((h, i) => {
+          if (h.percentage > 0.5) {
+            html += `<div class="holders-bar-seg" style="width:${h.percentage}%;background:${colors[i % colors.length]}" title="#${h.rank} — ${h.percentage.toFixed(2)}%"></div>`;
+          }
+        });
+        if (topNPct < 100) {
+          html += `<div class="holders-bar-seg holders-bar-rest" style="width:${100 - topNPct}%" title="Others — ${(100 - topNPct).toFixed(2)}%"></div>`;
+        }
+        barEl.innerHTML = html;
+      }
+
+      // Render table
+      const tbody = document.getElementById('holders-tbody');
+      if (tbody) {
+        const price = this.token && this.token.price ? this.token.price : 0;
+        const maxPct = holders.length > 0 ? holders[0].percentage || 0 : 0;
+        tbody.innerHTML = holders.slice(0, 10).map(h => {
+          const shortAddr = h.address.slice(0, 4) + '...' + h.address.slice(-4);
+          const pct = h.percentage != null ? h.percentage.toFixed(2) + '%' : '--';
+          const bal = h.balance >= 1e9 ? (h.balance / 1e9).toFixed(2) + 'B'
+            : h.balance >= 1e6 ? (h.balance / 1e6).toFixed(2) + 'M'
+            : h.balance >= 1e3 ? (h.balance / 1e3).toFixed(2) + 'K'
+            : h.balance.toFixed(2);
+          const usdVal = price > 0 ? h.balance * price : 0;
+          const valStr = usdVal > 0
+            ? '$' + (usdVal >= 1e6 ? (usdVal / 1e6).toFixed(2) + 'M'
+              : usdVal >= 1e3 ? (usdVal / 1e3).toFixed(2) + 'K'
+              : usdVal.toFixed(2))
+            : '--';
+          const barW = maxPct > 0 ? ((h.percentage || 0) / maxPct) * 100 : 0;
+          return `<tr>
+            <td>${h.rank}</td>
+            <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a></td>
+            <td class="text-right mono">${bal}</td>
+            <td class="text-right mono">${valStr}</td>
+            <td class="text-right mono">${pct}</td>
+            <td class="holders-share-col"><div class="holders-share-bar" style="width:${barW.toFixed(1)}%"></div></td>
+          </tr>`;
+        }).join('');
+      }
+    } catch (error) {
+      console.warn('[TokenDetail] Holder analytics failed:', error.message);
+    } finally {
+      if (refreshBtn) refreshBtn.classList.remove('spinning');
+    }
+  },
+
+  // Keep the "Updated X ago" text ticking
+  _startHoldersTimestampTimer() {
+    if (this._holdersTimestampInterval) clearInterval(this._holdersTimestampInterval);
+    this._holdersTimestampInterval = setInterval(() => {
+      const el = document.getElementById('holders-updated');
+      if (!el || !this._holdersUpdatedAt) return;
+      const sec = Math.floor((Date.now() - this._holdersUpdatedAt) / 1000);
+      if (sec < 10) el.textContent = 'Updated just now';
+      else if (sec < 60) el.textContent = `Updated ${sec}s ago`;
+      else if (sec < 3600) el.textContent = `Updated ${Math.floor(sec / 60)}m ago`;
+      else el.textContent = `Updated ${Math.floor(sec / 3600)}h ago`;
+    }, 10000);
   },
 
   // Load chart data
@@ -1756,6 +1914,10 @@ const tokenDetail = {
     if (this.freshnessInterval) {
       clearInterval(this.freshnessInterval);
       this.freshnessInterval = null;
+    }
+    if (this._holdersTimestampInterval) {
+      clearInterval(this._holdersTimestampInterval);
+      this._holdersTimestampInterval = null;
     }
 
     // Destroy chart safely

@@ -1355,6 +1355,85 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
   }
 }));
 
+// GET /api/tokens/:mint/holders - Top holder analytics
+// Returns the 20 largest token accounts with concentration metrics
+router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+  const cacheKey = `holders:${mint}`;
+
+  try {
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get largest accounts and supply in parallel
+    const [largestAccounts, supplyResult] = await Promise.all([
+      solanaService.getTokenLargestAccounts(mint),
+      solanaService.getTokenSupply(mint).catch(() => null)
+    ]);
+
+    if (!largestAccounts || largestAccounts.length === 0) {
+      return res.json({ holders: [], totalSupply: null, metrics: null });
+    }
+
+    const totalSupply = supplyResult?.value
+      ? parseFloat(supplyResult.value.uiAmountString || supplyResult.value.uiAmount || 0)
+      : null;
+
+    // Calculate percentages if supply is known
+    const holders = largestAccounts.map((a, i) => ({
+      rank: i + 1,
+      address: a.address,
+      balance: a.uiAmount,
+      percentage: totalSupply > 0 ? (a.uiAmount / totalSupply) * 100 : null
+    })).filter(h => h.balance > 0);
+
+    // Concentration metrics
+    let metrics = null;
+    if (totalSupply > 0 && holders.length > 0) {
+      const top5Pct = holders.slice(0, 5).reduce((s, h) => s + (h.percentage || 0), 0);
+      const top10Pct = holders.slice(0, 10).reduce((s, h) => s + (h.percentage || 0), 0);
+      const top20Pct = holders.reduce((s, h) => s + (h.percentage || 0), 0);
+
+      // Herfindahl-Hirschman Index (0-10000 scale) — higher = more concentrated
+      const herfindahl = holders.reduce((s, h) => s + Math.pow(h.percentage || 0, 2), 0);
+
+      // #1 holder dominance — what % of top-20 holdings belong to the single largest holder
+      const top1Pct = holders[0]?.percentage || 0;
+      const dominance = top20Pct > 0 ? (top1Pct / top20Pct) * 100 : 0;
+
+      // Average holding among top 20
+      const avgBalance = holders.reduce((s, h) => s + h.balance, 0) / holders.length;
+      const avgPct = top20Pct / holders.length;
+
+      // Concentration risk rating
+      // Based on top-10 concentration and #1 holder share
+      let riskLevel = 'low';    // green — well distributed
+      if (top10Pct > 70 || top1Pct > 30) riskLevel = 'high';
+      else if (top10Pct > 40 || top1Pct > 15) riskLevel = 'medium';
+
+      metrics = {
+        top5Pct: Math.round(top5Pct * 100) / 100,
+        top10Pct: Math.round(top10Pct * 100) / 100,
+        top20Pct: Math.round(top20Pct * 100) / 100,
+        herfindahl: Math.round(herfindahl),
+        top1Pct: Math.round(top1Pct * 100) / 100,
+        dominance: Math.round(dominance * 100) / 100,
+        avgBalance: avgBalance,
+        avgPct: Math.round(avgPct * 100) / 100,
+        riskLevel: riskLevel,
+        holderCount: holders.length
+      };
+    }
+
+    const result = { holders, totalSupply, metrics };
+    await cache.set(cacheKey, result, TTL.HOUR);
+    res.json(result);
+  } catch (error) {
+    console.error('[Tokens] Holder analytics error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch holder data' });
+  }
+}));
+
 // GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
 // Anti-spoofing: helps users identify confusing or copycat token names
 // Returns fast DB results inline (~5-20ms), then queues worker for GeckoTerminal enrichment.

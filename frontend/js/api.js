@@ -482,6 +482,16 @@ const api = {
       );
     },
 
+    async getHolders(mint) {
+      const cacheKey = `tokens:holders:${mint}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/${mint}/holders`),
+        apiCache.TTL.pools, // reuse pools TTL (5min)
+        true
+      );
+    },
+
     async getHolderBalance(mint, wallet) {
       // Don't cache holder balances - need fresh data for voting
       return api.request(`/api/tokens/${mint}/holder/${wallet}`);

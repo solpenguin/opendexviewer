@@ -480,6 +480,29 @@ async function getTokenMetadataBatch(mintAddresses) {
   }
 }
 
+/**
+ * Get the 20 largest token accounts for a mint using standard Solana RPC.
+ * Returns accounts sorted by balance descending.
+ *
+ * @param {string} mintAddress - Token mint address
+ * @returns {Promise<Array|null>} - Array of { address, amount, decimals, uiAmount } or null
+ */
+async function getTokenLargestAccounts(mintAddress) {
+  try {
+    const result = await rpcCall('getTokenLargestAccounts', [mintAddress]);
+    if (!result || !result.value) return null;
+    return result.value.map(a => ({
+      address: a.address,
+      amount: a.amount,
+      decimals: a.decimals,
+      uiAmount: parseFloat(a.uiAmountString || a.uiAmount || 0)
+    }));
+  } catch (error) {
+    console.error('[Solana] getTokenLargestAccounts error:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   rpcCall,
   getAccountInfo,
@@ -491,6 +514,7 @@ module.exports = {
   getTransaction,
   getSignaturesForAddress,
   getTokenHolderCount,
+  getTokenLargestAccounts,
   getTokenMetadata,
   getTokenMetadataBatch,
   isHeliusConfigured,

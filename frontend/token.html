@@ -386,6 +386,80 @@
           <div id="similar-tokens-list" class="similar-tokens-list" style="display:none;"></div>
         </section>
 
+        <!-- Holder Analytics -->
+        <section class="holders-section" id="holders-section" style="display:none;">
+          <div class="holders-header">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              Holder Analytics
+            </h2>
+            <div class="holders-header-actions">
+              <span class="holders-updated" id="holders-updated"></span>
+              <button class="holders-refresh-btn" id="holders-refresh" title="Refresh holder data">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- Risk Rating -->
+          <div class="holders-risk-row" id="holders-risk-row" style="display:none;">
+            <span class="holders-risk-label">Concentration Risk</span>
+            <span class="holders-risk-badge" id="holders-risk-badge">--</span>
+          </div>
+          <!-- Concentration Metrics -->
+          <div class="holders-metrics" id="holders-metrics">
+            <div class="holder-metric">
+              <span class="holder-metric-label">Top 5</span>
+              <span class="holder-metric-value" id="holders-top5">--</span>
+            </div>
+            <div class="holder-metric">
+              <span class="holder-metric-label">Top 10</span>
+              <span class="holder-metric-value" id="holders-top10">--</span>
+            </div>
+            <div class="holder-metric">
+              <span class="holder-metric-label">Top 20</span>
+              <span class="holder-metric-value" id="holders-top20">--</span>
+            </div>
+            <div class="holder-metric">
+              <span class="holder-metric-label">#1 Holder</span>
+              <span class="holder-metric-value" id="holders-top1">--</span>
+            </div>
+            <div class="holder-metric">
+              <span class="holder-metric-label">HHI</span>
+              <span class="holder-metric-value" id="holders-hhi">--</span>
+            </div>
+            <div class="holder-metric">
+              <span class="holder-metric-label">Avg Hold</span>
+              <span class="holder-metric-value" id="holders-avg">--</span>
+            </div>
+          </div>
+          <!-- Concentration Bar -->
+          <div class="holders-concentration-bar" id="holders-bar"></div>
+          <!-- Top Holders Table -->
+          <div class="holders-table-wrap">
+            <table class="holders-table" id="holders-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Address</th>
+                  <th class="text-right">Balance</th>
+                  <th class="text-right">Value</th>
+                  <th class="text-right">%</th>
+                  <th class="holders-share-col">Share</th>
+                </tr>
+              </thead>
+              <tbody id="holders-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- Trade Section -->
         <section class="trade-section">
           <h2>Trade</h2>
