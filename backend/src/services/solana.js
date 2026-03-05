@@ -5,19 +5,28 @@ const { circuitBreakers } = require('./circuitBreaker');
 // RPC endpoint configuration with failover
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 
-// Pass the Helius key as a request header rather than a URL query parameter
-// to avoid the key appearing in HTTP access logs, CDN logs, or error traces
-const HELIUS_HEADERS = HELIUS_API_KEY ? { 'x-api-key': HELIUS_API_KEY } : {};
-
-// Primary and fallback RPC endpoints (no key in URLs)
+// Helius standard RPC requires the API key in the URL (not as a header).
+// The x-api-key header only works for Helius REST/DAS APIs, not for
+// JSON-RPC calls proxied to Solana validators.
 const RPC_ENDPOINTS = [
-  // Primary: Helius (if configured) - key sent via header
-  HELIUS_API_KEY && 'https://mainnet.helius-rpc.com',
-  // Secondary: Custom Helius RPC URL
+  // Primary: Helius with key in URL (if configured)
+  HELIUS_API_KEY && `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
+  // Secondary: Custom Helius RPC URL (may already contain the key)
   process.env.HELIUS_RPC_URL,
   // Tertiary: Public Solana RPC (rate limited but always available)
   'https://api.mainnet-beta.solana.com'
 ].filter(Boolean);
+
+// Remove duplicates (e.g. if HELIUS_RPC_URL is the same as the primary)
+const seen = new Set();
+const deduped = RPC_ENDPOINTS.filter(url => {
+  const base = url.split('?')[0];
+  if (seen.has(base)) return false;
+  seen.add(base);
+  return true;
+});
+RPC_ENDPOINTS.length = 0;
+RPC_ENDPOINTS.push(...deduped);
 
 // Current RPC index for failover
 let currentRpcIndex = 0;
@@ -53,8 +62,10 @@ function failoverToNextRpc() {
 // Legacy export for backwards compatibility
 const RPC_URL = RPC_ENDPOINTS[0];
 
-// Helius DAS API base URL (key sent via header, not query string)
-const HELIUS_DAS_URL = HELIUS_API_KEY ? 'https://mainnet.helius-rpc.com' : null;
+// Helius DAS API (Digital Asset Standard) — uses x-api-key header for auth
+// This is separate from standard Solana RPC which requires key in the URL
+const HELIUS_HEADERS = HELIUS_API_KEY ? { 'x-api-key': HELIUS_API_KEY } : {};
+const HELIUS_DAS_URL = HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : null;
 
 // Make RPC call with circuit breaker, failover, and retry logic
 async function rpcCall(method, params = [], retryCount = 0) {
@@ -73,7 +84,6 @@ async function rpcCall(method, params = [], retryCount = 0) {
           params
         }, {
           timeout: 15000, // 15 second timeout (reduced from 30s for faster failover)
-          headers: HELIUS_HEADERS,
           httpsAgent
         });
 

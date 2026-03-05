@@ -787,9 +787,25 @@ const tokenDetail = {
 
     try {
       const data = await api.tokens.getHolders(this.mint);
-      if (!data || !data.holders || data.holders.length === 0) return;
+      if (!data) return;
 
+      // Show the section — even on RPC errors we display a message
       if (section) section.style.display = '';
+
+      // Handle RPC unavailable — show section with retry message
+      if (data.error === 'rpc_unavailable' || !data.holders || data.holders.length === 0) {
+        const tbody = document.getElementById('holders-tbody');
+        if (tbody) {
+          tbody.innerHTML = data.error === 'rpc_unavailable'
+            ? '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);">Holder data temporarily unavailable. Click refresh to retry.</td></tr>'
+            : '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No holder data available for this token.</td></tr>';
+        }
+        // Don't cache RPC failures in frontend
+        if (data.error === 'rpc_unavailable') {
+          apiCache.clearPattern(`tokens:holders:${this.mint}`);
+        }
+        return;
+      }
 
       // Update "last updated" timestamp
       const updatedEl = document.getElementById('holders-updated');

@@ -1372,7 +1372,11 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       solanaService.getAccountInfo(mint).catch(() => null)
     ]);
 
-    if (!largestAccounts || largestAccounts.length === 0) {
+    if (!largestAccounts) {
+      // RPC call failed (rate limit, timeout, etc.) — don't cache the failure
+      return res.json({ holders: [], totalSupply: null, metrics: null, supply: null, error: 'rpc_unavailable' });
+    }
+    if (largestAccounts.length === 0) {
       return res.json({ holders: [], totalSupply: null, metrics: null, supply: null });
     }
 
