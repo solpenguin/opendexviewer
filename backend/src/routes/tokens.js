@@ -1368,12 +1368,13 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       if (cached) return res.json(cached);
     }
 
-    // Get largest accounts, supply, and mint account info in parallel.
+    // Get largest accounts, supply, mint account info, and token authorities in parallel.
     // Try standard RPC first (fast, pre-sorted), fall back to Helius DAS if it fails.
-    const [rpcAccounts, supplyResult, mintAccount] = await Promise.all([
+    const [rpcAccounts, supplyResult, mintAccount, tokenAuth] = await Promise.all([
       solanaService.getTokenLargestAccounts(mint),
       solanaService.getTokenSupply(mint).catch(() => null),
-      solanaService.getAccountInfo(mint).catch(() => null)
+      solanaService.getAccountInfo(mint).catch(() => null),
+      solanaService.getTokenAuthorities(mint).catch(() => null)
     ]);
 
     // If standard RPC failed, try Helius DAS API as fallback
@@ -1419,43 +1420,63 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',  // Meteora Pools
       '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',  // Lifinity v2
       '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',  // Orca Token Swap v2
+      '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // Pump.fun AMM (bonding curve)
+      'PSwapMdSai8tjrEXcxFeQth87xC4rRsa4VA5mhGhXkP',  // PumpSwap AMM
     ]);
-    let burntAmount = 0;
+    let deadWalletBurnt = 0;
     let lockedAmount = 0;
-    const lpIndices = new Set(); // indices into largestAccounts that are LP wallets
+    const lpIndices = new Set();
     const burntIndices = new Set();
+    // DAS fallback provides wallet addresses directly (via `wallet` field);
+    // standard RPC provides token account addresses that need resolution.
+    const usedDAS = !rpcAccounts;
     try {
-      // Step 1: Resolve token accounts → wallet owners
-      const accountAddresses = largestAccounts.slice(0, 20).map(a => a.address);
-      const tokenAccounts = await solanaService.getMultipleAccounts(accountAddresses);
-      if (tokenAccounts?.value) {
-        const walletToIndices = new Map();
-        tokenAccounts.value.forEach((acct, i) => {
-          const wallet = acct?.data?.parsed?.info?.owner;
-          if (!wallet) return;
-          if (BURN_WALLETS.has(wallet)) {
-            burntAmount += largestAccounts[i].uiAmount;
+      const walletToIndices = new Map();
+      if (usedDAS) {
+        // DAS path: largestAccounts[].wallet is already the wallet owner
+        largestAccounts.slice(0, 20).forEach((a, i) => {
+          if (!a.wallet) return;
+          if (BURN_WALLETS.has(a.wallet)) {
+            deadWalletBurnt += a.uiAmount;
             burntIndices.add(i);
             return;
           }
-          if (!walletToIndices.has(wallet)) walletToIndices.set(wallet, []);
-          walletToIndices.get(wallet).push(i);
+          if (!walletToIndices.has(a.wallet)) walletToIndices.set(a.wallet, []);
+          walletToIndices.get(a.wallet).push(i);
         });
+      } else {
+        // Standard RPC path: resolve token account addresses → wallet owners
+        const accountAddresses = largestAccounts.slice(0, 20).map(a => a.address);
+        const tokenAccounts = await solanaService.getMultipleAccounts(accountAddresses);
+        if (tokenAccounts?.value) {
+          tokenAccounts.value.forEach((acct, i) => {
+            const wallet = acct?.data?.parsed?.info?.owner;
+            if (!wallet) return;
+            largestAccounts[i].wallet = wallet; // Store for display
+            if (BURN_WALLETS.has(wallet)) {
+              deadWalletBurnt += largestAccounts[i].uiAmount;
+              burntIndices.add(i);
+              return;
+            }
+            if (!walletToIndices.has(wallet)) walletToIndices.set(wallet, []);
+            walletToIndices.get(wallet).push(i);
+          });
+        }
+      }
 
-        // Step 2: Check wallet accounts' on-chain owner to detect LP programs
-        const wallets = [...walletToIndices.keys()];
-        if (wallets.length > 0) {
-          const walletAccounts = await solanaService.getMultipleAccounts(wallets);
-          if (walletAccounts?.value) {
-            walletAccounts.value.forEach((acct, wi) => {
-              if (!acct) return;
-              if (LP_PROGRAMS.has(acct.owner)) {
-                for (const idx of walletToIndices.get(wallets[wi])) {
-                  lpIndices.add(idx);
-                }
+      // Check wallet accounts' on-chain owner to detect LP programs
+      const wallets = [...walletToIndices.keys()];
+      if (wallets.length > 0) {
+        const walletAccounts = await solanaService.getMultipleAccounts(wallets);
+        if (walletAccounts?.value) {
+          walletAccounts.value.forEach((acct, wi) => {
+            if (!acct) return;
+            if (LP_PROGRAMS.has(acct.owner)) {
+              for (const idx of walletToIndices.get(wallets[wi])) {
+                lpIndices.add(idx);
               }
-            });
-          }
+            }
+          });
         }
       }
     } catch (err) {
@@ -1468,6 +1489,31 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       console.warn('[Tokens] Failed to check Streamflow locks:', err.message);
     }
 
+    // SPL burn detection: the `burn` instruction reduces the mint's supply directly,
+    // so burnt tokens no longer exist in any account. Detect by comparing the known
+    // initial supply against the current on-chain supply.
+    // Pump.fun tokens always start with 1,000,000,000 tokens (6 decimals).
+    const PUMP_FUN_AUTHORITIES = new Set([
+      'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',  // pump.fun metadata authority
+      '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // pump.fun program
+      '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg', // pump.fun fee account
+    ]);
+    let splBurnt = 0;
+    if (tokenAuth && currentSupply) {
+      // Check if any authority matches pump.fun
+      const isPumpFun = tokenAuth.authorities?.some(a =>
+        PUMP_FUN_AUTHORITIES.has(a.address) ||
+        (a.scopes && PUMP_FUN_AUTHORITIES.has(a.address))
+      );
+      if (isPumpFun && decimals === 6) {
+        const initialSupply = 1000000000; // 1 billion — all pump.fun tokens
+        if (initialSupply > currentSupply) {
+          splBurnt = initialSupply - currentSupply;
+        }
+      }
+    }
+    const burntAmount = splBurnt + deadWalletBurnt;
+
     supply = {
       total: currentSupply,
       burnt: burntAmount,
@@ -1477,9 +1523,10 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     };
 
     // Build holders list with LP/burnt flags
+    // Prefer wallet address (meaningful to users) over token account address
     const holders = largestAccounts.map((a, i) => ({
       rank: i + 1,
-      address: a.address,
+      address: a.wallet || a.address,
       balance: a.uiAmount,
       percentage: totalSupply > 0 ? (a.uiAmount / totalSupply) * 100 : null,
       isLP: lpIndices.has(i),

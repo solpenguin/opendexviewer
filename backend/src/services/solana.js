@@ -553,9 +553,11 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
 
     const divisor = Math.pow(10, decimals);
     // Map to same format as getTokenLargestAccounts, sort by amount desc
+    // DAS returns both token account address and wallet owner
     return accounts
       .map(a => ({
-        address: a.owner,
+        address: a.address,
+        wallet: a.owner,
         amount: String(a.amount),
         decimals: decimals,
         uiAmount: parseFloat(a.amount) / divisor
@@ -564,6 +566,34 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
       .sort((a, b) => b.uiAmount - a.uiAmount);
   } catch (error) {
     console.error('[Solana] getTokenLargestAccountsDAS error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get token authorities from Helius DAS (update authority, creator, etc.)
+ * Used to detect token origin (e.g. pump.fun) for supply analysis.
+ *
+ * @param {string} mintAddress - Token mint address
+ * @returns {Promise<Object|null>} - { authorities: [...], creators: [...] } or null
+ */
+async function getTokenAuthorities(mintAddress) {
+  if (!HELIUS_DAS_URL) return null;
+  try {
+    const response = await axios.post(HELIUS_DAS_URL, {
+      jsonrpc: '2.0',
+      id: 'token-auth',
+      method: 'getAsset',
+      params: { id: mintAddress }
+    }, { timeout: 8000, headers: HELIUS_HEADERS, httpsAgent });
+
+    if (response.data.error || !response.data.result) return null;
+    const asset = response.data.result;
+    return {
+      authorities: asset.authorities || [],
+      creators: asset.creators || []
+    };
+  } catch (error) {
     return null;
   }
 }
@@ -640,6 +670,7 @@ module.exports = {
   getTokenMetadata,
   getTokenMetadataBatch,
   getStreamflowLockedAmount,
+  getTokenAuthorities,
   isHeliusConfigured,
   checkHealth
 };
