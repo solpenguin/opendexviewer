@@ -289,23 +289,40 @@ const wallet = {
           opt2.appendChild(opt2Title);
           opt2.appendChild(opt2Desc);
 
-          // QR code of current page URL
-          if (typeof qrcode !== 'undefined') {
-            const qrContainer = document.createElement('div');
-            qrContainer.style.cssText = 'display: flex; justify-content: center; padding: 0.5rem; background: #fff; border-radius: 8px; width: fit-content; margin: 0 auto;';
-            try {
-              const qr = qrcode(0, 'M');
-              qr.addData(window.location.href);
-              qr.make();
-              qrContainer.innerHTML = qr.createSvgTag(4);
-              opt2.appendChild(qrContainer);
+          // Copiable URL
+          const urlContainer = document.createElement('div');
+          urlContainer.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;';
 
-              const qrHint = document.createElement('p');
-              qrHint.style.cssText = 'text-align: center; color: var(--text-tertiary); font-size: 0.75rem; margin-top: 0.5rem;';
-              qrHint.textContent = 'Scan to copy this page URL';
-              opt2.appendChild(qrHint);
-            } catch (_) {}
-          }
+          const urlInput = document.createElement('input');
+          urlInput.type = 'text';
+          urlInput.readOnly = true;
+          urlInput.value = window.location.href;
+          urlInput.style.cssText = 'flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.8rem; outline: none; min-width: 0;';
+
+          const copyBtn = document.createElement('button');
+          copyBtn.style.cssText = 'padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--accent-primary); color: #fff; font-size: 0.8rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;';
+          copyBtn.textContent = 'Copy';
+          copyBtn.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(window.location.href);
+              copyBtn.textContent = 'Copied!';
+              setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+            } catch (_) {
+              urlInput.select();
+              document.execCommand('copy');
+              copyBtn.textContent = 'Copied!';
+              setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+            }
+          };
+
+          urlContainer.appendChild(urlInput);
+          urlContainer.appendChild(copyBtn);
+          opt2.appendChild(urlContainer);
+
+          const urlHint = document.createElement('p');
+          urlHint.style.cssText = 'text-align: center; color: var(--text-tertiary); font-size: 0.75rem; margin-top: 0.5rem;';
+          urlHint.textContent = 'Copy and paste into your wallet\'s browser';
+          opt2.appendChild(urlHint);
 
           mobileSection.appendChild(opt2);
 
