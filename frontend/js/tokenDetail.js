@@ -876,7 +876,6 @@ const tokenDetail = {
       if (data.supply) {
         const supplyRow = document.getElementById('holders-supply-row');
         const lockedEl = document.getElementById('holders-locked');
-        const burntEl = document.getElementById('holders-burnt');
         if (supplyRow) {
           supplyRow.style.display = '';
           const fmtAmount = (v) => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B'
@@ -891,14 +890,6 @@ const tokenDetail = {
             } else {
               lockedEl.textContent = 'None detected';
               lockedEl.className = 'holders-supply-value';
-            }
-          }
-          if (burntEl) {
-            const b = data.supply.burnt;
-            if (b > 0) {
-              burntEl.textContent = fmtAmount(b) + ' (' + data.supply.burntPct.toFixed(1) + '%)';
-            } else {
-              burntEl.textContent = 'None';
             }
           }
         }

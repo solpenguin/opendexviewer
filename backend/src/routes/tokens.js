@@ -1421,7 +1421,7 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',  // Lifinity v2
       '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',  // Orca Token Swap v2
       '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // Pump.fun AMM (bonding curve)
-      'PSwapMdSai8tjrEXcxFeQth87xC4rRsa4VA5mhGhXkP',  // PumpSwap AMM
+      'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',  // PumpSwap AMM
     ]);
     let deadWalletBurnt = 0;
     let lockedAmount = 0;
