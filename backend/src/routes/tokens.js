@@ -1365,19 +1365,25 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     const cached = await cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    // Get largest accounts, supply, and mint account info in parallel
-    const [largestAccounts, supplyResult, mintAccount] = await Promise.all([
+    // Get largest accounts, supply, and mint account info in parallel.
+    // Try standard RPC first (fast, pre-sorted), fall back to Helius DAS if it fails.
+    const [rpcAccounts, supplyResult, mintAccount] = await Promise.all([
       solanaService.getTokenLargestAccounts(mint),
       solanaService.getTokenSupply(mint).catch(() => null),
       solanaService.getAccountInfo(mint).catch(() => null)
     ]);
 
+    // If standard RPC failed, try Helius DAS API as fallback
+    let largestAccounts = rpcAccounts;
     if (!largestAccounts) {
-      // RPC call failed (rate limit, timeout, etc.) — don't cache the failure
-      return res.json({ holders: [], totalSupply: null, metrics: null, supply: null, error: 'rpc_unavailable' });
+      const decimals = supplyResult?.value?.decimals || mintAccount?.value?.data?.parsed?.info?.decimals || 0;
+      console.log(`[Tokens] Standard RPC failed for ${mint}, trying Helius DAS fallback (decimals=${decimals})`);
+      largestAccounts = await solanaService.getTokenLargestAccountsDAS(mint, decimals);
     }
-    if (largestAccounts.length === 0) {
-      return res.json({ holders: [], totalSupply: null, metrics: null, supply: null });
+
+    if (!largestAccounts || largestAccounts.length === 0) {
+      // Both methods failed — don't cache the failure
+      return res.json({ holders: [], totalSupply: null, metrics: null, supply: null, error: !rpcAccounts ? 'rpc_unavailable' : null });
     }
 
     const totalSupply = supplyResult?.value

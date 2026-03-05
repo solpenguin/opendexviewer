@@ -513,6 +513,61 @@ async function getTokenLargestAccounts(mintAddress) {
   }
 }
 
+/**
+ * Fallback: Get top token holders via Helius DAS API (getTokenAccounts).
+ * Unlike getTokenLargestAccounts, DAS doesn't sort by balance — it returns
+ * paginated accounts. We fetch a page and sort client-side.
+ * Slower but far more reliable (uses Helius plan, not public RPC limits).
+ *
+ * @param {string} mintAddress - Token mint address
+ * @param {number} decimals - Token decimals (needed to convert raw amounts)
+ * @returns {Promise<Array|null>} - Array of { address, uiAmount } sorted by balance desc, or null
+ */
+async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
+  if (!HELIUS_DAS_URL) return null;
+
+  try {
+    const response = await axios.post(HELIUS_DAS_URL, {
+      jsonrpc: '2.0',
+      id: 'largest-holders',
+      method: 'getTokenAccounts',
+      params: {
+        mint: mintAddress,
+        page: 1,
+        limit: 20,
+        options: { showZeroBalance: false }
+      }
+    }, {
+      timeout: 15000,
+      headers: HELIUS_HEADERS,
+      httpsAgent
+    });
+
+    if (response.data.error) {
+      console.error('[Solana] DAS getTokenAccounts error:', response.data.error.message);
+      return null;
+    }
+
+    const accounts = response.data.result?.token_accounts;
+    if (!accounts || accounts.length === 0) return null;
+
+    const divisor = Math.pow(10, decimals);
+    // Map to same format as getTokenLargestAccounts, sort by amount desc
+    return accounts
+      .map(a => ({
+        address: a.owner,
+        amount: String(a.amount),
+        decimals: decimals,
+        uiAmount: parseFloat(a.amount) / divisor
+      }))
+      .filter(a => a.uiAmount > 0)
+      .sort((a, b) => b.uiAmount - a.uiAmount);
+  } catch (error) {
+    console.error('[Solana] getTokenLargestAccountsDAS error:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   rpcCall,
   getAccountInfo,
@@ -525,6 +580,7 @@ module.exports = {
   getSignaturesForAddress,
   getTokenHolderCount,
   getTokenLargestAccounts,
+  getTokenLargestAccountsDAS,
   getTokenMetadata,
   getTokenMetadataBatch,
   isHeliusConfigured,
