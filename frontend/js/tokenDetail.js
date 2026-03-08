@@ -792,6 +792,7 @@ const tokenDetail = {
     if (fresh) {
       apiCache.clearPattern(`tokens:holders:${this.mint}`);
       apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
+      apiCache.clearPattern(`tokens:diamond-hands:${this.mint}`);
       this._holdTimesData = null;
       this._tokenHoldTimesData = null;
       if (refreshBtn) refreshBtn.classList.add('spinning');
@@ -816,6 +817,9 @@ const tokenDetail = {
         if (data.error === 'rpc_unavailable') {
           apiCache.clearPattern(`tokens:holders:${this.mint}`);
         }
+        // Hide diamond hands section if it was visible from a prior load
+        const dhSection = document.getElementById('diamond-hands-section');
+        if (dhSection) dhSection.style.display = 'none';
         return;
       }
 
@@ -911,8 +915,9 @@ const tokenDetail = {
         }
       }
 
-      // Lazy-load hold times after table renders (non-blocking)
+      // Lazy-load hold times and diamond hands after table renders (non-blocking)
       this._loadHoldTimes();
+      if (holders.length > 0) this._loadDiamondHands();
     } catch (error) {
       console.warn('[TokenDetail] Holder analytics failed:', error.message);
     } finally {
@@ -1094,6 +1099,86 @@ const tokenDetail = {
 
     const avgMs = values.reduce((sum, v) => sum + v, 0) / values.length;
     el.textContent = this._formatHoldTime(avgMs);
+  },
+
+  // Load diamond hands distribution with polling
+  async _loadDiamondHands(attempt = 0) {
+    const MAX_POLLS = 8;
+    const POLL_DELAYS = [3000, 5000, 8000, 12000, 18000, 25000, 35000, 45000];
+
+    try {
+      if (attempt > 0) {
+        apiCache.clearPattern(`tokens:diamond-hands:${this.mint}`);
+      }
+
+      console.log(`[DiamondHands] Poll ${attempt}/${MAX_POLLS} for ${this.mint.slice(0, 8)}...`);
+      const data = await api.tokens.getDiamondHands(this.mint);
+
+      if (!data) {
+        console.log(`[DiamondHands] No response`);
+        return;
+      }
+
+      // Only render once we have actual distribution data (at least some analyzed)
+      if (data.distribution && data.analyzed > 0) {
+        this._renderDiamondHands(data);
+      }
+
+      if (!data.computed && attempt < MAX_POLLS) {
+        console.log(`[DiamondHands] ${data.analyzed || 0}/${data.totalCount || data.sampleSize} analyzed, re-polling in ${POLL_DELAYS[attempt]}ms`);
+        setTimeout(() => this._loadDiamondHands(attempt + 1), POLL_DELAYS[attempt]);
+      } else {
+        // Final state — if still no data, hide section
+        if (!data.distribution || !data.analyzed) {
+          const section = document.getElementById('diamond-hands-section');
+          if (section) section.style.display = 'none';
+        }
+        console.log(`[DiamondHands] Done: sample=${data.sampleSize}, analyzed=${data.analyzed}`);
+      }
+    } catch (error) {
+      console.warn('[DiamondHands] Failed:', error.message);
+    }
+  },
+
+  _renderDiamondHands(data) {
+    const section = document.getElementById('diamond-hands-section');
+    if (!section || !data.distribution) return;
+
+    section.style.display = '';
+
+    // Update sample size label
+    const sampleEl = document.getElementById('diamond-hands-sample');
+    if (sampleEl) {
+      if (data.computed) {
+        sampleEl.textContent = `${data.analyzed} of ${data.sampleSize} holders`;
+      } else {
+        sampleEl.textContent = `${data.analyzed}/${data.totalCount || data.sampleSize} analyzed...`;
+      }
+    }
+
+    // Update each bar
+    const buckets = ['6h', '24h', '3d', '1w', '1m'];
+    for (const key of buckets) {
+      const pct = data.distribution[key] ?? 0;
+      const fillEl = document.getElementById(`dh-fill-${key}`);
+      const pctEl = document.getElementById(`dh-pct-${key}`);
+
+      if (fillEl) {
+        fillEl.style.width = pct + '%';
+        // Color gradient: higher % = greener (more diamond hands)
+        if (pct >= 50) fillEl.className = 'diamond-bar-fill dh-high';
+        else if (pct >= 20) fillEl.className = 'diamond-bar-fill dh-mid';
+        else fillEl.className = 'diamond-bar-fill dh-low';
+      }
+      if (pctEl) {
+        pctEl.textContent = pct + '%';
+        // Color the percentage text to match
+        pctEl.classList.remove('dh-text-high', 'dh-text-mid', 'dh-text-low');
+        if (pct >= 50) pctEl.classList.add('dh-text-high');
+        else if (pct >= 20) pctEl.classList.add('dh-text-mid');
+        else if (pct > 0) pctEl.classList.add('dh-text-low');
+      }
+    }
   },
 
   // Load chart data

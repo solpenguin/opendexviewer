@@ -419,6 +419,48 @@ const jobProcessors = {
 
     console.log(`[Worker] Hold times for ${mint}: ${computed} computed, ${skipped} no data`);
     return { computed, skipped };
+  },
+
+  /**
+   * Compute diamond hands data — same as compute-hold-times but clears
+   * the diamond-hands-pending flag when done.
+   */
+  'compute-diamond-hands': async (job) => {
+    const { mint, wallets } = job.data;
+    if (!wallets || wallets.length === 0) return { computed: 0 };
+
+    console.log(`[Worker] Computing diamond hands for ${wallets.length} wallets (token ${mint})`);
+
+    const BATCH_SIZE = 5;
+    let computed = 0;
+    let skipped = 0;
+
+    for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
+      const batch = wallets.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (wallet) => {
+          try {
+            const metrics = await solanaService.getWalletHoldMetrics(wallet, mint);
+            return [wallet, metrics];
+          } catch (err) {
+            return [wallet, null];
+          }
+        })
+      );
+
+      for (const [wallet, metrics] of batchResults) {
+        const avg = metrics?.avgHoldTime ?? -1;
+        const token = metrics?.tokenHoldTime ?? -1;
+        await cache.set(`wallet-hold-time:${wallet}`, avg, TTL.DAY);
+        await cache.set(`wallet-token-hold:${wallet}:${mint}`, token, TTL.DAY);
+        if (avg > 0 || token > 0) computed++;
+        else skipped++;
+      }
+    }
+
+    await cache.delete(`diamond-hands-pending:${mint}`);
+    console.log(`[Worker] Diamond hands for ${mint}: ${computed} with data, ${skipped} no data`);
+    return { computed, skipped };
   }
 };
 

@@ -13,6 +13,25 @@ const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
 const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'tech', 'meme'];
 const VALID_SORTS = ['volume', 'price', 'priceChange24h', 'marketCap', 'views'];
 const VALID_ORDERS = ['asc', 'desc'];
+
+// Known burn wallets and LP program IDs — shared across holder endpoints
+const BURN_WALLETS = new Set([
+  '1nc1nerator11111111111111111111111111111111',
+  '1111111111111111111111111111111111111111111',
+  'burnedFi11111111111111111111111111111111111'
+]);
+const LP_PROGRAMS = new Set([
+  '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',  // Raydium AMM v4
+  'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',  // Raydium CLMM
+  'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C',  // Raydium CPMM
+  'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',  // Orca Whirlpool
+  'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',  // Meteora DLMM
+  'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',  // Meteora Pools
+  '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',  // Lifinity v2
+  '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',  // Orca Token Swap v2
+  '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // Pump.fun AMM (bonding curve)
+  'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',  // PumpSwap AMM
+]);
 const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tiktok', 'website', 'other'];
 const VALID_SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'all'];
 const jobQueue = require('../services/jobQueue');
@@ -1406,23 +1425,6 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     // - Burnt: tokens sent to known dead/burn wallet addresses
     // - LP: tokens held by liquidity pool programs (Raydium, Orca, Meteora, etc.)
     // - Locked: Streamflow vesting contracts (queried by mint address)
-    const BURN_WALLETS = new Set([
-      '1nc1nerator11111111111111111111111111111111',
-      '1111111111111111111111111111111111111111111',
-      'burnedFi11111111111111111111111111111111111'
-    ]);
-    const LP_PROGRAMS = new Set([
-      '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',  // Raydium AMM v4
-      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',  // Raydium CLMM
-      'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C',  // Raydium CPMM
-      'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',  // Orca Whirlpool
-      'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',  // Meteora DLMM
-      'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',  // Meteora Pools
-      '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',  // Lifinity v2
-      '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',  // Orca Token Swap v2
-      '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // Pump.fun AMM (bonding curve)
-      'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',  // PumpSwap AMM
-    ]);
     let deadWalletBurnt = 0;
     let lockedAmount = 0;
     const lpIndices = new Set();
@@ -1733,6 +1735,179 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
     res.status(500).json({ error: 'Failed to fetch hold times' });
   }
 }));
+
+// GET /api/tokens/:mint/holders/diamond-hands - Hold time distribution across top 250 holders
+// Returns % of holders that have held the token for >6h, >24h, >3d, >1w, >1m.
+// Uses Helius DAS to sample up to 250 holders, then getWalletHoldMetrics for each.
+// Background computation with polling pattern (same as hold-times).
+const DIAMOND_HANDS_BUCKETS = [
+  { key: '6h',  label: '>6h',  ms: 6 * 3600000 },
+  { key: '24h', label: '>24h', ms: 24 * 3600000 },
+  { key: '3d',  label: '>3d',  ms: 3 * 86400000 },
+  { key: '1w',  label: '>1w',  ms: 7 * 86400000 },
+  { key: '1m',  label: '>1m',  ms: 30 * 86400000 },
+];
+
+router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+
+  try {
+    if (!solanaService.isHeliusConfigured()) {
+      return res.json({ distribution: null, sampleSize: 0, analyzed: 0, computed: true });
+    }
+
+    // Check for cached final result (1 hour TTL, set after full computation)
+    const resultCacheKey = `diamond-hands:${mint}`;
+    const cached = await cache.get(resultCacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    // Get holder sample — filter out burn wallets and LP programs
+    const walletsCacheKey = `diamond-hands-wallets:${mint}`;
+    let wallets = await cache.get(walletsCacheKey);
+    if (!wallets) {
+      // Combine burn + LP addresses into a single exclusion set
+      const excludeSet = new Set([...BURN_WALLETS, ...LP_PROGRAMS]);
+      wallets = await solanaService.getTokenHolderSample(mint, 250, excludeSet);
+      if (!wallets || wallets.length === 0) {
+        return res.json({ distribution: null, sampleSize: 0, analyzed: 0, computed: true });
+      }
+      await cache.set(walletsCacheKey, wallets, TTL.HOUR);
+    }
+
+    // Check per-wallet token hold time caches
+    const holdTimes = {};   // wallet → ms (only positive values)
+    const uncached = [];
+    let analyzedCount = 0;  // wallets that have been analyzed (positive OR sentinel)
+
+    await Promise.all(wallets.map(async (wallet) => {
+      const val = await cache.get(`wallet-token-hold:${wallet}:${mint}`);
+      if (val != null) {
+        analyzedCount++;
+        if (val > 0) holdTimes[wallet] = val;
+        // val === -1 means no data (sentinel) — analyzed but no hold time found
+      } else {
+        uncached.push(wallet);
+      }
+    }));
+
+    // If all wallets are cached, compute final distribution and cache it
+    if (uncached.length === 0) {
+      const result = buildDiamondHandsResult(holdTimes, wallets.length, analyzedCount);
+      await cache.set(resultCacheKey, result, TTL.HOUR);
+      return res.json(result);
+    }
+
+    // Background computation for uncached wallets
+    const pendingKey = `diamond-hands-pending:${mint}`;
+    const pending = await cache.get(pendingKey);
+
+    if (pending && typeof pending === 'number' && (Date.now() - pending) > 30000) {
+      console.log(`[DiamondHands] Pending for ${Math.round((Date.now() - pending) / 1000)}s — retrying`);
+      await cache.delete(pendingKey);
+    }
+
+    const isStillPending = await cache.get(pendingKey);
+
+    if (!isStillPending) {
+      await cache.set(pendingKey, Date.now(), 300000); // 5 min dedup
+
+      // Try worker first
+      const job = await jobQueue.addAnalyticsJob('compute-diamond-hands', {
+        mint,
+        wallets: uncached
+      });
+
+      let useInline = false;
+      if (job) {
+        const workerActive = await jobQueue.isWorkerActive();
+        if (!workerActive) {
+          console.log(`[DiamondHands] No worker — inline for ${uncached.length} wallets`);
+          useInline = true;
+        } else {
+          console.log(`[DiamondHands] Job queued for ${uncached.length} wallets`);
+        }
+      } else {
+        console.log(`[DiamondHands] Queue unavailable — inline for ${uncached.length} wallets`);
+        useInline = true;
+      }
+
+      if (useInline) {
+        const bgWallets = [...uncached];
+        const bgMint = mint;
+
+        setImmediate(() => {
+          (async () => {
+            console.log(`[DiamondHands] Inline: computing ${bgWallets.length} wallets for ${bgMint.slice(0, 8)}...`);
+            const BATCH_SIZE = 5;
+            const DAY_MS = 86400000;
+            let ok = 0;
+            try {
+              for (let i = 0; i < bgWallets.length; i += BATCH_SIZE) {
+                const batch = bgWallets.slice(i, i + BATCH_SIZE);
+                const results = await Promise.all(
+                  batch.map(async (wallet) => {
+                    try {
+                      const metrics = await solanaService.getWalletHoldMetrics(wallet, bgMint);
+                      return [wallet, metrics];
+                    } catch (err) {
+                      return [wallet, null];
+                    }
+                  })
+                );
+                for (const [wallet, metrics] of results) {
+                  const avg = metrics?.avgHoldTime ?? -1;
+                  const token = metrics?.tokenHoldTime ?? -1;
+                  await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
+                  await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
+                  ok++;
+                }
+              }
+              console.log(`[DiamondHands] Inline complete: ${ok}/${bgWallets.length} for ${bgMint.slice(0, 8)}...`);
+            } catch (err) {
+              console.error(`[DiamondHands] Inline failed:`, err.message);
+            } finally {
+              await cache.delete(`diamond-hands-pending:${bgMint}`);
+            }
+          })();
+        });
+      }
+    }
+
+    // Return partial distribution from cached data so far
+    const partial = buildDiamondHandsResult(holdTimes, wallets.length, analyzedCount);
+    partial.computed = false;
+    partial.totalCount = wallets.length;
+    console.log(`[DiamondHands] Partial: ${partial.analyzed}/${partial.totalCount} analyzed for ${mint.slice(0, 8)}...`);
+    res.json(partial);
+  } catch (error) {
+    console.error('[DiamondHands] Error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch diamond hands data' });
+  }
+}));
+
+/**
+ * Build diamond hands distribution from hold time data.
+ * Denominator is `analyzed` (wallets with actual data), not total sample.
+ * Wallets with -1 sentinel (no data/failed) are excluded from denominator.
+ */
+function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
+  const values = Object.values(holdTimes);
+  // Denominator: wallets with positive hold time data — not sentinels, not uncached
+  const denominator = values.length;
+  if (denominator === 0) {
+    return { distribution: null, sampleSize, analyzed: analyzed || 0, computed: true };
+  }
+
+  const distribution = {};
+  for (const bucket of DIAMOND_HANDS_BUCKETS) {
+    const count = values.filter(ms => ms >= bucket.ms).length;
+    distribution[bucket.key] = Math.round((count / denominator) * 1000) / 10;
+  }
+
+  return { distribution, sampleSize, analyzed: analyzed || denominator, computed: true };
+}
 
 // GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
 // Anti-spoofing: helps users identify confusing or copycat token names

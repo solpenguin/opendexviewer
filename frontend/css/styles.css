@@ -2433,6 +2433,91 @@ a:hover {
   transition: width 0.3s ease;
 }
 
+/* Diamond Hands Distribution */
+.diamond-hands-section {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.diamond-hands-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.625rem;
+}
+
+.diamond-hands-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.diamond-hands-sample {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.diamond-hands-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.diamond-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diamond-bar-label {
+  width: 2.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.diamond-bar-track {
+  flex: 1;
+  height: 14px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.diamond-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  min-width: 0;
+  transition: width 0.6s ease;
+}
+
+.diamond-bar-fill.dh-high { background: var(--success, #10b981); }
+.diamond-bar-fill.dh-mid { background: var(--warning, #f59e0b); }
+.diamond-bar-fill.dh-low { background: var(--error, #ef4444); }
+
+.diamond-bar-pct {
+  width: 2.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.diamond-bar-pct.dh-text-high { color: var(--success, #10b981); }
+.diamond-bar-pct.dh-text-mid { color: var(--warning, #f59e0b); }
+.diamond-bar-pct.dh-text-low { color: var(--error, #ef4444); }
+
 .holders-supply-row {
   display: flex;
   gap: 1.5rem;

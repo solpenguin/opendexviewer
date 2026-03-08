@@ -571,6 +571,64 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
 }
 
 /**
+ * Get a sample of token holder wallet addresses using Helius DAS API.
+ * Fetches up to 1000 token accounts in a single call, deduplicates by owner,
+ * and returns up to `count` unique wallet addresses.
+ *
+ * @param {string} mintAddress - Token mint address
+ * @param {number} [count=250] - Max number of unique wallets to return
+ * @param {Set} [excludeAddresses] - Addresses to skip (burn wallets, LP programs, etc.)
+ * @returns {Promise<string[]|null>} - Array of wallet addresses or null
+ */
+async function getTokenHolderSample(mintAddress, count = 250, excludeAddresses = null) {
+  if (!HELIUS_DAS_URL) return null;
+
+  try {
+    const response = await axios.post(HELIUS_DAS_URL, {
+      jsonrpc: '2.0',
+      id: 'holder-sample',
+      method: 'getTokenAccounts',
+      params: {
+        mint: mintAddress,
+        page: 1,
+        limit: 1000,
+        options: { showZeroBalance: false }
+      }
+    }, {
+      timeout: 20000,
+      headers: HELIUS_HEADERS,
+      httpsAgent
+    });
+
+    if (response.data.error) {
+      console.error('[Solana] getTokenHolderSample DAS error:', response.data.error.message);
+      return null;
+    }
+
+    const accounts = response.data.result?.token_accounts;
+    if (!accounts || accounts.length === 0) return null;
+
+    // Deduplicate by owner wallet, skip burn/LP addresses
+    const seen = new Set();
+    const wallets = [];
+    for (const a of accounts) {
+      if (!a.owner || !a.amount || a.amount === '0' || a.amount === 0) continue;
+      if (seen.has(a.owner)) continue;
+      if (excludeAddresses && excludeAddresses.has(a.owner)) continue;
+      seen.add(a.owner);
+      wallets.push(a.owner);
+      if (wallets.length >= count) break;
+    }
+
+    console.log(`[Solana] getTokenHolderSample: ${wallets.length} unique wallets from ${accounts.length} accounts for ${mintAddress.slice(0, 8)}...`);
+    return wallets;
+  } catch (error) {
+    console.error('[Solana] getTokenHolderSample error:', error.message);
+    return null;
+  }
+}
+
+/**
  * Get token authorities from Helius DAS (update authority, creator, etc.)
  * Used to detect token origin (e.g. pump.fun) for supply analysis.
  *
@@ -792,6 +850,7 @@ module.exports = {
   getTokenHolderCount,
   getTokenLargestAccounts,
   getTokenLargestAccountsDAS,
+  getTokenHolderSample,
   getTokenMetadata,
   getTokenMetadataBatch,
   getStreamflowLockedAmount,

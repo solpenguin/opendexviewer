@@ -503,6 +503,16 @@ const api = {
       );
     },
 
+    async getDiamondHands(mint) {
+      const cacheKey = `tokens:diamond-hands:${mint}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/${mint}/holders/diamond-hands`),
+        30000,
+        false
+      );
+    },
+
     async getHolderBalance(mint, wallet) {
       // Don't cache holder balances - need fresh data for voting
       return api.request(`/api/tokens/${mint}/holder/${wallet}`);
