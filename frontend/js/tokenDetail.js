@@ -1005,24 +1005,33 @@ const tokenDetail = {
   // If the backend returns computed: false (worker still processing),
   // re-poll up to MAX_POLLS times with increasing delay to pick up results.
   async _loadHoldTimes(attempt = 0) {
-    const MAX_POLLS = 7;
-    const POLL_DELAYS = [5000, 5000, 6000, 8000, 12000, 16000, 20000]; // ms between retries — first delay is longer to let computation progress
+    const MAX_POLLS = 8;
+    // First delay is longer to give backend inline computation time to complete
+    const POLL_DELAYS = [6000, 5000, 5000, 6000, 8000, 12000, 16000, 20000];
 
     // Cancel any in-flight polling from a previous load (e.g. refresh clicked while polling)
-    if (attempt === 0 && this._holdTimesTimer) {
-      clearTimeout(this._holdTimesTimer);
-      this._holdTimesTimer = null;
+    if (attempt === 0) {
+      if (this._holdTimesTimer) {
+        clearTimeout(this._holdTimesTimer);
+        this._holdTimesTimer = null;
+      }
+      this._holdTimesLoaded = false;
     }
 
     try {
-      // Always clear frontend cache so we get fresh computed status from backend
-      apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
-
+      // Bypass apiCache entirely — poll directly so we always hit the backend.
+      // The apiCache.getOrFetch pattern can return stale cached responses during
+      // rapid polling, which prevents us from seeing newly computed data.
       console.log(`[HoldTimes] Poll ${attempt}/${MAX_POLLS} for ${this.mint.slice(0, 8)}...`);
-      const data = await api.tokens.getHolderHoldTimes(this.mint);
+      const data = await api.request(`/api/tokens/${this.mint}/holders/hold-times`);
 
       if (!data) {
         console.warn(`[HoldTimes] No data returned from API`);
+        if (attempt < MAX_POLLS) {
+          this._holdTimesTimer = setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt] || 10000);
+        } else {
+          this._holdTimesLoaded = true;
+        }
         return;
       }
 
@@ -1030,9 +1039,9 @@ const tokenDetail = {
       const tokenCount = data.tokenHoldTimes ? Object.keys(data.tokenHoldTimes).length : 0;
       console.log(`[HoldTimes] Poll ${attempt}: computed=${data.computed}, avg=${avgCount}, token=${tokenCount}`);
 
-      // If the backend returned no data (likely holders cache miss), ensure the
-      // backend holders cache gets repopulated by making a fresh holders request.
-      // This is fire-and-forget — the next poll will pick up the results.
+      // If the backend returned no data (holders cache miss), ensure the backend
+      // holders cache gets repopulated by making a fresh holders request.
+      // Fire-and-forget — the next poll will find the cache populated.
       if (!data.computed && avgCount === 0 && tokenCount === 0 && attempt < 2) {
         console.log(`[HoldTimes] Empty response — refreshing backend holders cache`);
         apiCache.clearPattern(`tokens:holders:${this.mint}`);
@@ -1040,14 +1049,14 @@ const tokenDetail = {
       }
 
       // Merge into existing data (re-polls add to previous results)
-      if (data.holdTimes) {
+      if (data.holdTimes && Object.keys(data.holdTimes).length > 0) {
         this._holdTimesData = Object.assign(this._holdTimesData || {}, data.holdTimes);
       }
-      if (data.tokenHoldTimes) {
+      if (data.tokenHoldTimes && Object.keys(data.tokenHoldTimes).length > 0) {
         this._tokenHoldTimesData = Object.assign(this._tokenHoldTimesData || {}, data.tokenHoldTimes);
       }
 
-      // Fill in pending placeholders
+      // Fill in pending placeholders with any data we have so far
       this._applyHoldTimesToDOM();
 
       // Re-poll if worker is still computing and we haven't exhausted retries
@@ -1072,14 +1081,20 @@ const tokenDetail = {
         console.log(`[HoldTimes] Done: ${totalAvg} avg hold times, ${totalToken} token hold times loaded`);
       }
     } catch (error) {
-      console.warn('[HoldTimes] Failed:', error.message, error);
-      this._holdTimesLoaded = true;
-      document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
-        el.textContent = '--';
-        el.classList.remove('hold-time-pending', 'token-hold-pending');
-      });
-      const avgEl = document.getElementById('holders-avg-hold-time');
-      if (avgEl) avgEl.textContent = '--';
+      console.warn('[HoldTimes] Failed:', error.message);
+      // On error, keep polling if we have retries left (could be transient)
+      if (attempt < MAX_POLLS) {
+        console.log(`[HoldTimes] Error on poll ${attempt}, retrying in ${POLL_DELAYS[attempt]}ms`);
+        this._holdTimesTimer = setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
+      } else {
+        this._holdTimesLoaded = true;
+        document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
+          el.textContent = '--';
+          el.classList.remove('hold-time-pending', 'token-hold-pending');
+        });
+        const avgEl = document.getElementById('holders-avg-hold-time');
+        if (avgEl) avgEl.textContent = '--';
+      }
     }
   },
 
@@ -1125,7 +1140,7 @@ const tokenDetail = {
   // Load diamond hands distribution with polling
   async _loadDiamondHands(attempt = 0) {
     const MAX_POLLS = 8;
-    const POLL_DELAYS = [6000, 8000, 10000, 14000, 20000, 28000, 38000, 50000]; // longer delays for 250 wallets
+    const POLL_DELAYS = [5000, 5000, 6000, 8000, 10000, 14000, 18000, 24000]; // 100 wallets at batch 25 ≈ 8-12s
 
     // Cancel any in-flight polling from a previous load
     if (attempt === 0 && this._diamondHandsTimer) {
@@ -1134,11 +1149,9 @@ const tokenDetail = {
     }
 
     try {
-      // Always clear frontend cache so we get fresh computed status
-      apiCache.clearPattern(`tokens:diamond-hands:${this.mint}`);
-
+      // Bypass apiCache — poll directly so we always get fresh data from backend
       console.log(`[DiamondHands] Poll ${attempt}/${MAX_POLLS} for ${this.mint.slice(0, 8)}...`);
-      const data = await api.tokens.getDiamondHands(this.mint);
+      const data = await api.request(`/api/tokens/${this.mint}/holders/diamond-hands`);
 
       if (!data) {
         console.log(`[DiamondHands] No response`);

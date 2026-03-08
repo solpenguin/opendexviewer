@@ -431,7 +431,7 @@ const jobProcessors = {
 
     console.log(`[Worker] Computing diamond hands for ${wallets.length} wallets (token ${mint})`);
 
-    const BATCH_SIZE = 10;
+    const BATCH_SIZE = 25;
     let computed = 0;
     let skipped = 0;
 
