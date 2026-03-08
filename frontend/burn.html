@@ -4,21 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Burn Credits - OpenDex</title>
-  <meta name="description" content="Burn $OD tokens to earn Burn Credits (BC) on OpenDex. Use Sol Incinerator to burn tokens and submit your transaction for verification.">
+  <meta name="description" content="Burn $OD tokens directly on OpenDex to earn Burn Credits (BC). Connect your wallet and burn in one click.">
   <meta name="theme-color" content="#07080a">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OpenDex">
   <meta property="og:title" content="Burn Credits - OpenDex">
-  <meta property="og:description" content="Burn $OD tokens to earn Burn Credits (BC) on OpenDex.">
+  <meta property="og:description" content="Burn $OD tokens directly on OpenDex to earn Burn Credits (BC).">
   <meta property="og:image" content="https://opendex.online/OpenDexBanner2.png">
   <meta property="og:url" content="https://opendex.online/burn">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Burn Credits - OpenDex">
-  <meta name="twitter:description" content="Burn $OD tokens to earn Burn Credits (BC) on OpenDex.">
+  <meta name="twitter:description" content="Burn $OD tokens directly on OpenDex to earn Burn Credits (BC).">
   <meta name="twitter:image" content="https://opendex.online/OpenDexBanner2.png">
 
   <!-- Favicon -->
@@ -89,148 +89,166 @@
   </header>
   <div id="announcement-banner"></div>
 
-  <main class="main hackathon-page">
+  <main class="main burn-page">
     <!-- Hero -->
-    <section class="submit-hero hackathon-hero">
-      <div class="submit-hero-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-          <path d="M8 12l2-6 4 9 2-3"/>
+    <section class="burn-hero">
+      <div class="burn-hero-glow"></div>
+      <div class="burn-hero-icon">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="url(#burn-gradient)" stroke-width="1.5">
+          <defs>
+            <linearGradient id="burn-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#f59e0b"/>
+              <stop offset="100%" stop-color="#ef4444"/>
+            </linearGradient>
+          </defs>
+          <path d="M12 22c-4.97 0-9-2.69-9-6 0-2.5 1.5-4.5 3-6 .5-.5 1.5-1.5 2-3 1 2 2 3 3 4 1-2 1-4 0-6 3 1 6 4 6 8 0 1-.5 2-1 3 .5-1 1-2 1-3 1 2 2 4 1 6-.5 1-1 2-2 3-1.5 1.5-3 2-4 2z"/>
         </svg>
       </div>
-      <h1>Burn Credits</h1>
-      <p>Burn $OD tokens to earn Burn Credits (BC)</p>
-      <div id="burn-rate-display" class="burn-rate-badge" style="margin-top: 0.75rem; display: inline-block; padding: 0.4rem 1rem; background: var(--accent-muted); border-radius: var(--radius-sm); color: var(--accent-hover); font-weight: 600; font-size: 0.9rem;">
-        Loading rate...
-      </div>
+      <h1 class="burn-hero-title">Burn Credits</h1>
+      <p class="burn-hero-subtitle">Burn $OD tokens to earn Burn Credits</p>
+      <div class="burn-rate-pill" id="burn-rate-display">Loading rate...</div>
     </section>
 
-    <!-- Balance Card (shown when wallet connected) -->
-    <section id="burn-balance-section" class="community-section" style="display: none;">
-      <div class="burn-balance-card" style="display: flex; gap: 2rem; align-items: center; justify-content: center; flex-wrap: wrap; padding: 1.5rem;">
-        <div style="text-align: center;">
-          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Your Burn Credits</div>
-          <div id="burn-balance" style="font-size: 2rem; font-weight: 700; color: var(--accent-hover); font-family: 'JetBrains Mono', monospace;">0</div>
+    <!-- Stats Cards (shown when connected) -->
+    <section id="burn-stats-section" class="burn-stats-section" style="display: none;">
+      <div class="burn-stats-grid">
+        <div class="burn-stat-card">
+          <div class="burn-stat-label">Your Burn Credits</div>
+          <div class="burn-stat-value burn-stat-accent" id="burn-balance">0</div>
         </div>
-        <div style="width: 1px; height: 3rem; background: var(--border-color);"></div>
-        <div style="text-align: center;">
-          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Total $OD Burned</div>
-          <div id="burn-total-burned" style="font-size: 2rem; font-weight: 700; color: var(--yellow); font-family: 'JetBrains Mono', monospace;">0</div>
+        <div class="burn-stat-card">
+          <div class="burn-stat-label">Total $OD Burned</div>
+          <div class="burn-stat-value burn-stat-yellow" id="burn-total-burned">0</div>
         </div>
-        <div style="width: 1px; height: 3rem; background: var(--border-color);"></div>
-        <div style="text-align: center;">
-          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Submissions</div>
-          <div id="burn-submissions" style="font-size: 2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">0</div>
+        <div class="burn-stat-card">
+          <div class="burn-stat-label">Submissions</div>
+          <div class="burn-stat-value" id="burn-submissions">0</div>
         </div>
       </div>
     </section>
 
-    <!-- How to Burn Instructions -->
-    <section class="community-section">
-      <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);">How to Earn Burn Credits</h2>
-      <div class="burn-steps" style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
-        <div class="burn-step" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
-          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
-            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">1</div>
-            <h3 style="font-size: 0.95rem; color: var(--text-primary); margin: 0;">Get $OD Tokens</h3>
-          </div>
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-            Purchase $OD tokens on any Solana DEX. Contract:
-            <code style="font-size: 0.75rem; background: var(--bg-tertiary); padding: 0.15rem 0.35rem; border-radius: 3px; word-break: break-all;">8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump</code>
-          </p>
-        </div>
-
-        <div class="burn-step" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
-          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
-            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">2</div>
-            <h3 style="font-size: 0.95rem; color: var(--text-primary); margin: 0;">Burn with Sol Incinerator</h3>
-          </div>
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-            Visit <a href="https://sol-incinerator.com" target="_blank" rel="noopener" style="color: var(--accent-hover);">Sol Incinerator</a> and burn your $OD tokens. Copy the transaction URL or signature after the burn completes.
-          </p>
-        </div>
-
-        <div class="burn-step" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
-          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
-            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">3</div>
-            <h3 style="font-size: 0.95rem; color: var(--text-primary); margin: 0;">Submit Transaction</h3>
-          </div>
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-            Connect your wallet below and paste the burn transaction URL or ID. We'll verify it on-chain and credit your Burn Credits automatically.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Submit Burn Transaction -->
-    <section class="community-section">
-      <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);">Submit Burn Transaction</h2>
-
+    <!-- Burn Interface -->
+    <section class="burn-interface-section">
       <!-- Not connected state -->
-      <div id="burn-connect-prompt" style="text-align: center; padding: 2rem;">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-dim); margin-bottom: 0.75rem;">
-          <rect x="2" y="5" width="20" height="14" rx="2"/>
-          <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
-        </svg>
-        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Connect your wallet to submit burn transactions</p>
-        <button id="burn-connect-btn" class="btn btn-accent">Connect Wallet</button>
+      <div id="burn-connect-prompt" class="burn-connect-prompt">
+        <div class="burn-connect-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-dim);">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+        </div>
+        <h2 class="burn-connect-title">Connect Your Wallet</h2>
+        <p class="burn-connect-desc">Connect your Solana wallet to burn $OD tokens and earn Burn Credits</p>
+        <button id="burn-connect-btn" class="btn btn-accent">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
       </div>
 
-      <!-- Connected state - submission form -->
-      <div id="burn-submit-form" style="display: none;">
-        <div style="margin-bottom: 1rem;">
-          <label for="burn-tx-input" style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
-            Transaction URL or Signature
-          </label>
-          <input
-            type="text"
-            id="burn-tx-input"
-            placeholder="Paste Solscan URL or transaction signature..."
-            style="width: 100%; padding: 0.75rem 1rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; outline: none; box-sizing: border-box;"
-          >
-          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
-            Accepts Solscan URLs, Solana Explorer URLs, or raw transaction signatures
-          </p>
-        </div>
-        <div style="display: flex; align-items: center; gap: 1rem;">
-          <button id="burn-submit-btn" class="btn btn-accent" style="min-width: 160px;">
+      <!-- Connected state - burn form -->
+      <div id="burn-main-form" style="display: none;">
+        <!-- Tab switcher -->
+        <div class="burn-tabs">
+          <button class="burn-tab active" data-tab="direct">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-              <path d="M8 12l2-6 4 9 2-3"/>
+              <path d="M12 22c-4.97 0-9-2.69-9-6 0-2.5 1.5-4.5 3-6 .5-.5 1.5-1.5 2-3 1 2 2 3 3 4 1-2 1-4 0-6 3 1 6 4 6 8 0 1-.5 2-1 3 .5-1 1-2 1-3 1 2 2 4 1 6-.5 1-1 2-2 3-1.5 1.5-3 2-4 2z"/>
             </svg>
-            Submit Burn
+            Burn Tokens
           </button>
-          <div id="burn-submit-status" style="font-size: 0.85rem; color: var(--text-secondary);"></div>
+          <button class="burn-tab" data-tab="manual">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            Submit Existing TX
+          </button>
         </div>
-      </div>
 
-      <!-- Result display -->
-      <div id="burn-result" style="display: none; margin-top: 1.25rem; padding: 1rem 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--green); background: var(--green-light);">
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          <span style="font-weight: 600; color: var(--green);">Burn Verified!</span>
+        <!-- Direct burn panel -->
+        <div id="burn-panel-direct" class="burn-panel active">
+          <div class="burn-form-card">
+            <div class="burn-token-header">
+              <span class="burn-token-label">You Burn</span>
+              <span class="burn-token-balance" id="burn-od-balance">
+                Balance: <span id="burn-od-balance-val">--</span> $OD
+              </span>
+            </div>
+            <div class="burn-amount-row">
+              <input type="text" id="burn-amount-input" class="burn-amount-input" placeholder="0.00" inputmode="decimal" autocomplete="off">
+              <div class="burn-amount-actions">
+                <button class="burn-percent-btn" data-pct="25">25%</button>
+                <button class="burn-percent-btn" data-pct="50">50%</button>
+                <button class="burn-percent-btn" data-pct="100">MAX</button>
+                <span class="burn-token-symbol">$OD</span>
+              </div>
+            </div>
+            <div class="burn-conversion-row" id="burn-conversion-row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span id="burn-conversion-preview">You will receive <strong>0</strong> Burn Credits</span>
+            </div>
+          </div>
+
+          <button id="burn-execute-btn" class="burn-execute-btn" disabled>
+            <svg class="burn-execute-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22c-4.97 0-9-2.69-9-6 0-2.5 1.5-4.5 3-6 .5-.5 1.5-1.5 2-3 1 2 2 3 3 4 1-2 1-4 0-6 3 1 6 4 6 8 0 1-.5 2-1 3 .5-1 1-2 1-3 1 2 2 4 1 6-.5 1-1 2-2 3-1.5 1.5-3 2-4 2z"/>
+            </svg>
+            <span id="burn-execute-text">Enter an amount</span>
+          </button>
+          <p class="burn-execute-hint" id="burn-execute-status"></p>
         </div>
-        <div id="burn-result-details" style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;"></div>
-      </div>
 
-      <!-- Error display -->
-      <div id="burn-error" style="display: none; margin-top: 1.25rem; padding: 1rem 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--red); background: var(--red-light);">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
-          <span id="burn-error-text" style="font-weight: 500; color: var(--red);"></span>
+        <!-- Manual submit panel -->
+        <div id="burn-panel-manual" class="burn-panel">
+          <div class="burn-form-card">
+            <p class="burn-manual-desc">Already burned $OD tokens elsewhere? Paste your transaction signature below and we'll verify it on-chain.</p>
+            <div class="burn-manual-input-row">
+              <label for="burn-tx-input" class="burn-manual-label">Transaction URL or Signature</label>
+              <input type="text" id="burn-tx-input" class="burn-manual-input" placeholder="Paste Solscan URL or transaction signature..." autocomplete="off">
+              <p class="burn-manual-hint">Accepts Solscan URLs, Solana Explorer URLs, or raw transaction signatures</p>
+            </div>
+          </div>
+          <button id="burn-submit-btn" class="burn-execute-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+            <span id="burn-submit-text">Submit Burn</span>
+          </button>
+          <p class="burn-execute-hint" id="burn-submit-status"></p>
+        </div>
+
+        <!-- Result display -->
+        <div id="burn-result" class="burn-result" style="display: none;">
+          <div class="burn-result-header">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>Burn Verified!</span>
+          </div>
+          <div id="burn-result-details" class="burn-result-details"></div>
+        </div>
+
+        <!-- Error display -->
+        <div id="burn-error" class="burn-error" style="display: none;">
+          <div class="burn-error-header">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span id="burn-error-text"></span>
+          </div>
         </div>
       </div>
     </section>
 
     <!-- Burn History -->
-    <section id="burn-history-section" class="community-section" style="display: none;">
-      <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);">Your Burn History</h2>
+    <section id="burn-history-section" class="burn-history-section" style="display: none;">
+      <h2 class="burn-section-title">Burn History</h2>
       <div class="community-table-container">
-        <table class="token-table community-table">
+        <table class="token-table community-table burn-history-table">
           <thead>
             <tr>
               <th>Date</th>
@@ -272,6 +290,9 @@
       </div>
     </div>
   </footer>
+
+  <!-- Solana Web3.js for building burn transactions -->
+  <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
 
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>

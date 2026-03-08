@@ -1379,7 +1379,7 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
 // Returns the 20 largest token accounts with concentration metrics
 router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
-  const cacheKey = `holders:${mint}`;
+  const cacheKey = `holder-analytics:${mint}`;
 
   try {
     // Allow ?fresh=true to bypass cache (rate-limited by frontend to 1 per minute)
@@ -1600,9 +1600,9 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
     // Get holder data (likely already cached from the main holders call).
     // If the cache is missing (expired/evicted), return computed: false so the
     // frontend keeps polling — the main holders endpoint will repopulate it.
-    const holdersCache = await cache.get(`holders:${mint}`);
+    const holdersCache = await cache.get(`holder-analytics:${mint}`);
     if (!holdersCache || !holdersCache.holders || holdersCache.holders.length === 0) {
-      console.log(`[HoldTimes] holders:${mint} cache miss — returning computed: false to trigger re-poll`);
+      console.log(`[HoldTimes] holder-analytics:${mint} cache miss — returning computed: false to trigger re-poll`);
       return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: false });
     }
 

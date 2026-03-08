@@ -548,7 +548,7 @@ const tokenDetail = {
     const liqEl = document.getElementById('stat-liquidity');
     if (liqEl) liqEl.textContent = utils.formatNumber(token.liquidity);
     const holdersEl = document.getElementById('stat-holders');
-    if (holdersEl) holdersEl.textContent = token.holders?.toLocaleString() || 'N/A';
+    if (holdersEl) holdersEl.textContent = typeof token.holders === 'number' ? token.holders.toLocaleString() : 'N/A';
 
     const supplyEl = document.getElementById('stat-supply');
     if (supplyEl) supplyEl.textContent = token.supply ? utils.formatNumber(token.supply, '') : '--';

@@ -517,11 +517,16 @@ const wallet = {
         addressSpan.textContent = utils.truncateAddress(this.address);
         connectBtn.appendChild(addressSpan);
 
-        // Burn Credits badge (loaded async, shows next to address)
-        const bcBadge = document.createElement('span');
+        // Burn Credits badge (clickable link to burn page, loaded async)
+        const bcBadge = document.createElement('a');
         bcBadge.id = 'header-bc-badge';
         bcBadge.className = 'header-bc-badge';
-        bcBadge.style.display = 'none';
+        bcBadge.href = 'burn.html';
+        bcBadge.title = 'Your Burn Credits balance \u2014 click to manage';
+        bcBadge.innerHTML = '<svg class="bc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22c-4.97 0-9-2.69-9-6 0-2.5 1.5-4.5 3-6 .5-.5 1.5-1.5 2-3 1 2 2 3 3 4 1-2 1-4 0-6 3 1 6 4 6 8 0 1-.5 2-1 3 .5-1 1-2 1-3 1 2 2 4 1 6-.5 1-1 2-2 3-1.5 1.5-3 2-4 2z"/></svg><span class="bc-value">0 BC</span>';
+        bcBadge.addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent wallet menu from opening
+        });
         connectBtn.appendChild(bcBadge);
         this._loadHeaderBurnCredits(bcBadge);
 
@@ -584,18 +589,19 @@ const wallet = {
   // Load burn credits balance for header badge (fire-and-forget)
   async _loadHeaderBurnCredits(badgeEl) {
     if (!this.address || typeof api === 'undefined' || !api.burnCredits) return;
+    const valueEl = badgeEl.querySelector('.bc-value');
+    if (!valueEl) return;
     try {
       const data = await api.burnCredits.getBalance(this.address);
-      if (data && data.balance > 0) {
-        let display;
-        if (data.balance >= 1000000) display = (data.balance / 1000000).toFixed(1) + 'M';
-        else if (data.balance >= 1000) display = (data.balance / 1000).toFixed(1) + 'K';
-        else display = data.balance.toLocaleString('en-US', { maximumFractionDigits: 1 });
-        badgeEl.textContent = display + ' BC';
-        badgeEl.style.display = '';
-      }
+      const balance = (data && typeof data.balance === 'number') ? data.balance : 0;
+      let display;
+      if (balance >= 1000000) display = (balance / 1000000).toFixed(1) + 'M';
+      else if (balance >= 1000) display = (balance / 1000).toFixed(1) + 'K';
+      else display = balance.toLocaleString('en-US', { maximumFractionDigits: 1 });
+      valueEl.textContent = display + ' BC';
+      badgeEl.title = `${balance.toLocaleString()} Burn Credits \u2014 click to manage`;
     } catch (_) {
-      // Non-critical — silently fail
+      valueEl.textContent = '0 BC';
     }
   },
 
@@ -1089,6 +1095,11 @@ const wallet = {
               this.saveConnection();
               this.broadcastConnectionChange('connected');
             }
+
+            // Dispatch walletConnected so page-level listeners can react
+            window.dispatchEvent(new CustomEvent('walletConnected', {
+              detail: { address: this.address, wallet: savedConnection.wallet }
+            }));
             return;
           }
         } catch (e) {
@@ -1108,6 +1119,11 @@ const wallet = {
         this.providerName = walletConfig.id;
         this.updateUI();
         this.saveConnection();
+
+        // Dispatch walletConnected so page-level listeners can react
+        window.dispatchEvent(new CustomEvent('walletConnected', {
+          detail: { address: this.address, wallet: walletConfig.id }
+        }));
         return;
       }
     }
@@ -1210,6 +1226,10 @@ const wallet = {
         this.providerName = 'device-session';
         this.provider = null;
         this.updateUI();
+
+        window.dispatchEvent(new CustomEvent('walletConnected', {
+          detail: { address: deviceWallet, wallet: 'device-session' }
+        }));
       }
     }
 
