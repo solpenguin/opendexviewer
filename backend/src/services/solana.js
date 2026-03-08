@@ -679,7 +679,7 @@ async function getTransactionsForAddress(walletAddress, { limit = 100, type } = 
 
     const response = await axios.get(
       `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions`,
-      { params, timeout: 15000, httpsAgent }
+      { params, timeout: 10000, httpsAgent }
     );
 
     if (!response.data || !Array.isArray(response.data)) {

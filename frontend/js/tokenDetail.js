@@ -915,7 +915,8 @@ const tokenDetail = {
         }
       }
 
-      // Lazy-load hold times and diamond hands after table renders (non-blocking)
+      // Lazy-load hold times and diamond hands after table renders (non-blocking).
+      // First call triggers backend computation; subsequent polls pick up results.
       this._loadHoldTimes();
       if (holders.length > 0) this._loadDiamondHands();
     } catch (error) {
@@ -1000,14 +1001,18 @@ const tokenDetail = {
   // If the backend returns computed: false (worker still processing),
   // re-poll up to MAX_POLLS times with increasing delay to pick up results.
   async _loadHoldTimes(attempt = 0) {
-    const MAX_POLLS = 5;
-    const POLL_DELAYS = [3000, 5000, 8000, 12000, 18000]; // ms between retries
+    const MAX_POLLS = 7;
+    const POLL_DELAYS = [5000, 5000, 6000, 8000, 12000, 16000, 20000]; // ms between retries — first delay is longer to let computation progress
+
+    // Cancel any in-flight polling from a previous load (e.g. refresh clicked while polling)
+    if (attempt === 0 && this._holdTimesTimer) {
+      clearTimeout(this._holdTimesTimer);
+      this._holdTimesTimer = null;
+    }
 
     try {
       // Always clear frontend cache so we get fresh computed status from backend
-      if (attempt > 0) {
-        apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
-      }
+      apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
 
       console.log(`[HoldTimes] Poll ${attempt}/${MAX_POLLS} for ${this.mint.slice(0, 8)}...`);
       const data = await api.tokens.getHolderHoldTimes(this.mint);
@@ -1035,7 +1040,7 @@ const tokenDetail = {
       // Re-poll if worker is still computing and we haven't exhausted retries
       if (!data.computed && attempt < MAX_POLLS) {
         console.log(`[HoldTimes] Not computed yet, re-polling in ${POLL_DELAYS[attempt]}ms`);
-        setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
+        this._holdTimesTimer = setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
       } else {
         // Final pass — replace any remaining placeholders with dashes
         const remaining = document.querySelectorAll('.hold-time-pending, .token-hold-pending');
@@ -1104,12 +1109,17 @@ const tokenDetail = {
   // Load diamond hands distribution with polling
   async _loadDiamondHands(attempt = 0) {
     const MAX_POLLS = 8;
-    const POLL_DELAYS = [3000, 5000, 8000, 12000, 18000, 25000, 35000, 45000];
+    const POLL_DELAYS = [6000, 8000, 10000, 14000, 20000, 28000, 38000, 50000]; // longer delays for 250 wallets
+
+    // Cancel any in-flight polling from a previous load
+    if (attempt === 0 && this._diamondHandsTimer) {
+      clearTimeout(this._diamondHandsTimer);
+      this._diamondHandsTimer = null;
+    }
 
     try {
-      if (attempt > 0) {
-        apiCache.clearPattern(`tokens:diamond-hands:${this.mint}`);
-      }
+      // Always clear frontend cache so we get fresh computed status
+      apiCache.clearPattern(`tokens:diamond-hands:${this.mint}`);
 
       console.log(`[DiamondHands] Poll ${attempt}/${MAX_POLLS} for ${this.mint.slice(0, 8)}...`);
       const data = await api.tokens.getDiamondHands(this.mint);
@@ -1126,7 +1136,7 @@ const tokenDetail = {
 
       if (!data.computed && attempt < MAX_POLLS) {
         console.log(`[DiamondHands] ${data.analyzed || 0}/${data.totalCount || data.sampleSize} analyzed, re-polling in ${POLL_DELAYS[attempt]}ms`);
-        setTimeout(() => this._loadDiamondHands(attempt + 1), POLL_DELAYS[attempt]);
+        this._diamondHandsTimer = setTimeout(() => this._loadDiamondHands(attempt + 1), POLL_DELAYS[attempt]);
       } else {
         // Final state — if still no data, hide section
         if (!data.distribution || !data.analyzed) {

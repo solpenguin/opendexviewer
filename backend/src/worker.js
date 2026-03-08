@@ -369,7 +369,7 @@ const jobProcessors = {
 
     console.log(`[Worker] Computing hold times for ${wallets.length} wallets (token ${mint})`);
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
     let computed = 0;
     let skipped = 0;
 
@@ -431,7 +431,7 @@ const jobProcessors = {
 
     console.log(`[Worker] Computing diamond hands for ${wallets.length} wallets (token ${mint})`);
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
     let computed = 0;
     let skipped = 0;
 
@@ -527,6 +527,9 @@ async function start() {
 ║  Starting worker process...                ║
 ╚════════════════════════════════════════════╝
   `);
+
+  // Log API key availability so missing keys are immediately obvious
+  console.log(`[Worker] API keys: HELIUS=${process.env.HELIUS_API_KEY ? 'configured' : 'MISSING'}, COINGECKO=${process.env.COINGECKO_API_KEY ? 'configured' : 'MISSING'}`);
 
   const redisConfig = getRedisConfig();
   if (!redisConfig) {

@@ -35,6 +35,8 @@ services:
       # API Keys (set these manually in Render dashboard)
       - key: HELIUS_API_KEY
         sync: false
+      - key: COINGECKO_API_KEY
+        sync: false
       - key: BIRDEYE_API_KEY
         sync: false
 
@@ -105,6 +107,13 @@ services:
           type: redis
           name: opendex-redis
           property: connectionString
+
+      # API Keys — worker needs these for background jobs
+      # (similar-tokens uses GeckoTerminal, hold-times/diamond-hands use Helius)
+      - key: HELIUS_API_KEY
+        sync: false
+      - key: COINGECKO_API_KEY
+        sync: false
 
       # Application settings
       - key: NODE_ENV

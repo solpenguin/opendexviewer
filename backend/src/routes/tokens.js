@@ -1646,8 +1646,8 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       if (!pending) {
         // First request — try worker, fall back to inline
         needsComputation = true;
-      } else if (typeof pending === 'number' && (Date.now() - pending) > 15000) {
-        // Pending for >15s with no progress — worker likely isn't running
+      } else if (typeof pending === 'number' && (Date.now() - pending) > 30000) {
+        // Pending for >30s with no progress — worker likely isn't running
         console.log(`[HoldTimes] Pending for ${Math.round((Date.now() - pending) / 1000)}s, stale wallets remain — forcing inline fallback`);
         await cache.delete(pendingKey);
         needsComputation = true;
@@ -1687,7 +1687,7 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
           setImmediate(() => {
             (async () => {
               console.log(`[HoldTimes] Inline background: computing ${bgWallets.length} wallets for ${bgMint}`);
-              const BATCH_SIZE = 5;
+              const BATCH_SIZE = 10;
               const DAY_MS = 86400000;
               let successCount = 0;
               let failCount = 0;
@@ -1773,7 +1773,7 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
       if (!wallets || wallets.length === 0) {
         return res.json({ distribution: null, sampleSize: 0, analyzed: 0, computed: true });
       }
-      await cache.set(walletsCacheKey, wallets, TTL.HOUR);
+      await cache.set(walletsCacheKey, wallets, 3 * TTL.HOUR);
     }
 
     // Check per-wallet token hold time caches
@@ -1795,7 +1795,7 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
     // If all wallets are cached, compute final distribution and cache it
     if (uncached.length === 0) {
       const result = buildDiamondHandsResult(holdTimes, wallets.length, analyzedCount);
-      await cache.set(resultCacheKey, result, TTL.HOUR);
+      await cache.set(resultCacheKey, result, 3 * TTL.HOUR);
       return res.json(result);
     }
 
@@ -1840,7 +1840,7 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
         setImmediate(() => {
           (async () => {
             console.log(`[DiamondHands] Inline: computing ${bgWallets.length} wallets for ${bgMint.slice(0, 8)}...`);
-            const BATCH_SIZE = 5;
+            const BATCH_SIZE = 10;
             const DAY_MS = 86400000;
             let ok = 0;
             try {
