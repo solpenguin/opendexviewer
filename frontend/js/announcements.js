@@ -138,7 +138,7 @@ const announcements = {
         <button
           class="announcement-dismiss"
           aria-label="Dismiss announcement"
-          data-id="${announcement.id}"
+          data-id="${esc(String(announcement.id))}"
         >✕</button>
       </div>
     `;

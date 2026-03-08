@@ -86,7 +86,13 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)[:500]\\)\")",
       "Bash(python -m json.tool)",
       "Bash(node -e \":*)",
-      "Bash(grep -E \"\\\\.js$\")"
+      "Bash(grep -E \"\\\\.js$\")",
+      "Bash(grep -l 'community.html\"\" class=\"\"nav-link' *.html)",
+      "Bash(grep -l 'admin' *.html)",
+      "Bash(grep -l 'About OpenDEX</a>            <a' *.html)",
+      "Bash(for f in api.html burn.html development.html docs.html hackathon.html index.html link.html ogfinder.html submit.html tokens.html)",
+      "Bash(sed -i 's|<a href=\"\"about.html\"\" class=\"\"nav-dropdown-item\"\">About OpenDEX</a>            <a href=\"\"development.html\"\"|<a href=\"\"about.html\"\" class=\"\"nav-dropdown-item\"\">About OpenDEX</a>\\\\n            <a href=\"\"development.html\"\"|' \"$f\")",
+      "Bash(done)"
     ]
   }
 }

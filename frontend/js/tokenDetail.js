@@ -628,6 +628,7 @@ const tokenDetail = {
   // Load similar tokens (anti-spoofing section)
   // Response format: { results: [...], enriched: boolean }
   async loadSimilarTokens() {
+    const mint = this.mint;
     const sectionEl = document.getElementById('similar-tokens-section');
     const loadingEl = document.getElementById('similar-tokens-loading');
     const listEl = document.getElementById('similar-tokens-list');
@@ -654,7 +655,6 @@ const tokenDetail = {
         // Has fast DB results but not yet enriched — render immediately
         this.renderSimilarTokens(similar, sectionEl, loadingEl, listEl, disclaimerEl);
         // One silent background poll to swap in enriched data
-        const mint = this.mint;
         setTimeout(async () => {
           try {
             if (this.mint !== mint) return;
@@ -673,7 +673,6 @@ const tokenDetail = {
 
       // No results and not enriched — worker may produce results from GeckoTerminal
       // Poll with fast intervals: 1s x 3, then 2s x 3
-      const mint = this.mint;
       const delays = [1000, 1000, 1000, 2000, 2000, 2000];
       const poll = async () => {
         for (const delay of delays) {
@@ -1345,7 +1344,7 @@ const tokenDetail = {
         errorEl.innerHTML = '<span>Please connect your wallet to use AI Analysis.</span>' +
           '<span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">AI Analysis costs ' + this._aiAnalysisCost + ' Burn Credits per use.</span>';
       } else {
-        errorEl.innerHTML = '<span>' + (err.message || 'Analysis unavailable. Try again later.') +
+        errorEl.innerHTML = '<span>' + this.escapeHtml(err.message || 'Analysis unavailable. Try again later.') +
           '</span><button class="ai-retry-btn" id="ai-retry-btn">Retry</button>';
         const retryBtn = document.getElementById('ai-retry-btn');
         if (retryBtn) retryBtn.onclick = () => this._fetchAIAnalysis();
@@ -2499,6 +2498,10 @@ const tokenDetail = {
       clearInterval(this._holdersTimestampInterval);
       this._holdersTimestampInterval = null;
     }
+
+    // Clear polling timers
+    if (this._holdTimesTimer) { clearTimeout(this._holdTimesTimer); this._holdTimesTimer = null; }
+    if (this._diamondHandsTimer) { clearTimeout(this._diamondHandsTimer); this._diamondHandsTimer = null; }
 
     // Destroy chart safely
     if (this.chart) {

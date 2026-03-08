@@ -66,8 +66,14 @@ function _pruneOldAlerts() {
   }
 }
 
+const MAX_TOTAL_ALERTS = 10000;
+
 module.exports = {
   create(alertData) {
+    // Enforce global cap to prevent unbounded memory growth
+    if (data.alerts.filter(a => a.is_active === 1).length >= MAX_TOTAL_ALERTS) {
+      throw new Error('Maximum alert capacity reached. Please try again later.');
+    }
     const alert = {
       id: data.nextId++,
       user_id: alertData.userId,

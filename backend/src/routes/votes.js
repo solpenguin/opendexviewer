@@ -123,8 +123,8 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
     return res.status(404).json({ error: 'Submission not found' });
   }
 
-  // DEVELOPMENT MODE: Bypass holder verification for testing
-  const isDevelopmentMode = adminSettings?.developmentMode === true;
+  // DEVELOPMENT MODE: Only allowed via compile-time env var (never toggleable at runtime in production)
+  const isDevelopmentMode = process.env.NODE_ENV !== 'production' && adminSettings?.developmentMode === true;
 
   let holderData;
   let voterPercentage = 0;
@@ -266,8 +266,8 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
 
   const tokensToInvalidate = new Set();
 
-  // DEVELOPMENT MODE: Bypass holder verification for testing
-  const isDevelopmentMode = adminSettings?.developmentMode === true;
+  // DEVELOPMENT MODE: Only allowed via compile-time env var (never toggleable at runtime in production)
+  const isDevelopmentMode = process.env.NODE_ENV !== 'production' && adminSettings?.developmentMode === true;
   const VOTE_COOLDOWN_MS = 10 * 1000;
 
   // Pre-fetch all submissions to deduplicate holder verification by (wallet, tokenMint)

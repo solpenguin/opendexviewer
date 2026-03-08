@@ -33,7 +33,7 @@ const config = {
     debug: window.location.hostname === 'localhost'
   },
 
-  // Feature flags
+  // Feature flags (NOTE: currently informational only — not enforced by frontend code)
   features: {
     enableWalletConnect: true,
     enableVoting: true,

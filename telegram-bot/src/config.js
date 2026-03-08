@@ -11,8 +11,8 @@ module.exports = {
   FRONTEND_URL: process.env.OPENDEX_FRONTEND_URL || 'https://opendex.online',
 
   // Alert polling
-  ALERT_POLL_INTERVAL_MS: parseInt(process.env.ALERT_POLL_INTERVAL_MS) || 60000,
-  MAX_ALERTS_PER_USER: parseInt(process.env.MAX_ALERTS_PER_USER) || 10,
+  ALERT_POLL_INTERVAL_MS: (() => { const v = parseInt(process.env.ALERT_POLL_INTERVAL_MS); return isNaN(v) ? 60000 : v; })(),
+  MAX_ALERTS_PER_USER: (() => { const v = parseInt(process.env.MAX_ALERTS_PER_USER); return isNaN(v) ? 10 : v; })(),
 
   // Rate limiting
   RATE_LIMIT_WINDOW_MS: 60000,

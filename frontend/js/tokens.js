@@ -891,7 +891,7 @@ const tokenList = {
                 src="${safeLogo}"
                 alt="${this.escapeHtml(token.symbol || '')}"
                 loading="lazy"
-                onerror="this.onerror=null;this.src='${defaultLogo}'"
+                data-fallback="${defaultLogo}"
               >
               <div class="token-info">
                 <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}</span>
@@ -934,6 +934,14 @@ const tokenList = {
 
     // Use event delegation for click handlers instead of inline onclick (safer)
     this.bindRowClickHandlers();
+
+    // Attach image error handlers post-render (avoids inline onerror for CSP compliance)
+    const tbody = document.getElementById('token-list');
+    if (tbody) {
+      tbody.querySelectorAll('.token-logo[data-fallback]').forEach(img => {
+        img.onerror = function() { this.onerror = null; this.src = this.dataset.fallback; };
+      });
+    }
 
     this.updatePagination();
     if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenList.render', performance.now() - _t0, true, 'frontend');

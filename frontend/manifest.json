@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "OpenDEX",
   "short_name": "OpenDEX",
   "description": "Free, open-source Solana token scanner with real-time prices, charts, and community-driven content",

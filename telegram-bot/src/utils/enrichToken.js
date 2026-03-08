@@ -28,8 +28,11 @@ async function enrichWithPrice(token) {
         liquidity: priceData.liquidity || token.liquidity || 0
       };
     }
-  } catch {
-    // Price fetch failed — return original data
+  } catch (err) {
+    // Price fetch failed — log for debugging, return original data
+    if (process.env.LOG_LEVEL === 'debug') {
+      console.debug(`[enrichWithPrice] Failed for ${mint}:`, err.message);
+    }
   }
 
   return token;

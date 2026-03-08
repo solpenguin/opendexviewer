@@ -50,7 +50,7 @@ setInterval(() => {
  * Authenticate with admin password
  */
 router.post('/login',
-  strictLimiter,
+  strictLimiter,  // IP-based rate limiting on login endpoint
   requireDatabase,
   asyncHandler(async (req, res) => {
     const { password } = req.body;
@@ -126,14 +126,12 @@ router.post('/login',
       maxAge: ADMIN_SESSION_DURATION_MS
     });
 
-    // Return session token in response body so the frontend can store it
-    // for the X-Admin-Session header fallback (needed when cookies fail cross-origin).
-    // The httpOnly cookie is the primary auth mechanism.
+    // Session token is transmitted via httpOnly cookie only.
+    // The frontend uses cookie-based auth; no token in response body.
     res.json({
       success: true,
       message: 'Login successful',
       data: {
-        sessionToken,
         expiresAt: expiresAt.toISOString()
       }
     });

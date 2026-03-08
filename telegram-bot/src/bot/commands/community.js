@@ -215,7 +215,7 @@ module.exports = (bot) => {
     } catch (error) {
       // If message didn't change (same page clicked), Telegram throws — silently ignore
       if (error.description?.includes('message is not modified')) return;
-      await ctx.answerCallbackQuery({ text: 'Failed to load. Try again.' });
+      await ctx.answerCallbackQuery({ text: 'Failed to load. Try again.' }).catch(() => {});
     }
   });
 };

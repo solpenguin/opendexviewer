@@ -44,12 +44,17 @@ const apiKeyManager = {
       doneBtn.addEventListener('click', () => this.finishKeyCreation());
     }
 
-    // Listen for wallet connect/disconnect events
+    // Listen for wallet connect/disconnect/ready events
     window.addEventListener('walletConnected', () => {
       this.updateUI();
     });
 
     window.addEventListener('walletDisconnected', () => {
+      this.updateUI();
+    });
+
+    // Handle auto-reconnect completing after init
+    window.addEventListener('walletReady', () => {
       this.updateUI();
     });
   },

@@ -2,10 +2,14 @@ const tokensApi = require('../../api/tokens');
 const { formatTokenMessage } = require('../../utils/format');
 const { downloadImage } = require('../../utils/sendToken');
 const { enrichWithPrice } = require('../../utils/enrichToken');
+const { isValidSolanaAddress } = require('../../utils/solana');
 
 module.exports = (bot) => {
   bot.callbackQuery(/^lookup:(.+)$/, async (ctx) => {
     const mint = ctx.match[1];
+    if (!isValidSolanaAddress(mint)) {
+      return ctx.answerCallbackQuery({ text: 'Invalid token address' });
+    }
 
     await ctx.answerCallbackQuery({ text: 'Loading token...' });
 

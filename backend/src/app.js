@@ -247,6 +247,9 @@ app.use(express.json({ limit: '100kb' }));
 
 // Cookie parser for admin sessions (signed cookies for tamper detection)
 const cookieParser = require('cookie-parser');
+if (!process.env.COOKIE_SECRET) {
+  console.warn('[SECURITY] COOKIE_SECRET is not set — admin sessions will not persist across restarts');
+}
 app.use(cookieParser(process.env.COOKIE_SECRET || crypto.randomBytes(32).toString('hex')));
 
 // Request logging
@@ -297,7 +300,11 @@ app.use('/api/v1', publicApiRoutes);
 app.use('/admin', (req, res, next) => {
   if (['POST', 'PATCH', 'DELETE'].includes(req.method) && process.env.NODE_ENV === 'production') {
     const origin = req.headers.origin;
-    if (origin && !corsOrigins.includes(origin.replace(/\/$/, ''))) {
+    // Reject requests with no Origin header (prevents CSRF via non-browser or redirect chains)
+    if (!origin) {
+      return res.status(403).json({ error: 'Origin header required', code: 'CSRF_REJECTED' });
+    }
+    if (!corsOrigins.includes(origin.replace(/\/$/, ''))) {
       return res.status(403).json({ error: 'Origin not allowed', code: 'CSRF_REJECTED' });
     }
   }

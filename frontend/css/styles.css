@@ -10587,6 +10587,23 @@ body.landscape .hero h1 {
   font-family: 'JetBrains Mono', monospace;
 }
 
+.burn-platform-stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.burn-platform-stat-value {
+  color: var(--yellow);
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+}
+
 /* Stats section */
 .burn-stats-section {
   margin-bottom: 1.5rem;

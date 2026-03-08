@@ -46,6 +46,18 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
 
+      # Cookie signing secret (required — sessions invalidated on restart without this)
+      - key: COOKIE_SECRET
+        sync: false
+
+      # Jupiter API key (required for swap routing)
+      - key: JUPITER_API_KEY
+        sync: false
+
+      # SSL certificate verification for PostgreSQL (set to 'false' for Render's self-signed certs)
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+
       # Application settings
       - key: NODE_ENV
         value: production
@@ -116,6 +128,8 @@ services:
         sync: false
       - key: COINGECKO_API_KEY
         sync: false
+      - key: BIRDEYE_API_KEY
+        sync: false
 
       # Application settings
       - key: NODE_ENV
@@ -156,7 +170,7 @@ services:
     region: oregon
     plan: free
     maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
+    # ipAllowList omitted to default to internal-only access
 
 # =====================================================
 # PostgreSQL Database
@@ -180,9 +194,15 @@ databases:
 #    - Build Command: echo "No build needed"
 #    - Publish Directory: .
 # 4. Add these rewrite rules in Settings > Redirects/Rewrites:
-#    - Source: /token/*  -> Destination: /token.html (Rewrite)
-#    - Source: /submit   -> Destination: /submit.html (Rewrite)
-#    - Source: /hackathon -> Destination: /hackathon.html (Rewrite)
-#    - Source: /ogfinder  -> Destination: /ogfinder.html (Rewrite)
-#    - Source: /tokens    -> Destination: /tokens.html (Rewrite)
+#    - Source: /token/*    -> Destination: /token.html (Rewrite)
+#    - Source: /submit     -> Destination: /submit.html (Rewrite)
+#    - Source: /hackathon  -> Destination: /hackathon.html (Rewrite)
+#    - Source: /ogfinder   -> Destination: /ogfinder.html (Rewrite)
+#    - Source: /tokens     -> Destination: /tokens.html (Rewrite)
+#    - Source: /about      -> Destination: /about.html (Rewrite)
+#    - Source: /api        -> Destination: /api.html (Rewrite)
+#    - Source: /burn       -> Destination: /burn.html (Rewrite)
+#    - Source: /community  -> Destination: /community.html (Rewrite)
+#    - Source: /development -> Destination: /development.html (Rewrite)
+#    - Source: /docs       -> Destination: /docs.html (Rewrite)
 # =====================================================

@@ -33,6 +33,13 @@ module.exports = (bot) => {
     if (isNaN(value) || value <= 0) {
       return ctx.reply('Value must be a positive number.');
     }
+    // Enforce sensible bounds
+    if (condition === 'change' && (value < 1 || value > 10000)) {
+      return ctx.reply('Change percentage must be between 1% and 10,000%.');
+    }
+    if ((condition === 'above' || condition === 'below') && value > 1e15) {
+      return ctx.reply('Market cap value is too large. Maximum: $1,000,000,000,000,000.');
+    }
 
     const userId = ctx.from.id;
     const existingAlerts = alertStore.listByUser(userId);

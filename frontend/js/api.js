@@ -635,6 +635,10 @@ const api = {
       return api.request('/api/burn-credits/config');
     },
 
+    async getPlatformStats() {
+      return api.request('/api/burn-credits/platform-stats');
+    },
+
     async getBalance(wallet) {
       // Don't cache - need fresh balance after submissions
       return api.request(`/api/burn-credits/balance/${wallet}`);

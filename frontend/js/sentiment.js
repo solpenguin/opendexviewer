@@ -2,7 +2,9 @@
 // Bullish/Bearish voting per token — any connected wallet can vote
 
 (function injectSentimentCSS() {
+  if (document.getElementById('sentiment-styles')) return;
   const style = document.createElement('style');
+  style.id = 'sentiment-styles';
   style.textContent = `
     .sentiment-header-row {
       display: flex;

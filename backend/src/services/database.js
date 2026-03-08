@@ -83,9 +83,9 @@ function createPool() {
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Render's managed PostgreSQL uses self-signed certificates, requiring rejectUnauthorized: false.
-    // This is acceptable for Render's internal network but disables TLS certificate verification.
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
+    // Use SSL in production. rejectUnauthorized: true requires proper CA cert from Render.
+    // Set DB_SSL_REJECT_UNAUTHORIZED=false only if using Render's internal network with self-signed certs.
+    ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
     max: maxConnections,                    // Maximum connections in pool
     min: parseInt(process.env.DB_POOL_MIN) || (isProduction ? 2 : 2), // Keep low to avoid exhausting Render's connection limit
     idleTimeoutMillis: 60000,               // Close idle connections after 60s
@@ -2743,6 +2743,21 @@ async function getBurnCreditBalance(walletAddress) {
   };
 }
 
+// Get platform-wide burn stats (total $OD burned, total burns)
+async function getPlatformBurnStats() {
+  if (!pool) return { totalOdBurned: 0, totalBurns: 0 };
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(token_amount), 0) AS total_od_burned, COUNT(*) AS total_burns
+     FROM burn_credits
+     WHERE status = 'confirmed'`
+  );
+  const row = result.rows[0];
+  return {
+    totalOdBurned: parseFloat(row.total_od_burned),
+    totalBurns: parseInt(row.total_burns)
+  };
+}
+
 // Spend burn credits (returns true if successful, false if insufficient balance)
 // Uses SERIALIZABLE isolation to prevent double-spend race conditions
 async function spendBurnCredits(walletAddress, amount, feature, metadata = {}) {
@@ -2941,6 +2956,7 @@ module.exports = {
   isBurnTxUsed,
   recordBurnCredit,
   getBurnCreditBalance,
+  getPlatformBurnStats,
   getBurnCreditHistory,
   getBurnCreditSpendHistory,
   spendBurnCredits

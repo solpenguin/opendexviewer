@@ -15,6 +15,7 @@ const burnPage = {
 
   init() {
     this.loadConfig();
+    this.loadPlatformStats();
     this.setupWalletListeners();
     this.setupTabListeners();
     this.setupFormListeners();
@@ -63,6 +64,19 @@ const burnPage = {
       console.error('Failed to load burn config:', error);
       const rateEl = document.getElementById('burn-rate-display');
       if (rateEl) rateEl.textContent = '1,000 $OD = 1 Burn Credit';
+    }
+  },
+
+  async loadPlatformStats() {
+    const el = document.getElementById('burn-platform-total');
+    if (!el) return;
+
+    try {
+      const stats = await api.burnCredits.getPlatformStats();
+      el.textContent = this.formatNumber(stats.totalOdBurned || 0);
+    } catch (error) {
+      console.error('Failed to load platform burn stats:', error);
+      el.textContent = '--';
     }
   },
 
@@ -180,9 +194,19 @@ const burnPage = {
     if (conversionPreview) {
       if (isValid && this.conversionRate > 0) {
         const credits = amount / this.conversionRate;
-        conversionPreview.innerHTML = `You will receive <strong>${this.formatNumber(credits)}</strong> Burn Credits`;
+        conversionPreview.textContent = '';
+        const pre = document.createTextNode('You will receive ');
+        const strong = document.createElement('strong');
+        strong.textContent = this.formatNumber(credits);
+        const post = document.createTextNode(' Burn Credits');
+        conversionPreview.append(pre, strong, post);
       } else {
-        conversionPreview.innerHTML = 'You will receive <strong>0</strong> Burn Credits';
+        conversionPreview.textContent = '';
+        const pre = document.createTextNode('You will receive ');
+        const strong = document.createElement('strong');
+        strong.textContent = '0';
+        const post = document.createTextNode(' Burn Credits');
+        conversionPreview.append(pre, strong, post);
       }
     }
   },
@@ -435,6 +459,7 @@ const burnPage = {
       this.loadBalance();
       this.loadHistory();
       this.loadOdBalance();
+      this.loadPlatformStats();
       this.refreshHeaderBadge();
 
     } catch (error) {
@@ -518,6 +543,7 @@ const burnPage = {
       this.loadBalance();
       this.loadHistory();
       this.loadOdBalance();
+      this.loadPlatformStats();
       this.refreshHeaderBadge();
 
     } catch (error) {

@@ -43,6 +43,9 @@ const githubTracker = {
       headers: { 'Accept': 'application/vnd.github.v3+json' }
     });
 
+    if (response.status === 403) {
+      throw new Error('GitHub API rate limit exceeded. Please try again later.');
+    }
     if (!response.ok) {
       throw new Error(`GitHub API ${response.status}`);
     }

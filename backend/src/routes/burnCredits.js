@@ -105,7 +105,7 @@ router.post('/send-tx', strictLimiter, veryStrictLimiter, async (req, res) => {
     res.json({ signature: txSignature });
   } catch (error) {
     console.error('[BurnCredits] Send tx error:', error.message);
-    res.status(502).json({ error: error.message || 'Failed to send transaction' });
+    res.status(502).json({ error: 'Failed to send transaction' });
   }
 });
 
@@ -156,6 +156,20 @@ router.get('/config', defaultLimiter, async (req, res) => {
   } catch (error) {
     console.error('[BurnCredits] Config error:', error.message);
     res.status(500).json({ error: 'Failed to load burn credits configuration' });
+  }
+});
+
+/**
+ * GET /api/burn-credits/platform-stats
+ * Returns platform-wide burn statistics (public, no wallet needed)
+ */
+router.get('/platform-stats', defaultLimiter, async (req, res) => {
+  try {
+    const stats = await db.getPlatformBurnStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('[BurnCredits] Platform stats error:', error.message);
+    res.status(500).json({ error: 'Failed to load platform burn stats' });
   }
 });
 

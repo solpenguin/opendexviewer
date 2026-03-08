@@ -50,10 +50,10 @@
         <a href="/" class="nav-link">Home</a>
         <a href="tokens.html" class="nav-link">Tokens</a>
         <a href="submit.html" class="nav-link">Submit</a>
-        <a href="community.html" class="nav-link">Community</a>
         <div class="nav-dropdown">
           <a href="#" class="nav-link nav-dropdown-toggle active">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
           <div class="nav-dropdown-menu">
+            <a href="community.html" class="nav-dropdown-item">Community</a>
             <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
             <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
             <a href="burn.html" class="nav-dropdown-item active">Burn Credits</a>
@@ -107,6 +107,10 @@
       <h1 class="burn-hero-title">Burn Credits</h1>
       <p class="burn-hero-subtitle">Burn $OD tokens to earn Burn Credits</p>
       <div class="burn-rate-pill" id="burn-rate-display">Loading rate...</div>
+      <div class="burn-platform-stat">
+        <span class="burn-platform-stat-value" id="burn-platform-total">--</span>
+        <span class="burn-platform-stat-label">$OD burned on OpenDex</span>
+      </div>
     </section>
 
     <!-- Stats Cards (shown when connected) -->
@@ -117,7 +121,7 @@
           <div class="burn-stat-value burn-stat-accent" id="burn-balance">0</div>
         </div>
         <div class="burn-stat-card">
-          <div class="burn-stat-label">Total $OD Burned</div>
+          <div class="burn-stat-label">Your $OD Burned</div>
           <div class="burn-stat-value burn-stat-yellow" id="burn-total-burned">0</div>
         </div>
         <div class="burn-stat-card">

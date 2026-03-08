@@ -1,11 +1,48 @@
 const { InputFile } = require('grammy');
 const axios = require('axios');
+const { URL } = require('url');
+const dns = require('dns');
+const { promisify } = require('util');
+
+const dnsLookup = promisify(dns.lookup);
+
+/**
+ * Check if an IP address is private/internal (SSRF protection).
+ */
+function isPrivateIP(ip) {
+  // IPv4 private/reserved ranges
+  const parts = ip.split('.').map(Number);
+  if (parts.length === 4) {
+    if (parts[0] === 10) return true;                                   // 10.0.0.0/8
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
+    if (parts[0] === 192 && parts[1] === 168) return true;             // 192.168.0.0/16
+    if (parts[0] === 127) return true;                                  // 127.0.0.0/8
+    if (parts[0] === 169 && parts[1] === 254) return true;             // 169.254.0.0/16 (link-local)
+    if (parts[0] === 0) return true;                                    // 0.0.0.0/8
+  }
+  // IPv6 loopback and link-local
+  if (ip === '::1' || ip.startsWith('fe80:') || ip.startsWith('fc00:') || ip.startsWith('fd00:')) return true;
+  return false;
+}
 
 /**
  * Download an image and return it as a grammY InputFile buffer.
  * Returns null if the download fails.
+ * Includes SSRF protection: blocks requests to private/internal IPs.
  */
 async function downloadImage(url) {
+  // Validate URL protocol
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error('Only HTTP(S) URLs are allowed');
+  }
+
+  // Resolve hostname and check for private IPs
+  const { address } = await dnsLookup(parsed.hostname);
+  if (isPrivateIP(address)) {
+    throw new Error('URLs pointing to private/internal addresses are not allowed');
+  }
+
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
     timeout: 10000,

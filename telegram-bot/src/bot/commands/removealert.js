@@ -3,9 +3,9 @@ const alertStore = require('../../alerts/store');
 module.exports = (bot) => {
   bot.command('removealert', async (ctx) => {
     const idStr = ctx.match?.trim();
-    const id = parseInt(idStr);
+    const id = Number(idStr);
 
-    if (!idStr || isNaN(id)) {
+    if (!idStr || !Number.isInteger(id) || id <= 0) {
       return ctx.reply('Usage: /removealert &lt;id&gt;\nUse /alerts to see your alert IDs.', { parse_mode: 'HTML' });
     }
 

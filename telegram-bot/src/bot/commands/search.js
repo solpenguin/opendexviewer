@@ -8,6 +8,9 @@ module.exports = (bot) => {
     if (!query || query.length < 2) {
       return ctx.reply('Usage: /search &lt;name or symbol&gt;\nMinimum 2 characters.', { parse_mode: 'HTML' });
     }
+    if (query.length > 100) {
+      return ctx.reply('Search query too long. Maximum 100 characters.');
+    }
 
     const statusMsg = await ctx.reply('Searching...');
 

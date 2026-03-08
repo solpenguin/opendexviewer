@@ -8,6 +8,16 @@ const hackathonPage = {
     this.loadTokens();
     // Auto-refresh every 60 seconds
     this.refreshTimer = setInterval(() => this.loadTokens(), 60000);
+
+    // Pause/resume refresh when tab visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (this.refreshTimer) { clearInterval(this.refreshTimer); this.refreshTimer = null; }
+      } else {
+        this.loadTokens();
+        this.refreshTimer = setInterval(() => this.loadTokens(), 60000);
+      }
+    });
   },
 
   async loadTokens() {

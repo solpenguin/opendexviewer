@@ -38,6 +38,7 @@ router.get('/:mint', defaultLimiter, validateMint, asyncHandler(async (req, res)
 // Requires wallet connection; no holder check
 router.post('/:mint', walletLimiter, validateMint, validateSentimentSignature, asyncHandler(async (req, res) => {
   const { mint } = req.params;
+  const { sentiment } = req.body;
   // Fall back to device session wallet if not provided in body
   const voterWallet = req.body.voterWallet || req.deviceWallet;
 
