@@ -1225,7 +1225,6 @@ const tokenDetail = {
     if (this.token) {
       metrics.marketCap = this.token.marketCap || null;
       metrics.volume24h = this.token.volume24h || null;
-      metrics.liquidity = this.token.liquidity || null;
       metrics.holders = this.token.holders || null;
       metrics.createdAt = this.token.pairCreatedAt || null;
     }
@@ -1344,8 +1343,8 @@ const tokenDetail = {
 
   // Load diamond hands distribution with polling
   async _loadDiamondHands(attempt = 0) {
-    const MAX_POLLS = 8;
-    const POLL_DELAYS = [5000, 5000, 6000, 8000, 10000, 14000, 18000, 24000]; // 100 wallets at batch 25 ≈ 8-12s
+    const MAX_POLLS = 10;
+    const POLL_DELAYS = [5000, 5000, 6000, 8000, 8000, 10000, 12000, 16000, 20000, 24000]; // 250 wallets at batch 25 ≈ 20-30s
 
     // Cancel any in-flight polling from a previous load
     if (attempt === 0 && this._diamondHandsTimer) {

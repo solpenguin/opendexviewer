@@ -1754,9 +1754,9 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
   }
 }));
 
-// GET /api/tokens/:mint/holders/diamond-hands - Hold time distribution across top 100 holders
+// GET /api/tokens/:mint/holders/diamond-hands - Hold time distribution across top 250 holders
 // Returns % of holders that have held the token for >6h, >24h, >3d, >1w, >1m.
-// Uses Helius DAS to sample up to 100 holders, then getWalletHoldMetrics for each.
+// Uses Helius DAS to sample up to 250 holders, then getWalletHoldMetrics for each.
 // Background computation with polling pattern (same as hold-times).
 const DIAMOND_HANDS_BUCKETS = [
   { key: '6h',  label: '>6h',  ms: 6 * 3600000 },
@@ -1787,7 +1787,7 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
     if (!wallets) {
       // Combine burn + LP addresses into a single exclusion set
       const excludeSet = new Set([...BURN_WALLETS, ...LP_PROGRAMS]);
-      wallets = await solanaService.getTokenHolderSample(mint, 100, excludeSet);
+      wallets = await solanaService.getTokenHolderSample(mint, 250, excludeSet);
       if (!wallets || wallets.length === 0) {
         return res.json({ distribution: null, sampleSize: 0, analyzed: 0, computed: true });
       }
@@ -1973,7 +1973,7 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
   // Build prompt — ~270 input tokens
   const prompt = `Score this Solana token's holder health 0-100 (100=best). Reply ONLY as: SCORE:<number>\n<2-3 sentences explaining key factors>.
 
-Market: mcap=${fmtUsd(m.marketCap)} vol24h=${fmtUsd(m.volume24h)} liq=${fmtUsd(m.liquidity)} holders=${bigNum(m.holders) || 'N/A'} age=${fmtAge(m.createdAt)}
+Market: mcap=${fmtUsd(m.marketCap)} vol24h=${fmtUsd(m.volume24h)} holders=${bigNum(m.holders) || 'N/A'} age=${fmtAge(m.createdAt)}
 Locked supply: ${safe(m.locked)}
 Concentration (% of supply held by top N holders — lower=more distributed):
 top1=${num(m.top1)}% top5=${num(m.top5)}% top10=${num(m.top10)}% top20=${num(m.top20)}%

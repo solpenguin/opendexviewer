@@ -629,6 +629,29 @@ const api = {
     }
   },
 
+  // Burn Credits endpoints
+  burnCredits: {
+    async getConfig() {
+      return api.request('/api/burn-credits/config');
+    },
+
+    async getBalance(wallet) {
+      // Don't cache - need fresh balance after submissions
+      return api.request(`/api/burn-credits/balance/${wallet}`);
+    },
+
+    async getHistory(wallet) {
+      return api.request(`/api/burn-credits/history/${wallet}`);
+    },
+
+    async submit(data) {
+      return api.request('/api/burn-credits/submit', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+    }
+  },
+
   // Hackathon endpoints
   hackathon: {
     async getTokens() {

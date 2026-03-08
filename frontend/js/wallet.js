@@ -517,6 +517,14 @@ const wallet = {
         addressSpan.textContent = utils.truncateAddress(this.address);
         connectBtn.appendChild(addressSpan);
 
+        // Burn Credits badge (loaded async, shows next to address)
+        const bcBadge = document.createElement('span');
+        bcBadge.id = 'header-bc-badge';
+        bcBadge.className = 'header-bc-badge';
+        bcBadge.style.display = 'none';
+        connectBtn.appendChild(bcBadge);
+        this._loadHeaderBurnCredits(bcBadge);
+
         connectBtn.classList.add('connected');
         connectBtn.onclick = () => this.showWalletMenu();
       } else {
@@ -570,6 +578,24 @@ const wallet = {
           if (connectBtnSubmissions) connectBtnSubmissions.style.display = 'inline-flex';
         }
       }
+    }
+  },
+
+  // Load burn credits balance for header badge (fire-and-forget)
+  async _loadHeaderBurnCredits(badgeEl) {
+    if (!this.address || typeof api === 'undefined' || !api.burnCredits) return;
+    try {
+      const data = await api.burnCredits.getBalance(this.address);
+      if (data && data.balance > 0) {
+        let display;
+        if (data.balance >= 1000000) display = (data.balance / 1000000).toFixed(1) + 'M';
+        else if (data.balance >= 1000) display = (data.balance / 1000).toFixed(1) + 'K';
+        else display = data.balance.toLocaleString('en-US', { maximumFractionDigits: 1 });
+        badgeEl.textContent = display + ' BC';
+        badgeEl.style.display = '';
+      }
+    } catch (_) {
+      // Non-critical — silently fail
     }
   },
 

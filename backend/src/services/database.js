@@ -389,6 +389,33 @@ async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
       CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at DESC);
+
+      -- Burn credits table for tracking $OD token burns and credited BC
+      CREATE TABLE IF NOT EXISTS burn_credits (
+        id SERIAL PRIMARY KEY,
+        wallet_address VARCHAR(44) NOT NULL,
+        tx_signature VARCHAR(128) UNIQUE NOT NULL,
+        token_amount DECIMAL(30,6) NOT NULL,
+        credits_awarded DECIMAL(20,6) NOT NULL,
+        conversion_rate DECIMAL(20,6) NOT NULL,
+        status VARCHAR(20) DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'revoked')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_burn_credits_wallet ON burn_credits(wallet_address);
+      CREATE INDEX IF NOT EXISTS idx_burn_credits_tx ON burn_credits(tx_signature);
+      CREATE INDEX IF NOT EXISTS idx_burn_credits_created ON burn_credits(created_at DESC);
+
+      -- Burn credit configuration (conversion rate, etc.)
+      CREATE TABLE IF NOT EXISTS burn_config (
+        key VARCHAR(50) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      -- Seed default conversion rate if not set (1000 $OD = 1 BC)
+      INSERT INTO burn_config (key, value) VALUES ('conversion_rate', '1000')
+        ON CONFLICT (key) DO NOTHING;
     `);
 
     await client.query('COMMIT');
@@ -2600,6 +2627,90 @@ async function safeQuery(queryFn) {
   return queryFn();
 }
 
+// ==========================================
+// Burn Credits operations
+// ==========================================
+
+// Get the current $OD to BC conversion rate
+async function getBurnConversionRate() {
+  if (!pool) return 1000; // Default: 1000 $OD = 1 BC
+  try {
+    const result = await pool.query(
+      "SELECT value FROM burn_config WHERE key = 'conversion_rate'"
+    );
+    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 1000;
+  } catch {
+    return 1000;
+  }
+}
+
+// Set the $OD to BC conversion rate (admin only)
+async function setBurnConversionRate(rate) {
+  if (!pool) throw new Error('Database not available');
+  await pool.query(
+    `INSERT INTO burn_config (key, value, updated_at) VALUES ('conversion_rate', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+    [String(rate)]
+  );
+  return rate;
+}
+
+// Check if a transaction signature has already been submitted
+async function isBurnTxUsed(txSignature) {
+  if (!pool) return false;
+  const result = await pool.query(
+    'SELECT id FROM burn_credits WHERE tx_signature = $1',
+    [txSignature]
+  );
+  return result.rows.length > 0;
+}
+
+// Record a verified burn and award credits
+async function recordBurnCredit({ walletAddress, txSignature, tokenAmount, creditsAwarded, conversionRate }) {
+  if (!pool) throw new Error('Database not available');
+  const result = await pool.query(
+    `INSERT INTO burn_credits (wallet_address, tx_signature, token_amount, credits_awarded, conversion_rate)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [walletAddress, txSignature, tokenAmount, creditsAwarded, conversionRate]
+  );
+  return result.rows[0];
+}
+
+// Get total burn credits balance for a wallet
+async function getBurnCreditBalance(walletAddress) {
+  if (!pool) return { balance: 0, totalBurned: 0, submissions: 0 };
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(credits_awarded), 0) AS balance,
+       COALESCE(SUM(token_amount), 0) AS total_burned,
+       COUNT(*) AS submissions
+     FROM burn_credits
+     WHERE wallet_address = $1 AND status = 'confirmed'`,
+    [walletAddress]
+  );
+  const row = result.rows[0];
+  return {
+    balance: parseFloat(row.balance),
+    totalBurned: parseFloat(row.total_burned),
+    submissions: parseInt(row.submissions)
+  };
+}
+
+// Get burn credit history for a wallet
+async function getBurnCreditHistory(walletAddress, limit = 20) {
+  if (!pool) return [];
+  const result = await pool.query(
+    `SELECT tx_signature, token_amount, credits_awarded, conversion_rate, status, created_at
+     FROM burn_credits
+     WHERE wallet_address = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [walletAddress, limit]
+  );
+  return result.rows;
+}
+
 module.exports = {
   get pool() { return pool; },
   initializeDatabase,
@@ -2709,5 +2820,12 @@ module.exports = {
   MIN_REVIEW_MINUTES,
   FIRST_SUBMISSION_REVIEW_MINUTES,
   MIN_VOTE_BALANCE_PERCENT,
-  VOTE_WEIGHT_TIERS
+  VOTE_WEIGHT_TIERS,
+  // Burn credits operations
+  getBurnConversionRate,
+  setBurnConversionRate,
+  isBurnTxUsed,
+  recordBurnCredit,
+  getBurnCreditBalance,
+  getBurnCreditHistory
 };

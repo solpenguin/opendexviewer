@@ -1604,6 +1604,9 @@ module.exports = {
   validateDeviceSession,
   // Cleanup
   stopSignatureCleanup,
+  // Signature replay helpers (used by burn credits route)
+  isSignatureUsed,
+  markSignatureUsed,
   // Constants
   SOLANA_ADDRESS_REGEX,
   BLOCKED_DOMAINS,

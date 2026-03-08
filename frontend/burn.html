@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Burn Credits - OpenDex</title>
+  <meta name="description" content="Burn $OD tokens to earn Burn Credits (BC) on OpenDex. Use Sol Incinerator to burn tokens and submit your transaction for verification.">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="OpenDex">
+  <meta property="og:title" content="Burn Credits - OpenDex">
+  <meta property="og:description" content="Burn $OD tokens to earn Burn Credits (BC) on OpenDex.">
+  <meta property="og:image" content="https://opendex.online/OpenDexBanner2.png">
+  <meta property="og:url" content="https://opendex.online/burn">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Burn Credits - OpenDex">
+  <meta name="twitter:description" content="Burn $OD tokens to earn Burn Credits (BC) on OpenDex.">
+  <meta name="twitter:image" content="https://opendex.online/OpenDexBanner2.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="OpenDEX_Logo.png">
+  <link rel="apple-touch-icon" href="OpenDEX_Logo.png">
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <img src="OpenDEX_Logo.png" alt="OpenDex Logo" class="logo-img" width="28" height="28">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">Beta</span>
+      </a>
+
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <svg class="icon-hamburger" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <svg class="icon-close" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <nav class="nav">
+        <a href="/" class="nav-link">Home</a>
+        <a href="tokens.html" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+        <a href="community.html" class="nav-link">Community</a>
+        <div class="nav-dropdown">
+          <a href="#" class="nav-link nav-dropdown-toggle active">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
+          <div class="nav-dropdown-menu">
+            <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
+            <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
+            <a href="burn.html" class="nav-dropdown-item active">Burn Credits</a>
+          </div>
+        </div>
+        <div class="nav-dropdown">
+          <a href="about.html" class="nav-link nav-dropdown-toggle">About <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
+          <div class="nav-dropdown-menu">
+            <a href="about.html" class="nav-dropdown-item">About OpenDEX</a>
+            <a href="development.html" class="nav-dropdown-item">Development</a>
+            <a href="api.html" class="nav-dropdown-item">API</a>
+            <a href="docs.html" class="nav-dropdown-item">Docs</a>
+          </div>
+        </div>
+      </nav>
+
+      <div class="header-actions">
+        <button id="install-app-btn" class="btn btn-ghost btn-sm" style="display:none;" aria-label="Install app">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Install
+        </button>
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
+      </div>
+    </div>
+  </header>
+  <div id="announcement-banner"></div>
+
+  <main class="main hackathon-page">
+    <!-- Hero -->
+    <section class="submit-hero hackathon-hero">
+      <div class="submit-hero-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+          <path d="M8 12l2-6 4 9 2-3"/>
+        </svg>
+      </div>
+      <h1>Burn Credits</h1>
+      <p>Burn $OD tokens to earn Burn Credits (BC)</p>
+      <div id="burn-rate-display" class="burn-rate-badge" style="margin-top: 0.75rem; display: inline-block; padding: 0.4rem 1rem; background: var(--accent-muted); border-radius: var(--radius-sm); color: var(--accent-hover); font-weight: 600; font-size: 0.9rem;">
+        Loading rate...
+      </div>
+    </section>
+
+    <!-- Balance Card (shown when wallet connected) -->
+    <section id="burn-balance-section" class="community-section" style="display: none;">
+      <div class="burn-balance-card" style="display: flex; gap: 2rem; align-items: center; justify-content: center; flex-wrap: wrap; padding: 1.5rem;">
+        <div style="text-align: center;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Your Burn Credits</div>
+          <div id="burn-balance" style="font-size: 2rem; font-weight: 700; color: var(--accent-hover); font-family: 'JetBrains Mono', monospace;">0</div>
+        </div>
+        <div style="width: 1px; height: 3rem; background: var(--border-color);"></div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Total $OD Burned</div>
+          <div id="burn-total-burned" style="font-size: 2rem; font-weight: 700; color: var(--yellow); font-family: 'JetBrains Mono', monospace;">0</div>
+        </div>
+        <div style="width: 1px; height: 3rem; background: var(--border-color);"></div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Submissions</div>
+          <div id="burn-submissions" style="font-size: 2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">0</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How to Burn Instructions -->
+    <section class="community-section">
+      <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);">How to Earn Burn Credits</h2>
+      <div class="burn-steps" style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+        <div class="burn-step" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">1</div>
+            <h3 style="font-size: 0.95rem; color: var(--text-primary); margin: 0;">Get $OD Tokens</h3>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+            Purchase $OD tokens on any Solana DEX. Contract:
+            <code style="font-size: 0.75rem; background: var(--bg-tertiary); padding: 0.15rem 0.35rem; border-radius: 3px; word-break: break-all;">8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump</code>
+          </p>
+        </div>
+
+        <div class="burn-step" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">2</div>
+            <h3 style="font-size: 0.95rem; color: var(--text-primary); margin: 0;">Burn with Sol Incinerator</h3>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+            Visit <a href="https://sol-incinerator.com" target="_blank" rel="noopener" style="color: var(--accent-hover);">Sol Incinerator</a> and burn your $OD tokens. Copy the transaction URL or signature after the burn completes.
+          </p>
+        </div>
+
+        <div class="burn-step" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-hover); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">3</div>
+            <h3 style="font-size: 0.95rem; color: var(--text-primary); margin: 0;">Submit Transaction</h3>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+            Connect your wallet below and paste the burn transaction URL or ID. We'll verify it on-chain and credit your Burn Credits automatically.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Submit Burn Transaction -->
+    <section class="community-section">
+      <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);">Submit Burn Transaction</h2>
+
+      <!-- Not connected state -->
+      <div id="burn-connect-prompt" style="text-align: center; padding: 2rem;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-dim); margin-bottom: 0.75rem;">
+          <rect x="2" y="5" width="20" height="14" rx="2"/>
+          <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+        </svg>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Connect your wallet to submit burn transactions</p>
+        <button id="burn-connect-btn" class="btn btn-accent">Connect Wallet</button>
+      </div>
+
+      <!-- Connected state - submission form -->
+      <div id="burn-submit-form" style="display: none;">
+        <div style="margin-bottom: 1rem;">
+          <label for="burn-tx-input" style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+            Transaction URL or Signature
+          </label>
+          <input
+            type="text"
+            id="burn-tx-input"
+            placeholder="Paste Solscan URL or transaction signature..."
+            style="width: 100%; padding: 0.75rem 1rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; outline: none; box-sizing: border-box;"
+          >
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+            Accepts Solscan URLs, Solana Explorer URLs, or raw transaction signatures
+          </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <button id="burn-submit-btn" class="btn btn-accent" style="min-width: 160px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+              <path d="M8 12l2-6 4 9 2-3"/>
+            </svg>
+            Submit Burn
+          </button>
+          <div id="burn-submit-status" style="font-size: 0.85rem; color: var(--text-secondary);"></div>
+        </div>
+      </div>
+
+      <!-- Result display -->
+      <div id="burn-result" style="display: none; margin-top: 1.25rem; padding: 1rem 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--green); background: var(--green-light);">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span style="font-weight: 600; color: var(--green);">Burn Verified!</span>
+        </div>
+        <div id="burn-result-details" style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;"></div>
+      </div>
+
+      <!-- Error display -->
+      <div id="burn-error" style="display: none; margin-top: 1.25rem; padding: 1rem 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--red); background: var(--red-light);">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          <span id="burn-error-text" style="font-weight: 500; color: var(--red);"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Burn History -->
+    <section id="burn-history-section" class="community-section" style="display: none;">
+      <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);">Your Burn History</h2>
+      <div class="community-table-container">
+        <table class="token-table community-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>$OD Burned</th>
+              <th>Credits Earned</th>
+              <th>Rate</th>
+              <th>Transaction</th>
+            </tr>
+          </thead>
+          <tbody id="burn-history-body">
+            <tr class="empty-row">
+              <td colspan="5">
+                <div class="empty-state"><span>No burn history yet</span></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-left">
+        <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
+        <p class="footer-tagline">Community-powered Solana analytics</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          GitHub
+        </a>
+        <span class="separator">|</span>
+        <a href="submit.html">Submit Content</a>
+        <span class="separator">|</span>
+        <a href="docs.html">Docs</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/bugReport.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/announcements.js"></script>
+  <script src="js/burn.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    (function() {
+      var deferredPrompt;
+      var installBtn = document.getElementById('install-app-btn');
+      if (!installBtn) return;
+      if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = '';
+      });
+      installBtn.addEventListener('click', function() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
+      });
+      window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
+    })();
+    (function() {
+      var dropdowns = document.querySelectorAll('.nav-dropdown');
+      dropdowns.forEach(function(dd) {
+        var toggle = dd.querySelector('.nav-dropdown-toggle');
+        if (!toggle) return;
+        toggle.addEventListener('click', function(e) {
+          if (!matchMedia('(hover: none)').matches) return;
+          if (dd.classList.contains('open')) return;
+          e.preventDefault();
+          dd.classList.add('open');
+        });
+      });
+      document.addEventListener('click', function(e) {
+        dropdowns.forEach(function(dd) {
+          if (!dd.contains(e.target)) dd.classList.remove('open');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

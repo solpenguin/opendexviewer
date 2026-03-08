@@ -21,6 +21,7 @@ const callRoutes = require('./routes/calls');
 const bugReportRoutes = require('./routes/bugReports');
 const hackathonRoutes = require('./routes/hackathon');
 const ogfinderRoutes = require('./routes/ogfinder');
+const burnCreditsRoutes = require('./routes/burnCredits');
 const deviceAuthRoutes = require('./routes/deviceAuth');
 
 // Import middleware
@@ -286,6 +287,7 @@ app.use('/api/calls', callRoutes);
 app.use('/api/bug-reports', bugReportRoutes);
 app.use('/api/hackathon', hackathonRoutes);
 app.use('/api/ogfinder', ogfinderRoutes);
+app.use('/api/burn-credits', burnCreditsRoutes);
 app.use('/api/auth/device-session', deviceAuthRoutes);
 
 // Public API (v1) - requires API key for most endpoints

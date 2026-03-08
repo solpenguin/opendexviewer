@@ -493,6 +493,19 @@ a:hover {
   color: var(--accent-hover);
 }
 
+/* Burn Credits badge in wallet button */
+.header-bc-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--yellow-light);
+  color: var(--yellow);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 /* =============================================
    Main Content
    ============================================= */
@@ -11731,6 +11744,11 @@ body.landscape .hero h1 {
   #connect-wallet svg,
   #install-app-btn svg {
     font-size: 1rem; /* reset for children */
+  }
+
+  /* Hide BC badge on very small screens where text is hidden */
+  .header-bc-badge {
+    display: none !important;
   }
 }
 
