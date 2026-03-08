@@ -261,23 +261,23 @@ router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
 
     // 2. Fetch the transaction from Solana RPC
     //    getTransaction (jsonParsed) may return null briefly after confirmation
-    //    while the RPC node indexes the full transaction data, so retry a few times.
+    //    while the RPC node indexes the full transaction data, so retry.
+    //    Frontend submit timeout is 30s, so we have room for aggressive retries.
     let tx;
-    const TX_FETCH_RETRIES = 5;
-    const TX_FETCH_DELAY_MS = 2000;
+    const TX_FETCH_RETRIES = 8;
+    const TX_FETCH_DELAY_MS = 3000;
     for (let attempt = 0; attempt < TX_FETCH_RETRIES; attempt++) {
       try {
         tx = await solana.getTransaction(cleanSignature);
       } catch (rpcError) {
-        console.error('[BurnCredits] RPC error fetching tx:', rpcError.message);
+        console.error(`[BurnCredits] RPC error fetching tx (attempt ${attempt + 1}/${TX_FETCH_RETRIES}):`, rpcError.message);
         if (attempt === TX_FETCH_RETRIES - 1) {
           return res.status(502).json({ error: 'Failed to verify transaction on-chain. Please try again.' });
         }
       }
       if (tx) break;
-      if (attempt < TX_FETCH_RETRIES - 1) {
-        await new Promise(resolve => setTimeout(resolve, TX_FETCH_DELAY_MS));
-      }
+      console.log(`[BurnCredits] getTransaction returned null (attempt ${attempt + 1}/${TX_FETCH_RETRIES}), retrying...`);
+      await new Promise(resolve => setTimeout(resolve, TX_FETCH_DELAY_MS));
     }
 
     if (!tx) {

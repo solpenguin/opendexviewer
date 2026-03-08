@@ -258,16 +258,15 @@ const burnPage = {
     }
   },
 
-  // Poll backend for transaction finalization
-  // Waits for 'finalized' so getTransaction (jsonParsed) reliably returns data
-  async waitForConfirmation(txSignature, maxAttempts = 40, intervalMs = 2000) {
+  // Poll backend for transaction confirmation
+  async waitForConfirmation(txSignature, maxAttempts = 30, intervalMs = 2000) {
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const status = await api.burnCredits.getTxStatus(txSignature);
         if (status.err) {
           throw new Error('Transaction failed on-chain');
         }
-        if (status.confirmationStatus === 'finalized') {
+        if (status.confirmed) {
           return;
         }
       } catch (error) {
@@ -364,6 +363,7 @@ const burnPage = {
     if (executeText) executeText.textContent = 'Building transaction...';
     if (statusEl) statusEl.textContent = '';
 
+    let txSignature; // Declared outside try so catch can show recovery link
     try {
       const walletPubkey = new solanaWeb3.PublicKey(this.walletAddress);
       const mintPubkey = new solanaWeb3.PublicKey(this.OD_TOKEN_MINT);
@@ -397,7 +397,6 @@ const burnPage = {
       if (statusEl) statusEl.textContent = 'Please approve the transaction in your wallet';
 
       // Use signAndSendTransaction if available (preferred - wallet handles its own RPC)
-      let txSignature;
       if (wallet.provider.signAndSendTransaction) {
         const result = await wallet.provider.signAndSendTransaction(transaction);
         txSignature = result.signature;
@@ -443,6 +442,9 @@ const burnPage = {
         this.showError('Insufficient SOL for transaction fee or insufficient $OD balance');
       } else if (error.message?.includes('Blockhash not found')) {
         this.showError('Transaction expired. Please try again.');
+      } else if (txSignature) {
+        // Transaction was signed but verification failed — show recovery instructions
+        this.showTxRecovery(txSignature, error.message);
       } else {
         this.showError(error.message || 'Failed to execute burn transaction');
       }
@@ -602,6 +604,26 @@ const burnPage = {
       errorText.textContent = msg;
       errorEl.style.display = 'block';
     }
+  },
+
+  showTxRecovery(sig, errorMsg) {
+    const errorEl = document.getElementById('burn-error');
+    const errorText = document.getElementById('burn-error-text');
+    if (!errorEl || !errorText) return;
+
+    const shortSig = sig.slice(0, 8) + '...' + sig.slice(-6);
+    const solscanUrl = `https://solscan.io/tx/${encodeURIComponent(sig)}`;
+    errorText.innerHTML =
+      this.escapeHtml(errorMsg || 'Could not verify transaction automatically.') +
+      '<br><br>' +
+      '<strong>Your transaction was sent successfully.</strong><br>' +
+      'View on Solscan: <a href="' + solscanUrl + '" target="_blank" rel="noopener" class="burn-tx-link">' + this.escapeHtml(shortSig) + '</a><br><br>' +
+      'To claim your Burn Credits, switch to the <strong>Previous Transaction</strong> tab and paste your transaction signature or the Solscan link above.';
+    errorEl.style.display = 'block';
+
+    // Pre-fill the manual submission input
+    const txInput = document.getElementById('burn-tx-input');
+    if (txInput) txInput.value = sig;
   },
 
   formatNumber(num) {

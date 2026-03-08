@@ -666,7 +666,9 @@ const api = {
     async submit(data) {
       return api.request('/api/burn-credits/submit', {
         method: 'POST',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+        timeout: 30000, // Backend retries getTransaction — needs extra time
+        retries: 1
       });
     }
   },

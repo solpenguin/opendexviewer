@@ -176,11 +176,11 @@ async function getRecentBlockhash() {
   return rpcCall('getLatestBlockhash');
 }
 
-// Get transaction (uses finalized commitment for reliable data availability)
+// Get transaction (confirmed commitment — data available sooner than finalized)
 async function getTransaction(signature) {
   return rpcCall('getTransaction', [
     signature,
-    { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'finalized' }
+    { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }
   ]);
 }
 
