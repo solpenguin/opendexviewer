@@ -959,7 +959,6 @@ const tokenList = {
     this.bindRowClickHandlers();
 
     // Attach image error handlers post-render (avoids inline onerror for CSP compliance)
-    const tbody = document.getElementById('token-list');
     if (tbody) {
       tbody.querySelectorAll('.token-logo[data-fallback]').forEach(img => {
         img.onerror = function() { this.onerror = null; this.src = this.dataset.fallback; };
