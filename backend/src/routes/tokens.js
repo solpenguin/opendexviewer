@@ -1571,7 +1571,7 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       };
     }
 
-    const result = { holders, totalSupply, metrics, supply };
+    const result = { holders, totalSupply, metrics, supply, fetchedAt: Date.now() };
     await cache.set(cacheKey, result, TTL.HOUR);
     res.json(result);
   } catch (error) {
@@ -1589,6 +1589,11 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
   const { mint } = req.params;
 
   try {
+    // If Helius isn't configured, hold times can't be computed — return immediately
+    if (!solanaService.isHeliusConfigured()) {
+      return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: true });
+    }
+
     // Get holder data (likely already cached from the main holders call)
     const holdersCache = await cache.get(`holders:${mint}`);
     if (!holdersCache || !holdersCache.holders || holdersCache.holders.length === 0) {
@@ -1629,75 +1634,72 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       }
     }));
 
-    // Queue worker for stale wallets, with inline fallback
+    // Queue worker for stale wallets, with inline background fallback
     let computed = true;
     if (staleWallets.length > 0) {
-      let dispatched = false;
-
-      // Try worker first
       const pendingKey = `hold-times-pending:${mint}`;
-      const isPending = await cache.get(pendingKey);
-      if (!isPending) {
-        await cache.set(pendingKey, true, 120000);
+      const pending = await cache.get(pendingKey);
+
+      // If already pending and it's been >15s with no progress, the worker
+      // likely isn't running — clear the flag so we can retry inline.
+      if (pending && typeof pending === 'number' && (Date.now() - pending) > 15000) {
+        console.log(`[Tokens] Hold times pending for ${Math.round((Date.now() - pending) / 1000)}s with no progress — retrying`);
+        await cache.delete(pendingKey);
+      }
+
+      const isStillPending = await cache.get(pendingKey);
+
+      if (!isStillPending) {
+        // Store timestamp (not boolean) so we can detect stale pending flags
+        await cache.set(pendingKey, Date.now(), 120000);
+
+        // Try worker first
         const job = await jobQueue.addAnalyticsJob('compute-hold-times', {
           mint,
           wallets: staleWallets
         });
-        if (job) {
-          dispatched = true;
-        } else {
-          await cache.delete(pendingKey);
-        }
-      } else {
-        dispatched = true; // Already pending in worker
-      }
 
-      if (dispatched) {
-        // Worker will handle it — tell frontend to poll
-        computed = false;
-      } else {
-        // No worker available — compute in background, don't block the response.
-        // Frontend will poll and pick up cached results on next request.
-        const bgWallets = [...staleWallets];
-        const bgMint = mint;
-        const pendingBgKey = `hold-times-pending:${bgMint}`;
-        cache.set(pendingBgKey, true, 120000); // Dedup flag for 2 min
+        if (!job) {
+          // No worker/Redis — compute in background without blocking the response.
+          const bgWallets = [...staleWallets];
+          const bgMint = mint;
 
-        setImmediate(() => {
-          (async () => {
-            console.log(`[Tokens] Computing hold times in background for ${bgWallets.length} wallets (no worker)`);
-            const BATCH_SIZE = 5;
-            const DAY_MS = 86400000;
-            try {
-              for (let i = 0; i < bgWallets.length; i += BATCH_SIZE) {
-                const batch = bgWallets.slice(i, i + BATCH_SIZE);
-                const results = await Promise.all(
-                  batch.map(async (wallet) => {
-                    try {
-                      return [wallet, await solanaService.getWalletHoldMetrics(wallet, bgMint)];
-                    } catch (err) {
-                      return [wallet, null];
-                    }
-                  })
-                );
-                for (const [wallet, metrics] of results) {
-                  const avg = metrics?.avgHoldTime ?? -1;
-                  const token = metrics?.tokenHoldTime ?? -1;
-                  await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
-                  await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
+          setImmediate(() => {
+            (async () => {
+              console.log(`[Tokens] Computing hold times in background for ${bgWallets.length} wallets (no worker)`);
+              const BATCH_SIZE = 5;
+              const DAY_MS = 86400000;
+              try {
+                for (let i = 0; i < bgWallets.length; i += BATCH_SIZE) {
+                  const batch = bgWallets.slice(i, i + BATCH_SIZE);
+                  const results = await Promise.all(
+                    batch.map(async (wallet) => {
+                      try {
+                        return [wallet, await solanaService.getWalletHoldMetrics(wallet, bgMint)];
+                      } catch (err) {
+                        return [wallet, null];
+                      }
+                    })
+                  );
+                  for (const [wallet, metrics] of results) {
+                    const avg = metrics?.avgHoldTime ?? -1;
+                    const token = metrics?.tokenHoldTime ?? -1;
+                    await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
+                    await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
+                  }
                 }
+                console.log(`[Tokens] Background hold times complete for ${bgMint}`);
+              } catch (err) {
+                console.error(`[Tokens] Background hold times failed:`, err.message);
+              } finally {
+                await cache.delete(`hold-times-pending:${bgMint}`);
               }
-              console.log(`[Tokens] Background hold times complete for ${bgMint}`);
-            } catch (err) {
-              console.error(`[Tokens] Background hold times failed:`, err.message);
-            } finally {
-              cache.delete(pendingBgKey);
-            }
-          })();
-        });
-
-        computed = false; // Tell frontend to poll
+            })();
+          });
+        }
       }
+
+      computed = false;
     }
 
     res.json({ holdTimes, tokenHoldTimes, computed });

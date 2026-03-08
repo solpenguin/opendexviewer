@@ -817,11 +817,15 @@ const tokenDetail = {
         return;
       }
 
-      // Update "last updated" timestamp
+      // Update "last updated" timestamp (use backend fetchedAt so it reflects real data age)
       const updatedEl = document.getElementById('holders-updated');
       if (updatedEl) {
-        this._holdersUpdatedAt = Date.now();
-        updatedEl.textContent = 'Updated just now';
+        this._holdersUpdatedAt = data.fetchedAt || Date.now();
+        const ageSec = Math.floor((Date.now() - this._holdersUpdatedAt) / 1000);
+        if (ageSec < 10) updatedEl.textContent = 'Updated just now';
+        else if (ageSec < 60) updatedEl.textContent = `Updated ${ageSec}s ago`;
+        else if (ageSec < 3600) updatedEl.textContent = `Updated ${Math.floor(ageSec / 60)}m ago`;
+        else updatedEl.textContent = `Updated ${Math.floor(ageSec / 3600)}h ago`;
         this._startHoldersTimestampTimer();
       }
 
@@ -989,8 +993,8 @@ const tokenDetail = {
   // If the backend returns computed: false (worker still processing),
   // re-poll up to 3 times with increasing delay to pick up results.
   async _loadHoldTimes(attempt = 0) {
-    const MAX_POLLS = 3;
-    const POLL_DELAYS = [4000, 6000, 10000]; // ms between retries
+    const MAX_POLLS = 5;
+    const POLL_DELAYS = [3000, 5000, 8000, 12000, 18000]; // ms between retries
 
     try {
       // Bypass frontend cache on re-polls so we get fresh worker results
