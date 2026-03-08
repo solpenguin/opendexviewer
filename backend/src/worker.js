@@ -489,6 +489,8 @@ function createWorker(queueName, redisConfig) {
     {
       connection: redisConfig,
       concurrency: parseInt(process.env.WORKER_CONCURRENCY) || 20, // Increased from 5 — view count queue must drain faster than it fills
+      lockDuration: 60000, // 60s lock — prevents stalled job false positives on slow jobs
+      stalledInterval: 30000, // Check for stalled jobs every 30s
       limiter: {
         max: parseInt(process.env.WORKER_LIMITER_MAX) || 20, // Max jobs
         duration: 1000 // Per second

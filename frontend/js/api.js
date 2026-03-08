@@ -7,7 +7,7 @@ const API_BASE_URL = (typeof config !== 'undefined' && config.api?.baseUrl)
 // TTLs are configurable via config.js (config.cache.*)
 const apiCache = {
   cache: new Map(),
-  accessOrder: [], // Track access order for true LRU eviction
+  accessOrder: new Map(), // LRU via Map insertion order (O(1) delete + re-insert)
   maxSize: 500,    // Increased from 100 for better cache hit rates
 
   // Cache TTLs in milliseconds - pulled from config.js with fallback defaults
@@ -31,13 +31,10 @@ const apiCache = {
     return `${endpoint}${paramStr ? '?' + paramStr : ''}`;
   },
 
-  // Update access order for LRU (move key to end = most recently used)
+  // Update access order for LRU — O(1) via Map delete + re-insert
   touchAccessOrder(key) {
-    const idx = this.accessOrder.indexOf(key);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
-    }
-    this.accessOrder.push(key);
+    this.accessOrder.delete(key);
+    this.accessOrder.set(key, 1);
   },
 
   // Get cached value if fresh
@@ -48,9 +45,7 @@ const apiCache = {
     const age = Date.now() - entry.timestamp;
     if (age > entry.ttl) {
       this.cache.delete(key);
-      // Remove from access order
-      const idx = this.accessOrder.indexOf(key);
-      if (idx !== -1) this.accessOrder.splice(idx, 1);
+      this.accessOrder.delete(key);
       return null;
     }
 
@@ -66,9 +61,6 @@ const apiCache = {
 
   // Set cache entry with proper LRU eviction
   set(key, data, ttl) {
-    // If key already exists, just update it
-    const exists = this.cache.has(key);
-
     this.cache.set(key, {
       data: data,
       timestamp: Date.now(),
@@ -79,8 +71,9 @@ const apiCache = {
     this.touchAccessOrder(key);
 
     // LRU eviction: remove least recently used entries when over limit
-    while (this.cache.size > this.maxSize && this.accessOrder.length > 0) {
-      const lruKey = this.accessOrder.shift(); // Remove oldest (front of array)
+    while (this.cache.size > this.maxSize && this.accessOrder.size > 0) {
+      const lruKey = this.accessOrder.keys().next().value; // First key = oldest
+      this.accessOrder.delete(lruKey);
       this.cache.delete(lruKey);
     }
   },
@@ -124,9 +117,7 @@ const apiCache = {
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
         this.cache.delete(key);
-        // Also remove from access order
-        const idx = this.accessOrder.indexOf(key);
-        if (idx !== -1) this.accessOrder.splice(idx, 1);
+        this.accessOrder.delete(key);
       }
     }
   },
@@ -134,7 +125,7 @@ const apiCache = {
   // Clear all cache
   clear() {
     this.cache.clear();
-    this.accessOrder = [];
+    this.accessOrder.clear();
   }
 };
 
@@ -196,6 +187,10 @@ const latencyTracker = {
 
 // Default request timeout (10 seconds) - prevents hung requests
 const DEFAULT_REQUEST_TIMEOUT = (typeof config !== 'undefined' && config.api?.timeout) || 10000;
+
+// Global 429 rate-limit awareness: when set, auto-refresh and background requests should back off
+let _rateLimitedUntil = 0;
+function isRateLimited() { return Date.now() < _rateLimitedUntil; }
 
 // API Client
 const api = {
@@ -270,6 +265,11 @@ const api = {
         // Don't retry on 4xx errors (client errors) except 429 (rate limit)
         if (error.status >= 400 && error.status < 500 && error.status !== 429) {
           break;
+        }
+        // Global 429 awareness: suppress background fetches for the retry-after window
+        if (error.status === 429) {
+          const backoff = (error.retryAfter || 60) * 1000;
+          _rateLimitedUntil = Math.max(_rateLimitedUntil, Date.now() + backoff);
         }
 
         if (attempt < maxRetries - 1) {
@@ -1338,7 +1338,9 @@ const utils = {
       });
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    // Scope observer to main content area instead of document.body to reduce mutation noise
+    const observeTarget = document.querySelector('main') || document.querySelector('.content') || document.body;
+    observer.observe(observeTarget, { childList: true, subtree: true });
   }
 };
 

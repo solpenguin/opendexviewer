@@ -14,6 +14,7 @@ const router = express.Router();
 const db = require('../services/database');
 const solana = require('../services/solana');
 const { defaultLimiter, strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
+const { asyncHandler } = require('../middleware/validation');
 // Wallet signature verification not needed — on-chain tx signer check is sufficient
 
 // $OD token mint address
@@ -30,7 +31,7 @@ const TX_SIGNATURE_REGEX = /^[1-9A-HJ-NP-Za-km-z]{64,128}$/;
  * Returns the $OD token balance for a wallet (uses backend Helius RPC)
  * This avoids the frontend hitting the rate-limited public Solana RPC
  */
-router.get('/od-balance/:wallet', defaultLimiter, async (req, res) => {
+router.get('/od-balance/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -58,13 +59,13 @@ router.get('/od-balance/:wallet', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] OD balance error:', error.message);
     res.status(502).json({ error: 'Failed to fetch token balance' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/blockhash
  * Returns the latest blockhash (proxied through backend Helius RPC)
  */
-router.get('/blockhash', defaultLimiter, async (req, res) => {
+router.get('/blockhash', defaultLimiter, asyncHandler(async (req, res) => {
   try {
     const result = await solana.rpcCall('getLatestBlockhash', [{ commitment: 'confirmed' }]);
     if (!result || !result.value) {
@@ -78,14 +79,14 @@ router.get('/blockhash', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] Blockhash error:', error.message);
     res.status(502).json({ error: 'Failed to get blockhash' });
   }
-});
+}));
 
 /**
  * POST /api/burn-credits/send-tx
  * Sends a signed transaction via backend Helius RPC (fallback for wallets without signAndSendTransaction)
  * Body: { transaction: base64-encoded serialized transaction }
  */
-router.post('/send-tx', strictLimiter, veryStrictLimiter, async (req, res) => {
+router.post('/send-tx', strictLimiter, veryStrictLimiter, asyncHandler(async (req, res) => {
   const { transaction } = req.body;
 
   if (!transaction || typeof transaction !== 'string') {
@@ -107,13 +108,13 @@ router.post('/send-tx', strictLimiter, veryStrictLimiter, async (req, res) => {
     console.error('[BurnCredits] Send tx error:', error.message);
     res.status(502).json({ error: 'Failed to send transaction' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/tx-status/:signature
  * Checks transaction confirmation status via backend Helius RPC
  */
-router.get('/tx-status/:signature', defaultLimiter, async (req, res) => {
+router.get('/tx-status/:signature', defaultLimiter, asyncHandler(async (req, res) => {
   const { signature } = req.params;
 
   if (!TX_SIGNATURE_REGEX.test(signature)) {
@@ -136,13 +137,13 @@ router.get('/tx-status/:signature', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] Tx status error:', error.message);
     res.status(502).json({ error: 'Failed to check transaction status' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/config
  * Returns the current conversion rate and token info
  */
-router.get('/config', defaultLimiter, async (req, res) => {
+router.get('/config', defaultLimiter, asyncHandler(async (req, res) => {
   try {
     const conversionRate = await db.getBurnConversionRate();
     const aiAnalysisCost = await db.getAIAnalysisCost();
@@ -157,13 +158,13 @@ router.get('/config', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] Config error:', error.message);
     res.status(500).json({ error: 'Failed to load burn credits configuration' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/platform-stats
  * Returns platform-wide burn statistics (public, no wallet needed)
  */
-router.get('/platform-stats', defaultLimiter, async (req, res) => {
+router.get('/platform-stats', defaultLimiter, asyncHandler(async (req, res) => {
   try {
     const stats = await db.getPlatformBurnStats();
     res.json(stats);
@@ -171,13 +172,13 @@ router.get('/platform-stats', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] Platform stats error:', error.message);
     res.status(500).json({ error: 'Failed to load platform burn stats' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/balance/:wallet
  * Returns the burn credit balance for a wallet
  */
-router.get('/balance/:wallet', defaultLimiter, async (req, res) => {
+router.get('/balance/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -191,13 +192,13 @@ router.get('/balance/:wallet', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] Balance error:', error.message);
     res.status(500).json({ error: 'Failed to load burn credit balance' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/history/:wallet
  * Returns the burn credit history for a wallet
  */
-router.get('/history/:wallet', defaultLimiter, async (req, res) => {
+router.get('/history/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -211,13 +212,13 @@ router.get('/history/:wallet', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] History error:', error.message);
     res.status(500).json({ error: 'Failed to load burn credit history' });
   }
-});
+}));
 
 /**
  * GET /api/burn-credits/spend-history/:wallet
  * Returns the burn credit spending history for a wallet
  */
-router.get('/spend-history/:wallet', defaultLimiter, async (req, res) => {
+router.get('/spend-history/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -231,7 +232,7 @@ router.get('/spend-history/:wallet', defaultLimiter, async (req, res) => {
     console.error('[BurnCredits] Spend history error:', error.message);
     res.status(500).json({ error: 'Failed to load spend history' });
   }
-});
+}));
 
 /**
  * POST /api/burn-credits/submit
@@ -249,7 +250,7 @@ router.get('/spend-history/:wallet', defaultLimiter, async (req, res) => {
  * 5. UNIQUE DB constraint on tx_signature prevents double-crediting
  * 7. Race condition handled via DB constraint error catch
  */
-router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
+router.post('/submit', strictLimiter, veryStrictLimiter, asyncHandler(async (req, res) => {
   const { txSignature, walletAddress } = req.body;
 
   // --- Input validation ---
@@ -298,9 +299,11 @@ router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
     //    while the RPC node indexes the full transaction data, so retry.
     //    Frontend submit timeout is 30s, so we have room for aggressive retries.
     let tx;
-    const TX_FETCH_RETRIES = 8;
-    const TX_FETCH_DELAY_MS = 3000;
+    const TX_FETCH_RETRIES = 4;
+    const TX_FETCH_DELAY_MS = 2000;
     for (let attempt = 0; attempt < TX_FETCH_RETRIES; attempt++) {
+      // Abort early if the client disconnected (no point retrying)
+      if (req.socket.destroyed) return;
       try {
         tx = await solana.getTransaction(cleanSignature);
       } catch (rpcError) {
@@ -364,9 +367,9 @@ router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
       });
     }
 
-    // 7. Calculate burn credits (floor to 6 decimal places to prevent rounding exploits)
+    // 7. Calculate burn credits (floor to whole number — BC are always integers)
     const conversionRate = await db.getBurnConversionRate();
-    const creditsAwarded = Math.floor((burnResult.amount / conversionRate) * 1e6) / 1e6;
+    const creditsAwarded = Math.floor(burnResult.amount / conversionRate);
 
     if (creditsAwarded <= 0) {
       return res.status(400).json({
@@ -411,7 +414,7 @@ router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
     console.error('[BurnCredits] Submit error:', error.message);
     res.status(500).json({ error: 'Failed to process burn credit submission' });
   }
-});
+}));
 
 /**
  * Analyze a parsed Solana transaction to verify it burns $OD tokens.

@@ -291,9 +291,13 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
     }
   }
 
-  // Process all votes concurrently — each vote targets a different submission
-  // and uses atomic DB operations (transactions + UPSERT), so parallel is safe
-  const settled = await Promise.all(votes.map(async (vote) => {
+  // Process votes with limited concurrency (max 5 at a time) to avoid
+  // overwhelming the DB connection pool when batch sizes are large
+  const BATCH_CONCURRENCY = 5;
+  const settled = [];
+  for (let i = 0; i < votes.length; i += BATCH_CONCURRENCY) {
+    const chunk = votes.slice(i, i + BATCH_CONCURRENCY);
+    const chunkResults = await Promise.all(chunk.map(async (vote) => {
     const { submissionId, voteType } = vote;
 
     try {
@@ -394,6 +398,8 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
       };
     }
   }));
+    settled.push(...chunkResults);
+  }
 
   const results = settled.filter(r => r.success);
   const errors = settled.filter(r => !r.success);

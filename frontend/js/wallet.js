@@ -593,13 +593,13 @@ const wallet = {
     if (!valueEl) return;
     try {
       const data = await api.burnCredits.getBalance(this.address);
-      const balance = (data && typeof data.balance === 'number') ? data.balance : 0;
+      const balance = (data && typeof data.balance === 'number') ? Math.floor(data.balance) : 0;
       let display;
       if (balance >= 1000000) display = (balance / 1000000).toFixed(1) + 'M';
       else if (balance >= 1000) display = (balance / 1000).toFixed(1) + 'K';
-      else display = balance.toLocaleString('en-US', { maximumFractionDigits: 1 });
+      else display = balance.toLocaleString('en-US', { maximumFractionDigits: 0 });
       valueEl.textContent = display + ' BC';
-      badgeEl.title = `${balance.toLocaleString()} Burn Credits \u2014 click to manage`;
+      badgeEl.title = `${balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} Burn Credits \u2014 click to manage`;
     } catch (_) {
       valueEl.textContent = '0 BC';
     }

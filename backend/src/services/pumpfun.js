@@ -9,16 +9,31 @@ const PUMPFUN_BASE_URL = 'https://frontend-api-v3.pump.fun';
 // Throttle: serialize outbound PumpFun calls with a minimum gap.
 // Prevents bursts when many unique queries arrive at once.
 const MIN_GAP_MS = 1500; // 1.5 seconds between calls (~40/min max)
+const MAX_QUEUE_DEPTH = 20; // Reject new requests if queue is too deep
+const QUEUE_TIMEOUT_MS = 30000; // Timeout if queued longer than 30s
 let _lastCallTime = 0;
 let _queue = Promise.resolve();
+let _queueDepth = 0;
 
 /**
  * Wraps the actual fetch in a serial queue so only one PumpFun call
  * runs at a time, with at least MIN_GAP_MS between calls.
+ * Rejects if queue is too deep or request waits too long.
  */
 function throttled(fn) {
+  if (_queueDepth >= MAX_QUEUE_DEPTH) {
+    return Promise.reject(new Error('PumpFun throttle queue full — try again later'));
+  }
+  _queueDepth++;
+  const enqueueTime = Date.now();
   return new Promise((resolve, reject) => {
     _queue = _queue.then(async () => {
+      // Timeout: reject if this request waited too long in the queue
+      if (Date.now() - enqueueTime > QUEUE_TIMEOUT_MS) {
+        _queueDepth--;
+        reject(new Error('PumpFun throttle queue timeout'));
+        return;
+      }
       const now = Date.now();
       const elapsed = now - _lastCallTime;
       if (elapsed < MIN_GAP_MS) {
@@ -30,6 +45,7 @@ function throttled(fn) {
       } catch (err) {
         reject(err);
       } finally {
+        _queueDepth--;
         _lastCallTime = Date.now();
       }
     });

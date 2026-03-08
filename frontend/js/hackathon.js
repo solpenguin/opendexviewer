@@ -3,6 +3,7 @@
 const hackathonPage = {
   tokens: [],
   refreshTimer: null,
+  _isLoading: false,
 
   init() {
     this.loadTokens();
@@ -21,8 +22,10 @@ const hackathonPage = {
   },
 
   async loadTokens() {
+    if (this._isLoading) return;
+    this._isLoading = true;
     const tbody = document.getElementById('hackathon-table-body');
-    if (!tbody) return;
+    if (!tbody) { this._isLoading = false; return; }
 
     // Only show loading spinner on first load (not on refresh)
     if (this.tokens.length === 0) {
@@ -71,6 +74,8 @@ const hackathonPage = {
           </tr>
         `;
       }
+    } finally {
+      this._isLoading = false;
     }
   },
 

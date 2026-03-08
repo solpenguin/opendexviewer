@@ -64,8 +64,9 @@ async function setCommands(bot) {
   ], { scope: { type: 'all_group_chats' } });
 }
 
-// Start bot
+// Start bot — only subscribe to update types we actually handle
 bot.start({
+  allowed_updates: ['message', 'callback_query'],
   onStart: async (botInfo) => {
     console.log(`
   OpenDEX Telegram Bot started

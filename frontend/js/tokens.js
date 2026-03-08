@@ -14,6 +14,8 @@ const tokenList = {
   freshnessInterval: null,
   lastUpdateTime: null,
   hasMorePages: true, // Track if there are more pages available
+  _consecutiveRefreshErrors: 0, // Circuit breaker for auto-refresh
+  _requestGeneration: 0, // Stale request cancellation counter
 
   // Get refresh interval from config (with fallback)
   get refreshIntervalMs() {
@@ -354,20 +356,26 @@ const tokenList = {
   },
 
   // Start auto-refresh (configurable via config.cache.tokenListRefresh)
+  // Circuit breaker: after 3 consecutive failures, double the interval (up to 10min)
   startAutoRefresh() {
     // Clear any existing intervals to prevent duplicates
     if (this.autoRefreshInterval) clearInterval(this.autoRefreshInterval);
+    const baseInterval = this.refreshIntervalMs;
+    const backoffMultiplier = this._consecutiveRefreshErrors >= 3
+      ? Math.min(Math.pow(2, this._consecutiveRefreshErrors - 2), 5) : 1;
+    const interval = Math.min(baseInterval * backoffMultiplier, 600000);
     this.autoRefreshInterval = setInterval(() => {
-      if (!this.isSearchMode && !this.isLoading && document.visibilityState === 'visible') {
+      if (!this.isSearchMode && !this.isLoading && document.visibilityState === 'visible' && !isRateLimited()) {
         this.loadTokens(true); // silent refresh (uses stale-while-revalidate cache)
       }
-    }, this.refreshIntervalMs);
+    }, interval);
   },
 
   // Load tokens
   async loadTokens(silent = false) {
     if (this.isLoading) return;
     this.isLoading = true;
+    const generation = ++this._requestGeneration; // Track request generation for stale cancellation
     const _t0 = performance.now();
     let _ok = true;
 
@@ -414,6 +422,9 @@ const tokenList = {
         }
       }
 
+      // Discard stale results if a newer request was started (e.g., user changed filter)
+      if (generation !== this._requestGeneration) return;
+
       // Apply client-side sorting (API may return pre-sorted data from external sources)
       // This ensures the user's sort selection is always respected
       this.sortTokens();
@@ -422,12 +433,24 @@ const tokenList = {
       this.hideApiError();
       this.lastUpdateTime = Date.now();
       this.updateFreshnessDisplay();
+      // Reset circuit breaker on success
+      if (this._consecutiveRefreshErrors > 0) {
+        this._consecutiveRefreshErrors = 0;
+        this.startAutoRefresh(); // Restore normal interval
+      }
     } catch (error) {
       _ok = false;
       console.error('[TokenList] Failed to load tokens:', error);
       if (!silent) {
         this.showError('Failed to load tokens. Please try again.');
         this.showApiError();
+      }
+      // Circuit breaker: back off on consecutive failures
+      if (silent) {
+        this._consecutiveRefreshErrors++;
+        if (this._consecutiveRefreshErrors >= 3) {
+          this.startAutoRefresh(); // Restart with backed-off interval
+        }
       }
     } finally {
       this.isLoading = false;

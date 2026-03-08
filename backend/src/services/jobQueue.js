@@ -234,12 +234,13 @@ async function flushViewCounts() {
   isFlushing = true;
 
   try {
-    // Snapshot the buffer and clear only the entries we're flushing
+    // Atomic snapshot: swap buffer with a fresh Map so new writes don't collide
+    const snapshot = new Map(viewCountBuffer);
+    viewCountBuffer.clear();
+
     const viewUpdates = [];
-    const flushedKeys = [];
-    for (const [tokenMint, count] of viewCountBuffer) {
+    for (const [tokenMint, count] of snapshot) {
       viewUpdates.push({ tokenMint, count });
-      flushedKeys.push(tokenMint);
     }
 
     // Try job queue first if available
@@ -247,8 +248,6 @@ async function flushViewCounts() {
       try {
         const job = await addAnalyticsJob('batch-view-counts', { updates: viewUpdates });
         if (job) {
-          // Job added successfully - clear only flushed entries
-          for (const key of flushedKeys) viewCountBuffer.delete(key);
           console.log(`[JobQueue] Queued ${viewUpdates.length} view count updates`);
           return;
         }
@@ -257,9 +256,15 @@ async function flushViewCounts() {
       }
     }
 
-    // Fallback: Write directly to database — only clear successfully written entries
-    const successfulMints = await flushViewCountsDirect(viewUpdates);
-    for (const mint of successfulMints) viewCountBuffer.delete(mint);
+    // Fallback: Write directly to database — re-add failed entries back to buffer
+    const successfulMints = new Set(await flushViewCountsDirect(viewUpdates));
+    for (const [tokenMint, count] of snapshot) {
+      if (!successfulMints.has(tokenMint)) {
+        // Re-add failed entries back to the live buffer
+        const current = viewCountBuffer.get(tokenMint) || 0;
+        viewCountBuffer.set(tokenMint, current + count);
+      }
+    }
   } finally {
     isFlushing = false;
   }

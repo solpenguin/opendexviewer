@@ -12,6 +12,7 @@ const tokenDetail = {
   priceRefreshInterval: null,
   freshnessInterval: null,
   lastPriceUpdate: null,
+  _consecutivePriceErrors: 0, // Circuit breaker for price refresh
   _chartPreload: null, // In-flight promise for the default chart interval; reused by loadChart()
   modalChart: null,
   _modalOpen: false,
@@ -387,13 +388,18 @@ const tokenDetail = {
   },
 
   // Start price refresh (configurable via config.cache.priceRefresh)
+  // Circuit breaker: after 3 consecutive failures, double interval (up to 10min)
   startPriceRefresh() {
     if (this.priceRefreshInterval) clearInterval(this.priceRefreshInterval);
+    const baseInterval = this.refreshIntervalMs;
+    const backoffMultiplier = this._consecutivePriceErrors >= 3
+      ? Math.min(Math.pow(2, this._consecutivePriceErrors - 2), 5) : 1;
+    const interval = Math.min(baseInterval * backoffMultiplier, 600000);
     this.priceRefreshInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && typeof isRateLimited === 'function' && !isRateLimited()) {
         this.refreshPrice();
       }
-    }, this.refreshIntervalMs);
+    }, interval);
   },
 
   // Refresh just the price - uses lightweight price endpoint instead of full token data
@@ -422,8 +428,17 @@ const tokenDetail = {
         this.lastPriceUpdate = Date.now();
         this.updateFreshnessDisplay();
       }
+      // Reset circuit breaker on success
+      if (this._consecutivePriceErrors > 0) {
+        this._consecutivePriceErrors = 0;
+        this.startPriceRefresh();
+      }
     } catch (error) {
       console.error('Price refresh failed:', error);
+      this._consecutivePriceErrors++;
+      if (this._consecutivePriceErrors >= 3) {
+        this.startPriceRefresh(); // Restart with backed-off interval
+      }
     } finally {
       if (priceContainer) priceContainer.classList.remove('price-refreshing');
       if (spinner) spinner.remove();

@@ -193,11 +193,11 @@ const burnPage = {
 
     if (conversionPreview) {
       if (isValid && this.conversionRate > 0) {
-        const credits = amount / this.conversionRate;
+        const credits = Math.floor(amount / this.conversionRate);
         conversionPreview.textContent = '';
         const pre = document.createTextNode('You will receive ');
         const strong = document.createElement('strong');
-        strong.textContent = this.formatNumber(credits);
+        strong.textContent = this.formatBC(credits);
         const post = document.createTextNode(' Burn Credits');
         conversionPreview.append(pre, strong, post);
       } else {
@@ -501,8 +501,8 @@ const burnPage = {
       const solscanUrl = `https://solscan.io/tx/${encodeURIComponent(sig)}`;
       resultDetails.innerHTML = `
         <strong>${this.formatNumber(result.tokensBurned)} $OD</strong> burned
-        &rarr; <strong>${this.formatNumber(result.creditsAwarded)} BC</strong> earned<br>
-        New balance: <strong>${this.formatNumber(result.newBalance)} BC</strong><br>
+        &rarr; <strong>${this.formatBC(result.creditsAwarded)} BC</strong> earned<br>
+        New balance: <strong>${this.formatBC(result.newBalance)} BC</strong><br>
         <a href="${solscanUrl}" target="_blank" rel="noopener" class="burn-tx-link">${shortSig}</a>
       `;
       resultEl.style.display = 'block';
@@ -565,7 +565,7 @@ const burnPage = {
       const burnedEl = document.getElementById('burn-total-burned');
       const subsEl = document.getElementById('burn-submissions');
 
-      if (balanceEl) balanceEl.textContent = this.formatNumber(data.balance);
+      if (balanceEl) balanceEl.textContent = this.formatBC(data.balance);
       if (burnedEl) burnedEl.textContent = this.formatNumber(data.totalBurned);
       if (subsEl) subsEl.textContent = data.submissions;
     } catch (error) {
@@ -604,7 +604,7 @@ const burnPage = {
           <tr>
             <td>${this.escapeHtml(dateStr)}</td>
             <td class="burn-history-od">${this.formatNumber(parseFloat(entry.token_amount))}</td>
-            <td class="burn-history-bc">${this.formatNumber(parseFloat(entry.credits_awarded))}</td>
+            <td class="burn-history-bc">${this.formatBC(parseFloat(entry.credits_awarded))}</td>
             <td class="burn-history-rate">${this.escapeHtml(Number(entry.conversion_rate).toLocaleString())}:1</td>
             <td><a href="${solscanUrl}" target="_blank" rel="noopener" class="burn-history-link">${this.escapeHtml(shortSig)}</a></td>
           </tr>`;
@@ -643,7 +643,7 @@ const burnPage = {
         return `
           <tr>
             <td>${this.escapeHtml(dateStr)}</td>
-            <td class="burn-history-bc">${this.formatNumber(parseFloat(entry.amount))}</td>
+            <td class="burn-history-bc">${this.formatBC(parseFloat(entry.amount))}</td>
             <td>${this.escapeHtml(featureLabel)}</td>
             <td class="burn-spend-details">${details}</td>
           </tr>`;
@@ -718,6 +718,14 @@ const burnPage = {
     if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
     if (num < 1) return num.toFixed(6);
     return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  },
+
+  // Format burn credits (always whole numbers)
+  formatBC(num) {
+    const n = Math.floor(num || 0);
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
   },
 
   escapeHtml(str) {

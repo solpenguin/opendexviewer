@@ -227,11 +227,16 @@ app.use(compression({
   }
 }));
 
-// Request timeout middleware - prevent hung requests
+// Request timeout middleware - prevent hung requests and abort in-flight work
 const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
 app.use((req, res, next) => {
   req.setTimeout(REQUEST_TIMEOUT);
-  res.setTimeout(REQUEST_TIMEOUT);
+  res.setTimeout(REQUEST_TIMEOUT, () => {
+    if (!res.headersSent) {
+      res.status(503).json({ error: 'Request timeout' });
+    }
+    req.destroy();
+  });
   next();
 });
 
@@ -419,12 +424,17 @@ async function gracefulShutdown(signal) {
   const isError = signal === 'uncaughtException' || signal === 'unhandledRejection';
   const exitCode = isError ? 1 : 0;
 
-  // Stop accepting new connections and drain in-flight requests
+  // Stop accepting new connections and await in-flight request drain
   if (httpServer) {
-    httpServer.close(() => console.log('[Shutdown] HTTP server closed'));
+    await new Promise(resolve => {
+      httpServer.close(() => {
+        console.log('[Shutdown] HTTP server closed');
+        resolve();
+      });
+    }).catch(() => {});
   }
 
-  // Force exit after 10 seconds if draining takes too long
+  // Force exit after 10 seconds if cleanup takes too long
   const forceTimer = setTimeout(() => {
     console.error('[Shutdown] Forced exit after timeout');
     process.exit(exitCode);

@@ -79,7 +79,7 @@ function createPool() {
   // Production: Higher pool for concurrent users
   // Development: Lower pool to avoid exhausting local DB
   const isProduction = process.env.NODE_ENV === 'production';
-  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 50 : 10);
+  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 30 : 10);
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -2737,7 +2737,7 @@ async function getBurnCreditBalance(walletAddress) {
   const row = result.rows[0];
   const spent = parseFloat(spentResult.rows[0].spent);
   return {
-    balance: Math.max(0, parseFloat(row.earned) - spent),
+    balance: Math.max(0, Math.floor(parseFloat(row.earned) - spent)),
     totalBurned: parseFloat(row.total_burned),
     submissions: parseInt(row.submissions)
   };
@@ -2782,7 +2782,7 @@ async function spendBurnCredits(walletAddress, amount, feature, metadata = {}) {
         [walletAddress]
       );
 
-      const balance = parseFloat(earned.rows[0].earned) - parseFloat(spent.rows[0].spent);
+      const balance = Math.floor(parseFloat(earned.rows[0].earned) - parseFloat(spent.rows[0].spent));
       if (balance < amount) {
         await client.query('ROLLBACK');
         return false;
