@@ -1182,7 +1182,7 @@ const tokenDetail = {
     const btn = document.getElementById('ai-analysis-btn');
     if (!btn) return;
     btn.disabled = false;
-    btn.title = 'Get AI-powered holder analysis';
+    btn.title = 'AI-powered holder analysis — costs 5 Burn Credits';
   },
 
   // Gather pre-aggregated metrics for AI analysis (minimal token usage)
@@ -1244,6 +1244,17 @@ const tokenDetail = {
     const errorEl = document.getElementById('ai-analysis-error');
     if (!overlay) return;
 
+    // Check wallet connection
+    if (typeof wallet === 'undefined' || !wallet.connected || !wallet.address) {
+      if (typeof toast !== 'undefined') {
+        toast.info('Connect your wallet to use AI Analysis (costs 5 BC)');
+      }
+      // Trigger wallet connect
+      const connectBtn = document.getElementById('connect-wallet');
+      if (connectBtn) connectBtn.click();
+      return;
+    }
+
     // Close handler (stable reference for cleanup)
     const close = () => {
       overlay.style.display = 'none';
@@ -1254,7 +1265,7 @@ const tokenDetail = {
     document.getElementById('ai-analysis-close').onclick = close;
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
-    // Show cached result immediately (no loading flash)
+    // Show cached result immediately (no loading flash, no BC charge)
     if (this._aiAnalysisCache) {
       loading.style.display = 'none';
       result.style.display = 'none';
@@ -1282,6 +1293,9 @@ const tokenDetail = {
 
     try {
       const metrics = this._gatherAIMetrics();
+      // Include wallet address for BC payment
+      metrics.walletAddress = (typeof wallet !== 'undefined' && wallet.address) ? wallet.address : null;
+
       const data = await api.request(`/api/tokens/${this.mint}/holders/ai-analysis`, {
         method: 'POST',
         body: JSON.stringify(metrics),
@@ -1291,12 +1305,29 @@ const tokenDetail = {
       if (data.error) throw new Error(data.error);
       this._aiAnalysisCache = data;
       this._renderAIResult(data);
+
+      // Refresh header BC badge after spending
+      const badge = document.getElementById('header-bc-badge');
+      if (badge && typeof wallet !== 'undefined' && wallet._loadHeaderBurnCredits) {
+        wallet._loadHeaderBurnCredits(badge);
+      }
     } catch (err) {
       loading.style.display = 'none';
       errorEl.style.display = 'flex';
-      errorEl.innerHTML = '<span>' + (err.message || 'Analysis unavailable. Try again later.') +
-        '</span><button class="ai-retry-btn" id="ai-retry-btn">Retry</button>';
-      document.getElementById('ai-retry-btn').onclick = () => this._fetchAIAnalysis();
+
+      if (err.code === 'INSUFFICIENT_BC') {
+        const bcLink = '<a href="burn.html" style="color: rgb(251, 191, 36); text-decoration: underline;">Get Burn Credits</a>';
+        errorEl.innerHTML = '<span>Insufficient Burn Credits. AI Analysis costs 5 BC.</span>' +
+          '<span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Burn $OD tokens to earn BC. ' + bcLink + '</span>';
+      } else if (err.code === 'WALLET_REQUIRED') {
+        errorEl.innerHTML = '<span>Please connect your wallet to use AI Analysis.</span>' +
+          '<span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">AI Analysis costs 5 Burn Credits per use.</span>';
+      } else {
+        errorEl.innerHTML = '<span>' + (err.message || 'Analysis unavailable. Try again later.') +
+          '</span><button class="ai-retry-btn" id="ai-retry-btn">Retry</button>';
+        const retryBtn = document.getElementById('ai-retry-btn');
+        if (retryBtn) retryBtn.onclick = () => this._fetchAIAnalysis();
+      }
     }
   },
 

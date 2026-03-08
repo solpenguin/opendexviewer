@@ -382,7 +382,7 @@ const burnPage = {
 
       const transaction = new solanaWeb3.Transaction({
         feePayer: walletPubkey,
-        blockhash,
+        recentBlockhash: blockhash,
         lastValidBlockHeight
       }).add(burnIx);
 

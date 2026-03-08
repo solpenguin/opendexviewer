@@ -2559,22 +2559,23 @@ a:hover {
 .ai-analysis-btn {
   display: flex;
   align-items: center;
-  gap: 0.325rem;
-  padding: 0.3rem 0.625rem;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.25);
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: 999px;
   color: rgb(167, 139, 250);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 .ai-analysis-btn:hover:not(:disabled) {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.22);
+  border-color: rgba(139, 92, 246, 0.5);
   color: rgb(196, 181, 253);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
 }
 .ai-analysis-btn:disabled {
   opacity: 0.3;
@@ -2582,6 +2583,17 @@ a:hover {
 }
 .ai-analysis-btn-label {
   line-height: 1;
+}
+.ai-analysis-btn-cost {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  background: rgba(251, 191, 36, 0.15);
+  border-radius: 999px;
+  color: rgb(251, 191, 36);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 /* AI Analysis Modal */
@@ -7068,7 +7080,7 @@ select {
     display: none;
   }
   .ai-analysis-btn {
-    padding: 0.3rem 0.4rem;
+    padding: 0.35rem 0.5rem;
   }
 }
 

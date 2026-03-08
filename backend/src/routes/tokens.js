@@ -1932,12 +1932,14 @@ function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
 
 // POST /api/tokens/:mint/holders/ai-analysis
 // Accepts pre-aggregated holder metrics, calls Claude Haiku for a 0-100 score + brief analysis.
+// Costs 5 Burn Credits per analysis (cached results are free).
 // Cached for 3 hours per mint. Very strict rate limit to protect API costs.
+const AI_ANALYSIS_COST = 5; // Burn Credits per analysis
 router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = `ai-analysis:${mint}`;
 
-  // Return cached result if available
+  // Return cached result if available (free — no BC charge)
   const cached = await cache.get(cacheKey);
   if (cached) return res.json(cached);
 
@@ -1950,6 +1952,24 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
   const m = req.body;
   if (!m || typeof m.top5 !== 'number' || typeof m.top10 !== 'number') {
     return res.status(400).json({ error: 'Missing required metrics' });
+  }
+
+  // Require wallet address for BC payment
+  const walletAddress = m.walletAddress;
+  if (!walletAddress || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
+    return res.status(400).json({ error: 'Wallet connection required to use AI analysis', code: 'WALLET_REQUIRED' });
+  }
+
+  // Charge Burn Credits
+  const charged = await db.spendBurnCredits(walletAddress, AI_ANALYSIS_COST, 'ai_holder_analysis', { mint });
+  if (!charged) {
+    const balance = await db.getBurnCreditBalance(walletAddress);
+    return res.status(402).json({
+      error: `Insufficient Burn Credits. This analysis costs ${AI_ANALYSIS_COST} BC.`,
+      code: 'INSUFFICIENT_BC',
+      required: AI_ANALYSIS_COST,
+      balance: balance.balance
+    });
   }
 
   // Sanitize: clamp numbers, strip strings to safe short values

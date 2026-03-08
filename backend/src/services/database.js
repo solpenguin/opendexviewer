@@ -406,6 +406,18 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_burn_credits_tx ON burn_credits(tx_signature);
       CREATE INDEX IF NOT EXISTS idx_burn_credits_created ON burn_credits(created_at DESC);
 
+      -- Burn credit spends (tracks BC usage for features like AI analysis)
+      CREATE TABLE IF NOT EXISTS burn_credit_spends (
+        id SERIAL PRIMARY KEY,
+        wallet_address VARCHAR(44) NOT NULL,
+        amount DECIMAL(20,6) NOT NULL,
+        feature VARCHAR(50) NOT NULL,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_burn_credit_spends_wallet ON burn_credit_spends(wallet_address);
+
       -- Burn credit configuration (conversion rate, etc.)
       CREATE TABLE IF NOT EXISTS burn_config (
         key VARCHAR(50) PRIMARY KEY,
@@ -2677,24 +2689,76 @@ async function recordBurnCredit({ walletAddress, txSignature, tokenAmount, credi
   return result.rows[0];
 }
 
-// Get total burn credits balance for a wallet
+// Get total burn credits balance for a wallet (earned minus spent)
 async function getBurnCreditBalance(walletAddress) {
   if (!pool) return { balance: 0, totalBurned: 0, submissions: 0 };
   const result = await pool.query(
     `SELECT
-       COALESCE(SUM(credits_awarded), 0) AS balance,
+       COALESCE(SUM(credits_awarded), 0) AS earned,
        COALESCE(SUM(token_amount), 0) AS total_burned,
        COUNT(*) AS submissions
      FROM burn_credits
      WHERE wallet_address = $1 AND status = 'confirmed'`,
     [walletAddress]
   );
+  const spentResult = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS spent
+     FROM burn_credit_spends
+     WHERE wallet_address = $1`,
+    [walletAddress]
+  );
   const row = result.rows[0];
+  const spent = parseFloat(spentResult.rows[0].spent);
   return {
-    balance: parseFloat(row.balance),
+    balance: Math.max(0, parseFloat(row.earned) - spent),
     totalBurned: parseFloat(row.total_burned),
     submissions: parseInt(row.submissions)
   };
+}
+
+// Spend burn credits (returns true if successful, false if insufficient balance)
+async function spendBurnCredits(walletAddress, amount, feature, metadata = {}) {
+  if (!pool) throw new Error('Database not available');
+
+  // Use a transaction to atomically check and deduct
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get current balance (earned - spent) with row-level lock
+    const earned = await client.query(
+      `SELECT COALESCE(SUM(credits_awarded), 0) AS earned
+       FROM burn_credits
+       WHERE wallet_address = $1 AND status = 'confirmed'`,
+      [walletAddress]
+    );
+    const spent = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS spent
+       FROM burn_credit_spends
+       WHERE wallet_address = $1`,
+      [walletAddress]
+    );
+
+    const balance = parseFloat(earned.rows[0].earned) - parseFloat(spent.rows[0].spent);
+    if (balance < amount) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    await client.query(
+      `INSERT INTO burn_credit_spends (wallet_address, amount, feature, metadata)
+       VALUES ($1, $2, $3, $4)`,
+      [walletAddress, amount, feature, JSON.stringify(metadata)]
+    );
+
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // Get burn credit history for a wallet
@@ -2827,5 +2891,6 @@ module.exports = {
   isBurnTxUsed,
   recordBurnCredit,
   getBurnCreditBalance,
-  getBurnCreditHistory
+  getBurnCreditHistory,
+  spendBurnCredits
 };
