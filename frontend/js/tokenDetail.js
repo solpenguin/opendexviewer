@@ -1056,6 +1056,11 @@ const tokenDetail = {
         this._tokenHoldTimesData = Object.assign(this._tokenHoldTimesData || {}, data.tokenHoldTimes);
       }
 
+      // Update fresh wallets metric if available
+      if (data.freshWallets && data.freshWallets.checked > 0) {
+        this._updateFreshWalletsMetric(data.freshWallets);
+      }
+
       // Fill in pending placeholders with any data we have so far
       this._applyHoldTimesToDOM();
 
@@ -1135,6 +1140,26 @@ const tokenDetail = {
 
     const avgMs = values.reduce((sum, v) => sum + v, 0) / values.length;
     el.textContent = this._formatHoldTime(avgMs);
+  },
+
+  // Update the "Fresh Wallets" metric — wallets with first-ever tx within 24h.
+  // Color-coded: green (0) = healthy, yellow (1-2) = watch, red (3+) = suspicious.
+  _updateFreshWalletsMetric(freshData) {
+    const el = document.getElementById('holders-fresh-wallets');
+    if (!el) return;
+
+    const { count, checked, total } = freshData;
+    if (checked === 0) {
+      el.textContent = '...';
+      return;
+    }
+
+    el.textContent = `${count}/${total}`;
+    el.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
+    // More fresh wallets among top holders = more suspicious
+    if (count === 0) el.classList.add('concentration-low');       // green = good
+    else if (count <= 2) el.classList.add('concentration-medium'); // yellow = some
+    else el.classList.add('concentration-high');                   // red = many
   },
 
   // Load diamond hands distribution with polling

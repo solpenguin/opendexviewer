@@ -718,17 +718,24 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
   const transactions = await getTransactionsForAddress(walletAddress, { limit: 100 });
   if (!transactions || transactions.length === 0) {
     console.log(`[Solana] getWalletHoldMetrics: no txs for ${walletAddress.slice(0, 8)}... → null/null`);
-    return { avgHoldTime: null, tokenHoldTime: null };
+    return { avgHoldTime: null, tokenHoldTime: null, walletAge: null };
   }
 
   // Track per-token buy/sell timestamps for avg hold time (SWAP transactions only)
   const tokenEvents = new Map();
   // Track earliest receive of the specific token (any transaction type)
   let earliestTokenReceive = null;
+  // Track oldest transaction seen — approximates wallet age
+  let oldestTxTimestamp = null;
 
   for (const tx of transactions) {
     const timestamp = (tx.timestamp || 0) * 1000; // seconds → ms
     if (!timestamp || !tx.tokenTransfers) continue;
+
+    // Track oldest tx for wallet age (only reliable if we got < 100 txs)
+    if (!oldestTxTimestamp || timestamp < oldestTxTimestamp) {
+      oldestTxTimestamp = timestamp;
+    }
 
     for (const transfer of tx.tokenTransfers) {
       const mint = transfer.mint;
@@ -777,8 +784,14 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
   // Calculate specific token hold time
   const tokenHoldTime = earliestTokenReceive ? Date.now() - earliestTokenReceive : null;
 
-  console.log(`[Solana] getWalletHoldMetrics ${walletAddress.slice(0, 8)}...: ${transactions.length} txs, ${tokenEvents.size} swap tokens, avg=${avgHoldTime}, tokenHold=${tokenHoldTime}`);
-  return { avgHoldTime, tokenHoldTime };
+  // Wallet age: only reliable when we got the full history (< 100 txs).
+  // If we got exactly 100, the wallet likely has older activity we didn't fetch.
+  const walletAge = (oldestTxTimestamp && transactions.length < 100)
+    ? Date.now() - oldestTxTimestamp
+    : null; // null = unknown (wallet has more history than we fetched)
+
+  console.log(`[Solana] getWalletHoldMetrics ${walletAddress.slice(0, 8)}...: ${transactions.length} txs, ${tokenEvents.size} swap tokens, avg=${avgHoldTime}, tokenHold=${tokenHoldTime}, walletAge=${walletAge ? Math.round(walletAge / 3600000) + 'h' : 'unknown'}`);
+  return { avgHoldTime, tokenHoldTime, walletAge };
 }
 
 /**

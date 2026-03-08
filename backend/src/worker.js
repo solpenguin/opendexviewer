@@ -389,26 +389,22 @@ const jobProcessors = {
 
       for (const [wallet, metrics] of batchResults) {
         if (!metrics) {
-          // No data at all — cache sentinels for both
+          // No data at all — cache sentinels for all
           await cache.set(`wallet-hold-time:${wallet}`, -1, TTL.DAY);
           await cache.set(`wallet-token-hold:${wallet}:${mint}`, -1, TTL.DAY);
+          await cache.set(`wallet-age:${wallet}`, -1, TTL.DAY);
           skipped++;
           continue;
         }
 
         // Cache avg hold time (wallet-level, reusable across tokens)
-        if (metrics.avgHoldTime != null) {
-          await cache.set(`wallet-hold-time:${wallet}`, metrics.avgHoldTime, TTL.DAY);
-        } else {
-          await cache.set(`wallet-hold-time:${wallet}`, -1, TTL.DAY);
-        }
+        await cache.set(`wallet-hold-time:${wallet}`, metrics.avgHoldTime ?? -1, TTL.DAY);
 
         // Cache token-specific hold time
-        if (metrics.tokenHoldTime != null) {
-          await cache.set(`wallet-token-hold:${wallet}:${mint}`, metrics.tokenHoldTime, TTL.DAY);
-        } else {
-          await cache.set(`wallet-token-hold:${wallet}:${mint}`, -1, TTL.DAY);
-        }
+        await cache.set(`wallet-token-hold:${wallet}:${mint}`, metrics.tokenHoldTime ?? -1, TTL.DAY);
+
+        // Cache wallet age (positive ms = known, -1 = unknown/100+ txs)
+        await cache.set(`wallet-age:${wallet}`, metrics.walletAge ?? -1, TTL.DAY);
 
         computed++;
       }
@@ -451,8 +447,10 @@ const jobProcessors = {
       for (const [wallet, metrics] of batchResults) {
         const avg = metrics?.avgHoldTime ?? -1;
         const token = metrics?.tokenHoldTime ?? -1;
+        const age = metrics?.walletAge ?? -1;
         await cache.set(`wallet-hold-time:${wallet}`, avg, TTL.DAY);
         await cache.set(`wallet-token-hold:${wallet}:${mint}`, token, TTL.DAY);
+        await cache.set(`wallet-age:${wallet}`, age, TTL.DAY);
         if (avg > 0 || token > 0) computed++;
         else skipped++;
       }

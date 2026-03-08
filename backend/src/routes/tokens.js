@@ -1619,11 +1619,15 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
     const holdTimes = {};
     const tokenHoldTimes = {};
     const staleWallets = [];
+    let freshWalletCount = 0;
+    let walletAgeChecked = 0;
+    const DAY_MS = 86400000;
 
     await Promise.all(wallets.map(async (wallet) => {
-      const [avgCached, tokenCached] = await Promise.all([
+      const [avgCached, tokenCached, ageCached] = await Promise.all([
         cache.get(`wallet-hold-time:${wallet}`),
-        cache.get(`wallet-token-hold:${wallet}:${mint}`)
+        cache.get(`wallet-token-hold:${wallet}:${mint}`),
+        cache.get(`wallet-age:${wallet}`)
       ]);
 
       if (avgCached != null) {
@@ -1631,6 +1635,14 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       }
       if (tokenCached != null) {
         if (tokenCached > 0) tokenHoldTimes[wallet] = tokenCached;
+      }
+
+      // Count fresh wallets (age < 24h). ageCached: positive ms = known age, -1 = unknown
+      if (ageCached != null && ageCached > 0) {
+        walletAgeChecked++;
+        if (ageCached < DAY_MS) freshWalletCount++;
+      } else if (ageCached === -1) {
+        walletAgeChecked++; // age unknown (100+ txs) — not fresh
       }
 
       // Stale if either cache is missing
@@ -1711,8 +1723,10 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
                   for (const [wallet, metrics] of results) {
                     const avg = metrics?.avgHoldTime ?? -1;
                     const token = metrics?.tokenHoldTime ?? -1;
+                    const age = metrics?.walletAge ?? -1; // -1 = unknown (100+ txs)
                     await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
                     await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
+                    await cache.set(`wallet-age:${wallet}`, age, DAY_MS);
                     if (avg > 0 || token > 0) successCount++;
                     else failCount++;
                   }
@@ -1731,8 +1745,8 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       computed = false;
     }
 
-    console.log(`[HoldTimes] Response for ${mint}: ${Object.keys(holdTimes).length} avg, ${Object.keys(tokenHoldTimes).length} token, computed=${computed}, stale=${staleWallets.length}`);
-    res.json({ holdTimes, tokenHoldTimes, computed });
+    console.log(`[HoldTimes] Response for ${mint}: ${Object.keys(holdTimes).length} avg, ${Object.keys(tokenHoldTimes).length} token, computed=${computed}, stale=${staleWallets.length}, fresh=${freshWalletCount}/${walletAgeChecked}`);
+    res.json({ holdTimes, tokenHoldTimes, computed, freshWallets: { count: freshWalletCount, checked: walletAgeChecked, total: wallets.length } });
   } catch (error) {
     console.error('[Tokens] Hold times error:', error.message);
     res.status(500).json({ error: 'Failed to fetch hold times' });
@@ -1862,8 +1876,10 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
                 for (const [wallet, metrics] of results) {
                   const avg = metrics?.avgHoldTime ?? -1;
                   const token = metrics?.tokenHoldTime ?? -1;
+                  const age = metrics?.walletAge ?? -1;
                   await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
                   await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
+                  await cache.set(`wallet-age:${wallet}`, age, DAY_MS);
                   ok++;
                 }
               }

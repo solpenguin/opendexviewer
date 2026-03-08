@@ -2346,9 +2346,15 @@ a:hover {
 
 .holders-metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+@media (max-width: 768px) {
+  .holders-metrics {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .holder-metric {
@@ -6810,14 +6816,31 @@ select {
   }
 }
 
-/* Holders metrics responsive */
+/* Holders table columns: hide hold-time cols on tablets and below */
+@media (max-width: 768px) {
+  .holders-share-col,
+  .holders-holdtime-col {
+    display: none;
+  }
+}
+
+/* Holders metrics: 2 columns on small phones */
 @media (max-width: 480px) {
   .holders-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
-  .holders-share-col,
-  .holders-holdtime-col {
-    display: none;
+  .holder-metric {
+    padding: 0.5rem;
+  }
+  .holder-metric-value {
+    font-size: 1rem;
+  }
+  .holders-refresh-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .holders-expand-btn {
+    padding: 0.625rem;
   }
 }
 
