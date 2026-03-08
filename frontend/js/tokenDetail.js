@@ -789,6 +789,8 @@ const tokenDetail = {
 
     if (fresh) {
       apiCache.clearPattern(`tokens:holders:${this.mint}`);
+      apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
+      this._holdTimesData = null;
       if (refreshBtn) refreshBtn.classList.add('spinning');
     }
 
@@ -804,8 +806,8 @@ const tokenDetail = {
         const tbody = document.getElementById('holders-tbody');
         if (tbody) {
           tbody.innerHTML = data.error === 'rpc_unavailable'
-            ? '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);">Holder data temporarily unavailable. Click refresh to retry.</td></tr>'
-            : '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No holder data available for this token.</td></tr>';
+            ? '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">Holder data temporarily unavailable. Click refresh to retry.</td></tr>'
+            : '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No holder data available for this token.</td></tr>';
         }
         // Don't cache RPC failures in frontend
         if (data.error === 'rpc_unavailable') {
@@ -908,6 +910,9 @@ const tokenDetail = {
           expandBtn.innerHTML = `Show All ${holders.length} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
         }
       }
+
+      // Lazy-load hold times after table renders (non-blocking)
+      this._loadHoldTimes();
     } catch (error) {
       console.warn('[TokenDetail] Holder analytics failed:', error.message);
     } finally {
@@ -939,12 +944,18 @@ const tokenDetail = {
         : h.isBurnt ? ' <span class="holder-label burnt-label" title="Burn Wallet">🔥Burn</span>'
         : '';
       const rowClass = h.isLP || h.isBurnt ? ' class="holder-excluded"' : '';
+      // Show hold time if available, otherwise a placeholder that will be filled lazily
+      const holdTimeStr = (h.isLP || h.isBurnt) ? '--'
+        : (this._holdTimesData && this._holdTimesData[h.address])
+          ? this._formatHoldTime(this._holdTimesData[h.address])
+          : '<span class="hold-time-pending" data-wallet="' + h.address + '">...</span>';
       return `<tr${rowClass}>
         <td>${h.rank}</td>
         <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a>${label}</td>
         <td class="text-right mono">${bal}</td>
         <td class="text-right mono">${valStr}</td>
         <td class="text-right mono">${pct}</td>
+        <td class="text-right mono holders-holdtime-col">${holdTimeStr}</td>
         <td class="holders-share-col"><div class="holders-share-bar" style="width:${barW.toFixed(1)}%"></div></td>
       </tr>`;
     }).join('');
@@ -962,6 +973,48 @@ const tokenDetail = {
       else if (sec < 3600) el.textContent = `Updated ${Math.floor(sec / 60)}m ago`;
       else el.textContent = `Updated ${Math.floor(sec / 3600)}h ago`;
     }, 10000);
+  },
+
+  // Format hold time from milliseconds to human-readable string
+  _formatHoldTime(ms) {
+    if (!ms || ms <= 0) return '--';
+    const hours = ms / 3600000;
+    if (hours < 1) return Math.round(ms / 60000) + 'm';
+    if (hours < 24) return Math.round(hours) + 'h';
+    const days = hours / 24;
+    if (days < 30) return Math.round(days) + 'd';
+    const months = days / 30;
+    if (months < 12) return Math.round(months) + 'mo';
+    return (days / 365).toFixed(1) + 'y';
+  },
+
+  // Lazy-load average hold times for holder wallets
+  async _loadHoldTimes() {
+    try {
+      const data = await api.tokens.getHolderHoldTimes(this.mint);
+      if (!data || !data.holdTimes) return;
+      this._holdTimesData = data.holdTimes;
+
+      // Fill in pending placeholders
+      const pending = document.querySelectorAll('.hold-time-pending');
+      pending.forEach(el => {
+        const wallet = el.getAttribute('data-wallet');
+        if (wallet && this._holdTimesData[wallet]) {
+          el.textContent = this._formatHoldTime(this._holdTimesData[wallet]);
+          el.classList.remove('hold-time-pending');
+        } else {
+          el.textContent = '--';
+          el.classList.remove('hold-time-pending');
+        }
+      });
+    } catch (error) {
+      console.warn('[TokenDetail] Hold times failed:', error.message);
+      // Replace pending indicators with dashes on failure
+      document.querySelectorAll('.hold-time-pending').forEach(el => {
+        el.textContent = '--';
+        el.classList.remove('hold-time-pending');
+      });
+    }
   },
 
   // Load chart data

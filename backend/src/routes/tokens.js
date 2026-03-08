@@ -1580,6 +1580,65 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
   }
 }));
 
+// GET /api/tokens/:mint/holders/hold-times - Average hold time per holder wallet
+// Fetches swap history from Helius for each holder and computes avg hold duration.
+// Designed to be called lazily after the holders table loads.
+router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+  const cacheKey = `hold-times:${mint}`;
+
+  try {
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get holder data (likely already cached from the main holders call)
+    const holdersCache = await cache.get(`holders:${mint}`);
+    if (!holdersCache || !holdersCache.holders || holdersCache.holders.length === 0) {
+      return res.json({ holdTimes: {} });
+    }
+
+    // Only compute for real holders (skip LP and burn wallets)
+    const wallets = holdersCache.holders
+      .filter(h => !h.isLP && !h.isBurnt && h.address)
+      .map(h => h.address);
+
+    if (wallets.length === 0) {
+      return res.json({ holdTimes: {} });
+    }
+
+    // Fetch hold times in batches of 5 to avoid Helius rate limits
+    const BATCH_SIZE = 5;
+    const results = [];
+    for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
+      const batch = wallets.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (wallet) => {
+          try {
+            const avgMs = await solanaService.getWalletAvgHoldTime(wallet);
+            return [wallet, avgMs];
+          } catch (err) {
+            console.warn(`[Tokens] Hold time failed for ${wallet}:`, err.message);
+            return [wallet, null];
+          }
+        })
+      );
+      results.push(...batchResults);
+    }
+
+    const holdTimes = {};
+    for (const [wallet, avgMs] of results) {
+      if (avgMs != null) holdTimes[wallet] = avgMs;
+    }
+
+    const result = { holdTimes };
+    await cache.set(cacheKey, result, TTL.HOUR);
+    res.json(result);
+  } catch (error) {
+    console.error('[Tokens] Hold times error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch hold times' });
+  }
+}));
+
 // GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
 // Anti-spoofing: helps users identify confusing or copycat token names
 // Returns fast DB results inline (~5-20ms), then queues worker for GeckoTerminal enrichment.

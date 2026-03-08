@@ -2547,6 +2547,16 @@ tr.holder-excluded {
 
 .holders-table .mono { font-family: var(--font-mono); }
 
+.hold-time-pending {
+  color: var(--text-muted);
+  animation: holdTimePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes holdTimePulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 .holder-address {
   color: var(--accent-primary);
   text-decoration: none;
@@ -6720,7 +6730,8 @@ select {
   .holders-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
-  .holders-share-col {
+  .holders-share-col,
+  .holders-holdtime-col {
     display: none;
   }
 }

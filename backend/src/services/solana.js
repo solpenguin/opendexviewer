@@ -599,6 +599,105 @@ async function getTokenAuthorities(mintAddress) {
 }
 
 /**
+ * Fetch parsed transaction history for a wallet using Helius Enhanced Transactions API.
+ * Uses Helius's getTransactionsForAddress which returns human-readable, enriched
+ * transaction data including swap details, token transfers, and timestamps.
+ *
+ * @param {string} walletAddress - Solana wallet address
+ * @param {Object} [options] - Query options
+ * @param {number} [options.limit=100] - Max transactions to return (up to 100)
+ * @param {string} [options.type] - Filter by transaction type (e.g. 'SWAP')
+ * @returns {Promise<Array|null>} - Array of parsed transactions or null
+ */
+async function getTransactionsForAddress(walletAddress, { limit = 100, type } = {}) {
+  if (!HELIUS_API_KEY) return null;
+
+  try {
+    const params = { 'api-key': HELIUS_API_KEY, limit };
+    if (type) params.type = type;
+
+    const response = await axios.get(
+      `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions`,
+      { params, timeout: 15000, httpsAgent }
+    );
+
+    if (!response.data || !Array.isArray(response.data)) return null;
+    return response.data;
+  } catch (error) {
+    console.error(`[Solana] getTransactionsForAddress error for ${walletAddress}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Calculate average hold time for a wallet based on their last 100 swap transactions.
+ * Analyzes token purchases and sales to determine how long the wallet typically
+ * holds tokens before selling.
+ *
+ * @param {string} walletAddress - Solana wallet address
+ * @returns {Promise<number|null>} - Average hold time in milliseconds, or null if unavailable
+ */
+// Base currencies and stablecoins to exclude from hold time calculations.
+// These appear in every swap as intermediaries and would skew the average.
+const HOLD_TIME_EXCLUDE_MINTS = new Set([
+  'So11111111111111111111111111111111111111112',  // Wrapped SOL
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+]);
+
+async function getWalletAvgHoldTime(walletAddress) {
+  const transactions = await getTransactionsForAddress(walletAddress, { limit: 100, type: 'SWAP' });
+  if (!transactions || transactions.length === 0) return null;
+
+  // Track per-token buy/sell timestamps
+  // tokenEvents: mint -> { firstBuy: timestamp, lastSell: timestamp|null }
+  const tokenEvents = new Map();
+
+  for (const tx of transactions) {
+    const timestamp = (tx.timestamp || 0) * 1000; // seconds → ms
+    if (!timestamp || !tx.tokenTransfers) continue;
+
+    for (const transfer of tx.tokenTransfers) {
+      const mint = transfer.mint;
+      if (!mint || HOLD_TIME_EXCLUDE_MINTS.has(mint)) continue;
+
+      if (transfer.toUserAccount === walletAddress) {
+        // Wallet received tokens → BUY
+        if (!tokenEvents.has(mint)) {
+          tokenEvents.set(mint, { firstBuy: timestamp, lastSell: null });
+        } else {
+          const ev = tokenEvents.get(mint);
+          if (timestamp < ev.firstBuy) ev.firstBuy = timestamp;
+        }
+      } else if (transfer.fromUserAccount === walletAddress) {
+        // Wallet sent tokens → SELL
+        if (tokenEvents.has(mint)) {
+          const ev = tokenEvents.get(mint);
+          if (!ev.lastSell || timestamp > ev.lastSell) ev.lastSell = timestamp;
+        }
+      }
+    }
+  }
+
+  if (tokenEvents.size === 0) return null;
+
+  const now = Date.now();
+  let totalHoldTime = 0;
+  let count = 0;
+
+  for (const [, events] of tokenEvents) {
+    const holdEnd = events.lastSell || now;
+    const holdTime = holdEnd - events.firstBuy;
+    if (holdTime > 0) {
+      totalHoldTime += holdTime;
+      count++;
+    }
+  }
+
+  return count > 0 ? Math.floor(totalHoldTime / count) : null;
+}
+
+/**
  * Get total locked token amount from Streamflow vesting contracts.
  * Queries on-chain Streamflow program accounts filtered by token mint,
  * then sums (deposited - withdrawn) for all active (non-closed) streams.
@@ -671,6 +770,8 @@ module.exports = {
   getTokenMetadataBatch,
   getStreamflowLockedAmount,
   getTokenAuthorities,
+  getTransactionsForAddress,
+  getWalletAvgHoldTime,
   isHeliusConfigured,
   checkHealth
 };
