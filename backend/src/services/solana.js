@@ -624,20 +624,24 @@ async function getTransactionsForAddress(walletAddress, { limit = 100, type } = 
     if (!response.data || !Array.isArray(response.data)) return null;
     return response.data;
   } catch (error) {
+    // 404 is expected for token accounts (ATAs) and program-owned addresses
+    // that don't have wallet-level transaction history — not an error
+    if (error.response && error.response.status === 404) return null;
     console.error(`[Solana] getTransactionsForAddress error for ${walletAddress}:`, error.message);
     return null;
   }
 }
 
 /**
- * Calculate average hold time for a wallet based on their last 100 swap transactions.
- * Analyzes token purchases and sales to determine how long the wallet typically
- * holds tokens before selling.
+ * Get hold metrics for a wallet: average hold time across all tokens AND
+ * how long the wallet has held a specific token. Uses a single Helius API call
+ * (unfiltered) and extracts both metrics from the same transaction data.
  *
  * @param {string} walletAddress - Solana wallet address
- * @returns {Promise<number|null>} - Average hold time in milliseconds, or null if unavailable
+ * @param {string} tokenMint - The specific token mint to measure hold duration for
+ * @returns {Promise<{avgHoldTime: number|null, tokenHoldTime: number|null}>}
  */
-// Base currencies and stablecoins to exclude from hold time calculations.
+// Base currencies and stablecoins to exclude from avg hold time calculations.
 // These appear in every swap as intermediaries and would skew the average.
 const HOLD_TIME_EXCLUDE_MINTS = new Set([
   'So11111111111111111111111111111111111111112',  // Wrapped SOL
@@ -645,13 +649,17 @@ const HOLD_TIME_EXCLUDE_MINTS = new Set([
   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
 ]);
 
-async function getWalletAvgHoldTime(walletAddress) {
-  const transactions = await getTransactionsForAddress(walletAddress, { limit: 100, type: 'SWAP' });
-  if (!transactions || transactions.length === 0) return null;
+async function getWalletHoldMetrics(walletAddress, tokenMint) {
+  // Fetch ALL transaction types (not just SWAP) so we catch token transfers too
+  const transactions = await getTransactionsForAddress(walletAddress, { limit: 100 });
+  if (!transactions || transactions.length === 0) {
+    return { avgHoldTime: null, tokenHoldTime: null };
+  }
 
-  // Track per-token buy/sell timestamps
-  // tokenEvents: mint -> { firstBuy: timestamp, lastSell: timestamp|null }
+  // Track per-token buy/sell timestamps for avg hold time (SWAP transactions only)
   const tokenEvents = new Map();
+  // Track earliest receive of the specific token (any transaction type)
+  let earliestTokenReceive = null;
 
   for (const tx of transactions) {
     const timestamp = (tx.timestamp || 0) * 1000; // seconds → ms
@@ -659,42 +667,52 @@ async function getWalletAvgHoldTime(walletAddress) {
 
     for (const transfer of tx.tokenTransfers) {
       const mint = transfer.mint;
-      if (!mint || HOLD_TIME_EXCLUDE_MINTS.has(mint)) continue;
+      if (!mint) continue;
 
-      if (transfer.toUserAccount === walletAddress) {
-        // Wallet received tokens → BUY
-        if (!tokenEvents.has(mint)) {
-          tokenEvents.set(mint, { firstBuy: timestamp, lastSell: null });
-        } else {
-          const ev = tokenEvents.get(mint);
-          if (timestamp < ev.firstBuy) ev.firstBuy = timestamp;
+      // Track specific token hold duration (all transfer types)
+      if (mint === tokenMint && transfer.toUserAccount === walletAddress) {
+        if (!earliestTokenReceive || timestamp < earliestTokenReceive) {
+          earliestTokenReceive = timestamp;
         }
-      } else if (transfer.fromUserAccount === walletAddress) {
-        // Wallet sent tokens → SELL
-        if (tokenEvents.has(mint)) {
-          const ev = tokenEvents.get(mint);
-          if (!ev.lastSell || timestamp > ev.lastSell) ev.lastSell = timestamp;
+      }
+
+      // Track avg hold time from SWAP transactions only, excluding base currencies
+      if (tx.type === 'SWAP' && !HOLD_TIME_EXCLUDE_MINTS.has(mint)) {
+        if (transfer.toUserAccount === walletAddress) {
+          if (!tokenEvents.has(mint)) {
+            tokenEvents.set(mint, { firstBuy: timestamp, lastSell: null });
+          } else {
+            const ev = tokenEvents.get(mint);
+            if (timestamp < ev.firstBuy) ev.firstBuy = timestamp;
+          }
+        } else if (transfer.fromUserAccount === walletAddress) {
+          if (tokenEvents.has(mint)) {
+            const ev = tokenEvents.get(mint);
+            if (!ev.lastSell || timestamp > ev.lastSell) ev.lastSell = timestamp;
+          }
         }
       }
     }
   }
 
-  if (tokenEvents.size === 0) return null;
-
-  const now = Date.now();
-  let totalHoldTime = 0;
-  let count = 0;
-
-  for (const [, events] of tokenEvents) {
-    const holdEnd = events.lastSell || now;
-    const holdTime = holdEnd - events.firstBuy;
-    if (holdTime > 0) {
-      totalHoldTime += holdTime;
-      count++;
+  // Calculate avg hold time
+  let avgHoldTime = null;
+  if (tokenEvents.size > 0) {
+    const now = Date.now();
+    let totalHoldTime = 0;
+    let count = 0;
+    for (const [, events] of tokenEvents) {
+      const holdEnd = events.lastSell || now;
+      const holdTime = holdEnd - events.firstBuy;
+      if (holdTime > 0) { totalHoldTime += holdTime; count++; }
     }
+    if (count > 0) avgHoldTime = Math.floor(totalHoldTime / count);
   }
 
-  return count > 0 ? Math.floor(totalHoldTime / count) : null;
+  // Calculate specific token hold time
+  const tokenHoldTime = earliestTokenReceive ? Date.now() - earliestTokenReceive : null;
+
+  return { avgHoldTime, tokenHoldTime };
 }
 
 /**
@@ -771,7 +789,7 @@ module.exports = {
   getStreamflowLockedAmount,
   getTokenAuthorities,
   getTransactionsForAddress,
-  getWalletAvgHoldTime,
+  getWalletHoldMetrics,
   isHeliusConfigured,
   checkHealth
 };

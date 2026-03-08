@@ -1581,20 +1581,18 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/tokens/:mint/holders/hold-times - Average hold time per holder wallet
-// Fetches swap history from Helius for each holder and computes avg hold duration.
-// Designed to be called lazily after the holders table loads.
+// Returns cached per-wallet hold times immediately. If any wallets are stale
+// (>24hr or missing), queues a background worker job to compute them.
+// Response includes `computed: false` when stale wallets are pending so the
+// frontend knows to re-poll.
 router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
-  const cacheKey = `hold-times:${mint}`;
 
   try {
-    const cached = await cache.get(cacheKey);
-    if (cached) return res.json(cached);
-
     // Get holder data (likely already cached from the main holders call)
     const holdersCache = await cache.get(`holders:${mint}`);
     if (!holdersCache || !holdersCache.holders || holdersCache.holders.length === 0) {
-      return res.json({ holdTimes: {} });
+      return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: true });
     }
 
     // Only compute for real holders (skip LP and burn wallets)
@@ -1603,36 +1601,53 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       .map(h => h.address);
 
     if (wallets.length === 0) {
-      return res.json({ holdTimes: {} });
+      return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: true });
     }
 
-    // Fetch hold times in batches of 5 to avoid Helius rate limits
-    const BATCH_SIZE = 5;
-    const results = [];
-    for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
-      const batch = wallets.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (wallet) => {
-          try {
-            const avgMs = await solanaService.getWalletAvgHoldTime(wallet);
-            return [wallet, avgMs];
-          } catch (err) {
-            console.warn(`[Tokens] Hold time failed for ${wallet}:`, err.message);
-            return [wallet, null];
-          }
-        })
-      );
-      results.push(...batchResults);
-    }
-
+    // Check per-wallet caches, collect stale/missing wallets.
+    // Cached values are either positive numbers or -1 sentinels (no data).
     const holdTimes = {};
-    for (const [wallet, avgMs] of results) {
-      if (avgMs != null) holdTimes[wallet] = avgMs;
+    const tokenHoldTimes = {};
+    const staleWallets = [];
+
+    await Promise.all(wallets.map(async (wallet) => {
+      const [avgCached, tokenCached] = await Promise.all([
+        cache.get(`wallet-hold-time:${wallet}`),
+        cache.get(`wallet-token-hold:${wallet}:${mint}`)
+      ]);
+
+      if (avgCached != null) {
+        if (avgCached > 0) holdTimes[wallet] = avgCached;
+      }
+      if (tokenCached != null) {
+        if (tokenCached > 0) tokenHoldTimes[wallet] = tokenCached;
+      }
+
+      // Stale if either cache is missing
+      if (avgCached == null || tokenCached == null) {
+        staleWallets.push(wallet);
+      }
+    }));
+
+    // Queue worker for stale wallets (deduped by pending flag)
+    let computed = true;
+    if (staleWallets.length > 0) {
+      const pendingKey = `hold-times-pending:${mint}`;
+      const isPending = await cache.get(pendingKey);
+      if (!isPending) {
+        await cache.set(pendingKey, true, 120000); // 2 min dedup window
+        const job = await jobQueue.addAnalyticsJob('compute-hold-times', {
+          mint,
+          wallets: staleWallets
+        });
+        if (!job) {
+          await cache.delete(pendingKey);
+        }
+      }
+      computed = false;
     }
 
-    const result = { holdTimes };
-    await cache.set(cacheKey, result, TTL.HOUR);
-    res.json(result);
+    res.json({ holdTimes, tokenHoldTimes, computed });
   } catch (error) {
     console.error('[Tokens] Hold times error:', error.message);
     res.status(500).json({ error: 'Failed to fetch hold times' });

@@ -19,6 +19,7 @@ const { Worker } = require('bullmq');
 // Import services for job processing
 const db = require('./services/database');
 const geckoService = require('./services/geckoTerminal');
+const solanaService = require('./services/solana');
 const { cache, TTL, keys } = require('./services/cache');
 
 // Allowed DEXes for similar-tokens anti-spoofing filter
@@ -351,6 +352,73 @@ const jobProcessors = {
     console.log(`[Worker] Similar tokens for ${mint}: found ${final.length} results`);
 
     return { count: final.length };
+  },
+
+  // ==========================================
+  // Holder Analytics Jobs
+  // ==========================================
+
+  /**
+   * Compute average hold times for holder wallets.
+   * Fetches swap history from Helius for each wallet that doesn't have
+   * a fresh per-wallet cache entry. Results are cached per-wallet for 24 hours.
+   */
+  'compute-hold-times': async (job) => {
+    const { mint, wallets } = job.data;
+    if (!wallets || wallets.length === 0) return { computed: 0 };
+
+    console.log(`[Worker] Computing hold times for ${wallets.length} wallets (token ${mint})`);
+
+    const BATCH_SIZE = 5;
+    let computed = 0;
+    let skipped = 0;
+
+    for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
+      const batch = wallets.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (wallet) => {
+          try {
+            const metrics = await solanaService.getWalletHoldMetrics(wallet, mint);
+            return [wallet, metrics];
+          } catch (err) {
+            console.warn(`[Worker] Hold time failed for ${wallet}:`, err.message);
+            return [wallet, null];
+          }
+        })
+      );
+
+      for (const [wallet, metrics] of batchResults) {
+        if (!metrics) {
+          // No data at all — cache sentinels for both
+          await cache.set(`wallet-hold-time:${wallet}`, -1, TTL.DAY);
+          await cache.set(`wallet-token-hold:${wallet}:${mint}`, -1, TTL.DAY);
+          skipped++;
+          continue;
+        }
+
+        // Cache avg hold time (wallet-level, reusable across tokens)
+        if (metrics.avgHoldTime != null) {
+          await cache.set(`wallet-hold-time:${wallet}`, metrics.avgHoldTime, TTL.DAY);
+        } else {
+          await cache.set(`wallet-hold-time:${wallet}`, -1, TTL.DAY);
+        }
+
+        // Cache token-specific hold time
+        if (metrics.tokenHoldTime != null) {
+          await cache.set(`wallet-token-hold:${wallet}:${mint}`, metrics.tokenHoldTime, TTL.DAY);
+        } else {
+          await cache.set(`wallet-token-hold:${wallet}:${mint}`, -1, TTL.DAY);
+        }
+
+        computed++;
+      }
+    }
+
+    // Clear pending flag so the endpoint knows computation is done
+    await cache.delete(`hold-times-pending:${mint}`);
+
+    console.log(`[Worker] Hold times for ${mint}: ${computed} computed, ${skipped} no data`);
+    return { computed, skipped };
   }
 };
 

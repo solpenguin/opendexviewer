@@ -2422,7 +2422,6 @@ a:hover {
 }
 
 .holders-share-col {
-  width: 80px;
   min-width: 60px;
 }
 
@@ -2547,7 +2546,8 @@ tr.holder-excluded {
 
 .holders-table .mono { font-family: var(--font-mono); }
 
-.hold-time-pending {
+.hold-time-pending,
+.token-hold-pending {
   color: var(--text-muted);
   animation: holdTimePulse 1.5s ease-in-out infinite;
 }

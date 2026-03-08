@@ -791,6 +791,7 @@ const tokenDetail = {
       apiCache.clearPattern(`tokens:holders:${this.mint}`);
       apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
       this._holdTimesData = null;
+      this._tokenHoldTimesData = null;
       if (refreshBtn) refreshBtn.classList.add('spinning');
     }
 
@@ -831,13 +832,14 @@ const tokenDetail = {
         const t10 = document.getElementById('holders-top10');
         const t20 = document.getElementById('holders-top20');
         const t1 = document.getElementById('holders-top1');
-        const hhi = document.getElementById('holders-hhi');
+        const avgHoldTimeEl = document.getElementById('holders-avg-hold-time');
         const avg = document.getElementById('holders-avg');
         if (t5) t5.textContent = metrics.top5Pct.toFixed(1) + '%';
         if (t10) t10.textContent = metrics.top10Pct.toFixed(1) + '%';
         if (t20) t20.textContent = metrics.top20Pct.toFixed(1) + '%';
         if (t1) t1.textContent = metrics.top1Pct.toFixed(1) + '%';
-        if (hhi) hhi.textContent = metrics.herfindahl.toFixed(0);
+        // Avg Hold Time metric is populated by _updateAvgHoldTimeMetric after hold times load
+        if (avgHoldTimeEl) avgHoldTimeEl.textContent = '...';
         if (avg) {
           const ab = metrics.avgBalance;
           avg.textContent = ab >= 1e9 ? (ab / 1e9).toFixed(1) + 'B'
@@ -855,14 +857,6 @@ const tokenDetail = {
           else if (val > 50) el.classList.add('concentration-medium');
           else el.classList.add('concentration-low');
         });
-
-        // Color-code HHI (0-10000 scale)
-        if (hhi) {
-          hhi.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
-          if (metrics.herfindahl > 2500) hhi.classList.add('concentration-high');
-          else if (metrics.herfindahl > 1500) hhi.classList.add('concentration-medium');
-          else hhi.classList.add('concentration-low');
-        }
 
         // Render risk badge
         const riskRow = document.getElementById('holders-risk-row');
@@ -925,7 +919,6 @@ const tokenDetail = {
     const tbody = document.getElementById('holders-tbody');
     if (!tbody) return;
     const price = this.token && this.token.price ? this.token.price : 0;
-    const maxPct = holders.length > 0 ? holders[0].percentage || 0 : 0;
     tbody.innerHTML = holders.slice(0, limit).map(h => {
       const shortAddr = h.address.slice(0, 4) + '...' + h.address.slice(-4);
       const pct = h.percentage != null ? h.percentage.toFixed(2) + '%' : '--';
@@ -939,16 +932,20 @@ const tokenDetail = {
           : usdVal >= 1e3 ? (usdVal / 1e3).toFixed(2) + 'K'
           : usdVal.toFixed(2))
         : '--';
-      const barW = maxPct > 0 ? ((h.percentage || 0) / maxPct) * 100 : 0;
       const label = h.isLP ? ' <span class="holder-label lp-label" title="Liquidity Pool">💧LP</span>'
         : h.isBurnt ? ' <span class="holder-label burnt-label" title="Burn Wallet">🔥Burn</span>'
         : '';
       const rowClass = h.isLP || h.isBurnt ? ' class="holder-excluded"' : '';
-      // Show hold time if available, otherwise a placeholder that will be filled lazily
+      // Show avg hold time if available, otherwise a placeholder that will be filled lazily
       const holdTimeStr = (h.isLP || h.isBurnt) ? '--'
         : (this._holdTimesData && this._holdTimesData[h.address])
           ? this._formatHoldTime(this._holdTimesData[h.address])
           : '<span class="hold-time-pending" data-wallet="' + h.address + '">...</span>';
+      // Show token-specific hold time (how long they've held THIS token)
+      const tokenHoldStr = (h.isLP || h.isBurnt) ? '--'
+        : (this._tokenHoldTimesData && this._tokenHoldTimesData[h.address])
+          ? this._formatHoldTime(this._tokenHoldTimesData[h.address])
+          : '<span class="token-hold-pending" data-wallet="' + h.address + '">...</span>';
       return `<tr${rowClass}>
         <td>${h.rank}</td>
         <td><a href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener" class="holder-address" title="${h.address}">${shortAddr}</a>${label}</td>
@@ -956,7 +953,7 @@ const tokenDetail = {
         <td class="text-right mono">${valStr}</td>
         <td class="text-right mono">${pct}</td>
         <td class="text-right mono holders-holdtime-col">${holdTimeStr}</td>
-        <td class="holders-share-col"><div class="holders-share-bar" style="width:${barW.toFixed(1)}%"></div></td>
+        <td class="text-right mono holders-share-col">${tokenHoldStr}</td>
       </tr>`;
     }).join('');
   },
@@ -988,33 +985,92 @@ const tokenDetail = {
     return (days / 365).toFixed(1) + 'y';
   },
 
-  // Lazy-load average hold times for holder wallets
-  async _loadHoldTimes() {
+  // Lazy-load average hold times for holder wallets.
+  // If the backend returns computed: false (worker still processing),
+  // re-poll up to 3 times with increasing delay to pick up results.
+  async _loadHoldTimes(attempt = 0) {
+    const MAX_POLLS = 3;
+    const POLL_DELAYS = [4000, 6000, 10000]; // ms between retries
+
     try {
+      // Bypass frontend cache on re-polls so we get fresh worker results
+      if (attempt > 0) {
+        apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
+      }
+
       const data = await api.tokens.getHolderHoldTimes(this.mint);
-      if (!data || !data.holdTimes) return;
-      this._holdTimesData = data.holdTimes;
+      if (!data) return;
+
+      // Merge into existing data (re-polls add to previous results)
+      if (data.holdTimes) {
+        this._holdTimesData = Object.assign(this._holdTimesData || {}, data.holdTimes);
+      }
+      if (data.tokenHoldTimes) {
+        this._tokenHoldTimesData = Object.assign(this._tokenHoldTimesData || {}, data.tokenHoldTimes);
+      }
 
       // Fill in pending placeholders
-      const pending = document.querySelectorAll('.hold-time-pending');
-      pending.forEach(el => {
+      this._applyHoldTimesToDOM();
+
+      // Re-poll if worker is still computing and we haven't exhausted retries
+      if (!data.computed && attempt < MAX_POLLS) {
+        setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
+      } else if (data.computed || attempt >= MAX_POLLS) {
+        // Final pass — replace any remaining placeholders with dashes
+        document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
+          el.textContent = '--';
+          el.classList.remove('hold-time-pending', 'token-hold-pending');
+        });
+        this._updateAvgHoldTimeMetric();
+      }
+    } catch (error) {
+      console.warn('[TokenDetail] Hold times failed:', error.message);
+      document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
+        el.textContent = '--';
+        el.classList.remove('hold-time-pending', 'token-hold-pending');
+      });
+      const avgEl = document.getElementById('holders-avg-hold-time');
+      if (avgEl) avgEl.textContent = '--';
+    }
+  },
+
+  // Apply cached hold time data to DOM placeholders and update summary metric
+  _applyHoldTimesToDOM() {
+    if (this._holdTimesData) {
+      document.querySelectorAll('.hold-time-pending').forEach(el => {
         const wallet = el.getAttribute('data-wallet');
         if (wallet && this._holdTimesData[wallet]) {
           el.textContent = this._formatHoldTime(this._holdTimesData[wallet]);
           el.classList.remove('hold-time-pending');
-        } else {
-          el.textContent = '--';
-          el.classList.remove('hold-time-pending');
         }
       });
-    } catch (error) {
-      console.warn('[TokenDetail] Hold times failed:', error.message);
-      // Replace pending indicators with dashes on failure
-      document.querySelectorAll('.hold-time-pending').forEach(el => {
-        el.textContent = '--';
-        el.classList.remove('hold-time-pending');
+    }
+    if (this._tokenHoldTimesData) {
+      document.querySelectorAll('.token-hold-pending').forEach(el => {
+        const wallet = el.getAttribute('data-wallet');
+        if (wallet && this._tokenHoldTimesData[wallet]) {
+          el.textContent = this._formatHoldTime(this._tokenHoldTimesData[wallet]);
+          el.classList.remove('token-hold-pending');
+        }
       });
     }
+    this._updateAvgHoldTimeMetric();
+  },
+
+  // Update the "Avg Hold Time" summary metric in the concentration metrics grid.
+  // Computes the average across all top-20 wallets that have hold time data.
+  _updateAvgHoldTimeMetric() {
+    const el = document.getElementById('holders-avg-hold-time');
+    if (!el || !this._holdTimesData) return;
+
+    const values = Object.values(this._holdTimesData).filter(v => v > 0);
+    if (values.length === 0) {
+      el.textContent = '--';
+      return;
+    }
+
+    const avgMs = values.reduce((sum, v) => sum + v, 0) / values.length;
+    el.textContent = this._formatHoldTime(avgMs);
   },
 
   // Load chart data
