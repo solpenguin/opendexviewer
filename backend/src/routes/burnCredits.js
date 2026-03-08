@@ -3,11 +3,9 @@
  * Allows users to burn $OD tokens and receive Burn Credits (BC)
  *
  * Security model:
- * - Wallet ownership proved via signed message (same pattern as votes/submissions)
- * - Signature replay protection via Redis/in-memory map
  * - Transaction verified on-chain via Solana RPC (jsonParsed encoding)
  * - Only SPL Token burn/burnChecked instructions for the exact $OD mint are accepted
- * - Signer of the on-chain tx must match the submitting wallet
+ * - Signer of the on-chain tx must match the submitting wallet (proves ownership)
  * - UNIQUE constraint on tx_signature prevents double-crediting
  * - Rate limited: 10/min (strict) + 50/hr (very strict)
  */
@@ -16,12 +14,7 @@ const router = express.Router();
 const db = require('../services/database');
 const solana = require('../services/solana');
 const { strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
-const {
-  verifyWalletSignature,
-  isSignatureUsed,
-  markSignatureUsed,
-  SIGNATURE_EXPIRY_MS
-} = require('../middleware/validation');
+// Wallet signature verification not needed — on-chain tx signer check is sufficient
 
 // $OD token mint address
 const OD_TOKEN_MINT = '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump';
@@ -211,20 +204,17 @@ router.get('/history/:wallet', async (req, res) => {
  * Required body fields:
  * - txSignature: Solana transaction signature or explorer URL
  * - walletAddress: Submitter's wallet address
- * - signature: Wallet signature (array of 64 bytes)
- * - signatureTimestamp: Timestamp when the message was signed
  *
  * Security measures:
  * 1. Rate limited (strict + very strict)
- * 2. Wallet ownership verified via signed message + replay protection
- * 3. Transaction fetched and verified on-chain via Solana RPC
- * 4. Only explicit SPL Token burn/burnChecked instructions for $OD mint accepted
- * 5. On-chain tx signer must match the submitting wallet
- * 6. UNIQUE DB constraint on tx_signature prevents double-crediting
+ * 2. Transaction fetched and verified on-chain via Solana RPC
+ * 3. Only explicit SPL Token burn/burnChecked instructions for $OD mint accepted
+ * 4. On-chain tx signer must match the submitting wallet (proves ownership)
+ * 5. UNIQUE DB constraint on tx_signature prevents double-crediting
  * 7. Race condition handled via DB constraint error catch
  */
 router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
-  const { txSignature, walletAddress, signature, signatureTimestamp } = req.body;
+  const { txSignature, walletAddress } = req.body;
 
   // --- Input validation ---
   if (!txSignature || !walletAddress) {
@@ -235,49 +225,8 @@ router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 
-  // --- Wallet signature verification (proves wallet ownership) ---
-  if (!signature || !signatureTimestamp) {
-    return res.status(400).json({ error: 'Wallet signature is required to verify ownership' });
-  }
-
-  // Validate timestamp freshness
-  const now = Date.now();
-  const timestamp = parseInt(signatureTimestamp);
-  if (isNaN(timestamp)) {
-    return res.status(400).json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' });
-  }
-  if (now - timestamp > SIGNATURE_EXPIRY_MS) {
-    return res.status(400).json({
-      error: 'Signature expired',
-      message: 'Please sign again - signatures expire after 2 minutes',
-      code: 'SIGNATURE_EXPIRED'
-    });
-  }
-  if (timestamp > now + 10000) {
-    return res.status(400).json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' });
-  }
-
-  // Validate signature format (array of 64 bytes, 0-255)
-  if (!Array.isArray(signature) || signature.length !== 64 ||
-      !signature.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
-    return res.status(400).json({ error: 'Invalid signature format', code: 'INVALID_SIGNATURE_FORMAT' });
-  }
-
-  // Check signature replay
-  const sigKey = signature.join(',');
-  if (await isSignatureUsed(sigKey)) {
-    return res.status(400).json({ error: 'Signature already used', code: 'SIGNATURE_REPLAY' });
-  }
-
-  // Verify the signature against the expected message
-  const expectedMessage = `OpenDex Burn: submit burn tx for ${walletAddress} at ${signatureTimestamp}`;
-  const isValid = verifyWalletSignature(expectedMessage, signature, walletAddress);
-  if (!isValid) {
-    return res.status(403).json({ error: 'Invalid wallet signature', code: 'INVALID_SIGNATURE' });
-  }
-
-  // Mark signature as used (prevents replay)
-  await markSignatureUsed(sigKey, SIGNATURE_EXPIRY_MS);
+  // No separate wallet signature needed — analyzeBurnTransaction verifies
+  // the submitting wallet is the on-chain signer of the burn transaction.
 
   // --- Clean up tx signature (handle Solscan/Explorer URLs) ---
   let cleanSignature = String(txSignature).trim();

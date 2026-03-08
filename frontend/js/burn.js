@@ -452,20 +452,11 @@ const burnPage = {
   },
 
   async submitTxToBackend(txSignature) {
-    // Sign a message to prove wallet ownership
-    const signatureTimestamp = Date.now();
-    const message = `OpenDex Burn: submit burn tx for ${this.walletAddress} at ${signatureTimestamp}`;
-
-    const signResult = await wallet.signMessage(message);
-    if (!signResult || !signResult.signature) {
-      throw new Error('Failed to get wallet signature for verification');
-    }
-
+    // No separate wallet signature needed — the on-chain transaction
+    // already proves wallet ownership (backend verifies the signer)
     const result = await api.burnCredits.submit({
       txSignature,
-      walletAddress: this.walletAddress,
-      signature: signResult.signature,
-      signatureTimestamp
+      walletAddress: this.walletAddress
     });
 
     // Show success
@@ -498,15 +489,12 @@ const burnPage = {
     this.hideMessages();
 
     if (submitBtn) submitBtn.disabled = true;
-    if (submitText) submitText.textContent = 'Signing...';
-    if (statusEl) statusEl.textContent = 'Requesting wallet signature...';
+    if (submitText) submitText.textContent = 'Verifying...';
+    if (statusEl) statusEl.textContent = 'Verifying burn transaction on-chain...';
 
     try {
-      if (typeof wallet === 'undefined' || !wallet.provider) {
+      if (!this.walletAddress) {
         throw new Error('Wallet not connected');
-      }
-      if (wallet.providerName === 'device-session') {
-        throw new Error('Cannot sign messages with a linked device session');
       }
 
       await this.submitTxToBackend(txSignature);
