@@ -1952,15 +1952,20 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
     return res.status(400).json({ error: 'Missing required metrics' });
   }
 
-  // Build minimal prompt — ~150 input tokens
-  const prompt = `Solana token holder analysis. Score 0-100 (higher=healthier). Reply ONLY as: SCORE:<number>\n<2-3 sentences>.
+  // Sanitize: clamp numbers, strip strings to safe short values
+  const num = (v, min = 0, max = 100) => typeof v === 'number' ? Math.min(max, Math.max(min, v)) : 0;
+  const safe = (v) => typeof v === 'string' ? v.replace(/[^a-zA-Z0-9./%\- ]/g, '').slice(0, 20) : 'N/A';
 
-Data (top holders by % supply):
-top5=${m.top5}% top10=${m.top10}% top20=${m.top20}% top1=${m.top1}%
-avgHoldAll=${m.avgHold||'N/A'} freshWallets=${m.freshWallets||'N/A'}
-conviction: >6h=${m.dh6h}% >24h=${m.dh24h}% >3d=${m.dh3d}% >1w=${m.dh1w}% >1M=${m.dh1m}%
-sampleSize=${m.sampleSize} analyzed=${m.analyzed}
-riskLevel=${m.riskLevel||'N/A'}`;
+  // Build minimal prompt — ~200 input tokens
+  const prompt = `Score this Solana token's holder health 0-100 (100=best). Reply ONLY as: SCORE:<number>\n<2-3 sentences explaining key factors>.
+
+Concentration (% of supply held by top N holders — lower=more distributed):
+top1=${num(m.top1)}% top5=${num(m.top5)}% top10=${num(m.top10)}% top20=${num(m.top20)}%
+Avg hold time across all tokens: ${safe(m.avgHold)}
+Fresh wallets (<24h old) in top holders: ${safe(m.freshWallets)}
+Conviction (% of sampled holders held for): >6h=${num(m.dh6h)}% >24h=${num(m.dh24h)}% >3d=${num(m.dh3d)}% >1w=${num(m.dh1w)}% >1M=${num(m.dh1m)}%
+Sample: ${num(m.analyzed, 0, 1000)} analyzed of ${num(m.sampleSize, 0, 1000)}
+Risk level: ${safe(m.riskLevel)}`;
 
   try {
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });

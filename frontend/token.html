@@ -481,9 +481,8 @@
           <!-- AI Analysis Button -->
           <button class="ai-analysis-btn" id="ai-analysis-btn" disabled title="Waiting for holder data...">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/>
-              <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/>
-              <path d="M8 14h8"/><path d="M9 18h6"/>
+              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+              <path d="M20 3v4"/><path d="M22 5h-4"/>
             </svg>
             AI Holder Analysis
           </button>
@@ -491,7 +490,12 @@
           <div class="ai-analysis-overlay" id="ai-analysis-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Holder Analysis">
             <div class="ai-analysis-modal">
               <div class="ai-analysis-header">
-                <span class="ai-analysis-title">AI Holder Analysis</span>
+                <div class="ai-analysis-header-left">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(167,139,250)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                  </svg>
+                  <span class="ai-analysis-title">AI Holder Analysis</span>
+                </div>
                 <button class="ai-analysis-close" id="ai-analysis-close" aria-label="Close">&times;</button>
               </div>
               <div class="ai-analysis-body" id="ai-analysis-body">
@@ -511,6 +515,7 @@
                     <span class="ai-score-value" id="ai-score-value">--</span>
                     <span class="ai-score-label">/ 100</span>
                   </div>
+                  <span class="ai-score-rating" id="ai-score-rating"></span>
                   <div class="ai-analysis-text" id="ai-analysis-text"></div>
                   <div class="ai-analysis-footer">
                     <span class="ai-analysis-disclaimer">Powered by Claude Haiku. Not financial advice.</span>

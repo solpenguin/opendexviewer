@@ -1042,6 +1042,7 @@ const tokenDetail = {
           this._holdTimesTimer = setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt] || 10000);
         } else {
           this._holdTimesLoaded = true;
+          this._checkAIAnalysisReady();
         }
         return;
       }
@@ -1105,6 +1106,7 @@ const tokenDetail = {
         this._holdTimesTimer = setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
       } else {
         this._holdTimesLoaded = true;
+        this._checkAIAnalysisReady();
         document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
           el.textContent = '--';
           el.classList.remove('hold-time-pending', 'token-hold-pending');
@@ -1209,16 +1211,16 @@ const tokenDetail = {
     metrics.riskLevel = riskBadge ? riskBadge.textContent.trim() : 'N/A';
 
     // Diamond hands from stored data
-    if (this._diamondHandsData && this._diamondHandsData.distribution) {
-      const d = this._diamondHandsData.distribution;
-      metrics.dh6h = d['6h'] ?? 0;
-      metrics.dh24h = d['24h'] ?? 0;
-      metrics.dh3d = d['3d'] ?? 0;
-      metrics.dh1w = d['1w'] ?? 0;
-      metrics.dh1m = d['1m'] ?? 0;
-      metrics.sampleSize = this._diamondHandsData.sampleSize || 0;
-      metrics.analyzed = this._diamondHandsData.analyzed || 0;
-    }
+    // Diamond hands conviction data (defaults to 0 if not available)
+    const dh = this._diamondHandsData;
+    const dist = dh && dh.distribution || {};
+    metrics.dh6h = dist['6h'] ?? 0;
+    metrics.dh24h = dist['24h'] ?? 0;
+    metrics.dh3d = dist['3d'] ?? 0;
+    metrics.dh1w = dist['1w'] ?? 0;
+    metrics.dh1m = dist['1m'] ?? 0;
+    metrics.sampleSize = dh ? dh.sampleSize || 0 : 0;
+    metrics.analyzed = dh ? dh.analyzed || 0 : 0;
 
     return metrics;
   },
@@ -1231,12 +1233,7 @@ const tokenDetail = {
     const errorEl = document.getElementById('ai-analysis-error');
     if (!overlay) return;
 
-    overlay.style.display = 'flex';
-    loading.style.display = 'flex';
-    result.style.display = 'none';
-    errorEl.style.display = 'none';
-
-    // Close handlers
+    // Close handler (stable reference for cleanup)
     const close = () => {
       overlay.style.display = 'none';
       document.removeEventListener('keydown', escHandler);
@@ -1246,11 +1243,31 @@ const tokenDetail = {
     document.getElementById('ai-analysis-close').onclick = close;
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
-    // Use cached result if available (same page session)
+    // Show cached result immediately (no loading flash)
     if (this._aiAnalysisCache) {
+      loading.style.display = 'none';
+      result.style.display = 'none';
+      errorEl.style.display = 'none';
+      overlay.style.display = 'flex';
       this._renderAIResult(this._aiAnalysisCache);
       return;
     }
+
+    // Show loading state
+    loading.style.display = 'flex';
+    result.style.display = 'none';
+    errorEl.style.display = 'none';
+    overlay.style.display = 'flex';
+
+    await this._fetchAIAnalysis();
+  },
+
+  // Fetch AI analysis from backend (separated for retry support)
+  async _fetchAIAnalysis() {
+    const loading = document.getElementById('ai-analysis-loading');
+    const errorEl = document.getElementById('ai-analysis-error');
+    loading.style.display = 'flex';
+    errorEl.style.display = 'none';
 
     try {
       const metrics = this._gatherAIMetrics();
@@ -1265,8 +1282,10 @@ const tokenDetail = {
       this._renderAIResult(data);
     } catch (err) {
       loading.style.display = 'none';
-      errorEl.style.display = 'block';
-      errorEl.textContent = err.message || 'Failed to get AI analysis. Try again later.';
+      errorEl.style.display = 'flex';
+      errorEl.innerHTML = '<span>' + (err.message || 'Analysis unavailable. Try again later.') +
+        '</span><button class="ai-retry-btn" id="ai-retry-btn">Retry</button>';
+      document.getElementById('ai-retry-btn').onclick = () => this._fetchAIAnalysis();
     }
   },
 
@@ -1276,22 +1295,36 @@ const tokenDetail = {
     const result = document.getElementById('ai-analysis-result');
     const scoreVal = document.getElementById('ai-score-value');
     const scoreCircle = document.getElementById('ai-score-circle');
+    const ratingEl = document.getElementById('ai-score-rating');
     const textEl = document.getElementById('ai-analysis-text');
     loading.style.display = 'none';
     result.style.display = 'flex';
 
-    const score = data.score != null ? data.score : '--';
-    scoreVal.textContent = score;
+    const score = data.score != null ? data.score : null;
+    scoreVal.textContent = score != null ? score : '--';
 
-    // Animate the ring (326.73 = 2πr circumference)
-    if (typeof score === 'number') {
+    if (score != null) {
+      // Reset dashoffset to full before animating (so reopens animate too)
+      scoreCircle.style.transition = 'none';
+      scoreCircle.style.strokeDashoffset = '326.73';
+      // Force reflow, then animate
+      scoreCircle.getBoundingClientRect();
+      scoreCircle.style.transition = 'stroke-dashoffset 1s ease, stroke 0.5s ease';
+
       const offset = 326.73 * (1 - score / 100);
       scoreCircle.style.strokeDashoffset = offset;
-      // Color based on score
-      scoreCircle.style.stroke =
-        score >= 70 ? 'var(--success, #10b981)' :
-        score >= 40 ? 'var(--warning, #f59e0b)' :
-        'var(--error, #ef4444)';
+
+      // Color based on score — ring, number, and rating label
+      const color = score >= 70 ? 'var(--success, #10b981)'
+        : score >= 40 ? 'var(--warning, #f59e0b)'
+        : 'var(--error, #ef4444)';
+      scoreCircle.style.stroke = color;
+      scoreVal.style.color = color;
+
+      // Rating label
+      const rating = score >= 80 ? 'Strong' : score >= 60 ? 'Healthy'
+        : score >= 40 ? 'Moderate' : score >= 20 ? 'Weak' : 'Critical';
+      if (ratingEl) { ratingEl.textContent = rating; ratingEl.style.color = color; }
     }
 
     textEl.textContent = data.analysis || '';
@@ -1315,6 +1348,8 @@ const tokenDetail = {
 
       if (!data) {
         console.log(`[DiamondHands] No response`);
+        this._diamondHandsLoaded = true;
+        this._checkAIAnalysisReady();
         return;
       }
 
@@ -1340,6 +1375,8 @@ const tokenDetail = {
       }
     } catch (error) {
       console.warn('[DiamondHands] Failed:', error.message);
+      this._diamondHandsLoaded = true;
+      this._checkAIAnalysisReady();
     }
   },
 
