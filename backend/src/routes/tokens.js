@@ -1634,24 +1634,28 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       }
     }));
 
-    // Queue worker for stale wallets, with inline background fallback
+    // Dispatch computation for stale wallets — try worker, fall back to inline
     let computed = true;
     if (staleWallets.length > 0) {
       const pendingKey = `hold-times-pending:${mint}`;
       const pending = await cache.get(pendingKey);
+      let needsComputation = false;
 
-      // If already pending and it's been >15s with no progress, the worker
-      // likely isn't running — clear the flag so we can retry inline.
-      if (pending && typeof pending === 'number' && (Date.now() - pending) > 15000) {
-        console.log(`[Tokens] Hold times pending for ${Math.round((Date.now() - pending) / 1000)}s with no progress — retrying`);
+      if (!pending) {
+        // First request — try worker, fall back to inline
+        needsComputation = true;
+      } else if (typeof pending === 'number' && (Date.now() - pending) > 15000) {
+        // Pending for >15s with no progress — worker likely isn't running
+        console.log(`[HoldTimes] Pending for ${Math.round((Date.now() - pending) / 1000)}s, stale wallets remain — forcing inline fallback`);
         await cache.delete(pendingKey);
+        needsComputation = true;
+      } else {
+        console.log(`[HoldTimes] Already pending (${typeof pending === 'number' ? Math.round((Date.now() - pending) / 1000) + 's ago' : 'flag'}), ${staleWallets.length} stale wallets — waiting`);
       }
 
-      const isStillPending = await cache.get(pendingKey);
-
-      if (!isStillPending) {
-        // Store timestamp (not boolean) so we can detect stale pending flags
+      if (needsComputation) {
         await cache.set(pendingKey, Date.now(), 120000);
+        let useInline = false;
 
         // Try worker first
         const job = await jobQueue.addAnalyticsJob('compute-hold-times', {
@@ -1659,24 +1663,42 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
           wallets: staleWallets
         });
 
-        if (!job) {
-          // No worker/Redis — compute in background without blocking the response.
+        if (job) {
+          // Check if worker is actually processing jobs
+          const workerActive = await jobQueue.isWorkerActive();
+          if (!workerActive) {
+            console.log(`[HoldTimes] Job queued but no active worker detected — using inline fallback`);
+            useInline = true;
+          } else {
+            console.log(`[HoldTimes] Job queued to worker for ${staleWallets.length} wallets`);
+          }
+        } else {
+          console.log(`[HoldTimes] Job queue unavailable — using inline fallback`);
+          useInline = true;
+        }
+
+        if (useInline) {
+          // Compute in background without blocking the response
           const bgWallets = [...staleWallets];
           const bgMint = mint;
 
           setImmediate(() => {
             (async () => {
-              console.log(`[Tokens] Computing hold times in background for ${bgWallets.length} wallets (no worker)`);
+              console.log(`[HoldTimes] Inline background: computing ${bgWallets.length} wallets for ${bgMint}`);
               const BATCH_SIZE = 5;
               const DAY_MS = 86400000;
+              let successCount = 0;
+              let failCount = 0;
               try {
                 for (let i = 0; i < bgWallets.length; i += BATCH_SIZE) {
                   const batch = bgWallets.slice(i, i + BATCH_SIZE);
                   const results = await Promise.all(
                     batch.map(async (wallet) => {
                       try {
-                        return [wallet, await solanaService.getWalletHoldMetrics(wallet, bgMint)];
+                        const metrics = await solanaService.getWalletHoldMetrics(wallet, bgMint);
+                        return [wallet, metrics];
                       } catch (err) {
+                        console.error(`[HoldTimes] Wallet ${wallet.slice(0,8)}... error:`, err.message);
                         return [wallet, null];
                       }
                     })
@@ -1686,11 +1708,13 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
                     const token = metrics?.tokenHoldTime ?? -1;
                     await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
                     await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
+                    if (avg > 0 || token > 0) successCount++;
+                    else failCount++;
                   }
                 }
-                console.log(`[Tokens] Background hold times complete for ${bgMint}`);
+                console.log(`[HoldTimes] Inline complete for ${bgMint}: ${successCount} with data, ${failCount} no data`);
               } catch (err) {
-                console.error(`[Tokens] Background hold times failed:`, err.message);
+                console.error(`[HoldTimes] Inline failed for ${bgMint}:`, err.message);
               } finally {
                 await cache.delete(`hold-times-pending:${bgMint}`);
               }
@@ -1702,6 +1726,7 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       computed = false;
     }
 
+    console.log(`[HoldTimes] Response for ${mint}: ${Object.keys(holdTimes).length} avg, ${Object.keys(tokenHoldTimes).length} token, computed=${computed}, stale=${staleWallets.length}`);
     res.json({ holdTimes, tokenHoldTimes, computed });
   } catch (error) {
     console.error('[Tokens] Hold times error:', error.message);

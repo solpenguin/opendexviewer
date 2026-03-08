@@ -498,8 +498,8 @@ const api = {
       return apiCache.getOrFetch(
         cacheKey,
         () => api.request(`/api/tokens/${mint}/holders/hold-times`),
-        apiCache.TTL.pools,
-        true
+        30000,  // Short 30s TTL — this is polled frequently for freshness
+        false   // Never return stale data — we need fresh computed status
       );
     },
 

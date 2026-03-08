@@ -321,6 +321,8 @@ const tokenDetail = {
       const total = this._holdersData.length;
       const limit = this._holdersExpanded ? total : 10;
       this._renderHoldersTable(this._holdersData, limit);
+      // Re-apply hold time data to newly rendered rows
+      this._applyHoldTimesToDOM();
       if (holdersExpandBtn) {
         holdersExpandBtn.innerHTML = this._holdersExpanded
           ? 'Show Top 10 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
@@ -991,19 +993,28 @@ const tokenDetail = {
 
   // Lazy-load average hold times for holder wallets.
   // If the backend returns computed: false (worker still processing),
-  // re-poll up to 3 times with increasing delay to pick up results.
+  // re-poll up to MAX_POLLS times with increasing delay to pick up results.
   async _loadHoldTimes(attempt = 0) {
     const MAX_POLLS = 5;
     const POLL_DELAYS = [3000, 5000, 8000, 12000, 18000]; // ms between retries
 
     try {
-      // Bypass frontend cache on re-polls so we get fresh worker results
+      // Always clear frontend cache so we get fresh computed status from backend
       if (attempt > 0) {
         apiCache.clearPattern(`tokens:hold-times:${this.mint}`);
       }
 
+      console.log(`[HoldTimes] Poll ${attempt}/${MAX_POLLS} for ${this.mint.slice(0, 8)}...`);
       const data = await api.tokens.getHolderHoldTimes(this.mint);
-      if (!data) return;
+
+      if (!data) {
+        console.warn(`[HoldTimes] No data returned from API`);
+        return;
+      }
+
+      const avgCount = data.holdTimes ? Object.keys(data.holdTimes).length : 0;
+      const tokenCount = data.tokenHoldTimes ? Object.keys(data.tokenHoldTimes).length : 0;
+      console.log(`[HoldTimes] Poll ${attempt}: computed=${data.computed}, avg=${avgCount}, token=${tokenCount}`);
 
       // Merge into existing data (re-polls add to previous results)
       if (data.holdTimes) {
@@ -1018,17 +1029,25 @@ const tokenDetail = {
 
       // Re-poll if worker is still computing and we haven't exhausted retries
       if (!data.computed && attempt < MAX_POLLS) {
+        console.log(`[HoldTimes] Not computed yet, re-polling in ${POLL_DELAYS[attempt]}ms`);
         setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
-      } else if (data.computed || attempt >= MAX_POLLS) {
+      } else {
         // Final pass — replace any remaining placeholders with dashes
-        document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
+        const remaining = document.querySelectorAll('.hold-time-pending, .token-hold-pending');
+        if (remaining.length > 0) {
+          console.log(`[HoldTimes] Final: ${remaining.length} placeholders still pending → showing --`);
+        }
+        remaining.forEach(el => {
           el.textContent = '--';
           el.classList.remove('hold-time-pending', 'token-hold-pending');
         });
         this._updateAvgHoldTimeMetric();
+        const totalAvg = this._holdTimesData ? Object.keys(this._holdTimesData).length : 0;
+        const totalToken = this._tokenHoldTimesData ? Object.keys(this._tokenHoldTimesData).length : 0;
+        console.log(`[HoldTimes] Done: ${totalAvg} avg hold times, ${totalToken} token hold times loaded`);
       }
     } catch (error) {
-      console.warn('[TokenDetail] Hold times failed:', error.message);
+      console.warn('[HoldTimes] Failed:', error.message, error);
       document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
         el.textContent = '--';
         el.classList.remove('hold-time-pending', 'token-hold-pending');

@@ -610,7 +610,10 @@ async function getTokenAuthorities(mintAddress) {
  * @returns {Promise<Array|null>} - Array of parsed transactions or null
  */
 async function getTransactionsForAddress(walletAddress, { limit = 100, type } = {}) {
-  if (!HELIUS_API_KEY) return null;
+  if (!HELIUS_API_KEY) {
+    console.warn(`[Solana] getTransactionsForAddress skipped: no HELIUS_API_KEY`);
+    return null;
+  }
 
   try {
     const params = { 'api-key': HELIUS_API_KEY, limit };
@@ -621,13 +624,16 @@ async function getTransactionsForAddress(walletAddress, { limit = 100, type } = 
       { params, timeout: 15000, httpsAgent }
     );
 
-    if (!response.data || !Array.isArray(response.data)) return null;
+    if (!response.data || !Array.isArray(response.data)) {
+      console.warn(`[Solana] getTransactionsForAddress: unexpected response for ${walletAddress.slice(0, 8)}...`);
+      return null;
+    }
     return response.data;
   } catch (error) {
     // 404 is expected for token accounts (ATAs) and program-owned addresses
     // that don't have wallet-level transaction history — not an error
     if (error.response && error.response.status === 404) return null;
-    console.error(`[Solana] getTransactionsForAddress error for ${walletAddress}:`, error.message);
+    console.error(`[Solana] getTransactionsForAddress error for ${walletAddress.slice(0, 8)}...: ${error.response?.status || error.code || error.message}`);
     return null;
   }
 }
@@ -653,6 +659,7 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
   // Fetch ALL transaction types (not just SWAP) so we catch token transfers too
   const transactions = await getTransactionsForAddress(walletAddress, { limit: 100 });
   if (!transactions || transactions.length === 0) {
+    console.log(`[Solana] getWalletHoldMetrics: no txs for ${walletAddress.slice(0, 8)}... → null/null`);
     return { avgHoldTime: null, tokenHoldTime: null };
   }
 
@@ -712,6 +719,7 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
   // Calculate specific token hold time
   const tokenHoldTime = earliestTokenReceive ? Date.now() - earliestTokenReceive : null;
 
+  console.log(`[Solana] getWalletHoldMetrics ${walletAddress.slice(0, 8)}...: ${transactions.length} txs, ${tokenEvents.size} swap tokens, avg=${avgHoldTime}, tokenHold=${tokenHoldTime}`);
   return { avgHoldTime, tokenHoldTime };
 }
 
