@@ -41,7 +41,8 @@ const burnPage = {
       console.warn('[Burn] Solana web3.js not loaded - direct burn unavailable');
       return;
     }
-    this.SPL_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+    // $OD is a pump.fun token using Token-2022 (Token Extensions program)
+    this.SPL_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
     this.ASSOCIATED_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
     const rpcUrl = (typeof config !== 'undefined' && config.solana?.rpcEndpoint)
