@@ -10989,6 +10989,12 @@ body.landscape .hero h1 {
   text-decoration: underline;
 }
 
+.burn-spend-details {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .burn-page {

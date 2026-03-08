@@ -2661,6 +2661,7 @@ async function getBurnConversionRate() {
 // Set the $OD to BC conversion rate (admin only)
 async function setBurnConversionRate(rate) {
   if (!pool) throw new Error('Database not available');
+  if (!rate || rate <= 0 || !isFinite(rate)) throw new Error('Conversion rate must be a positive number');
   await pool.query(
     `INSERT INTO burn_config (key, value, updated_at) VALUES ('conversion_rate', $1, NOW())
      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
@@ -2743,48 +2744,55 @@ async function getBurnCreditBalance(walletAddress) {
 }
 
 // Spend burn credits (returns true if successful, false if insufficient balance)
+// Uses SERIALIZABLE isolation to prevent double-spend race conditions
 async function spendBurnCredits(walletAddress, amount, feature, metadata = {}) {
   if (!pool) throw new Error('Database not available');
 
-  // Use a transaction to atomically check and deduct
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
 
-    // Get current balance (earned - spent) with row-level lock
-    const earned = await client.query(
-      `SELECT COALESCE(SUM(credits_awarded), 0) AS earned
-       FROM burn_credits
-       WHERE wallet_address = $1 AND status = 'confirmed'`,
-      [walletAddress]
-    );
-    const spent = await client.query(
-      `SELECT COALESCE(SUM(amount), 0) AS spent
-       FROM burn_credit_spends
-       WHERE wallet_address = $1`,
-      [walletAddress]
-    );
+      const earned = await client.query(
+        `SELECT COALESCE(SUM(credits_awarded), 0) AS earned
+         FROM burn_credits
+         WHERE wallet_address = $1 AND status = 'confirmed'`,
+        [walletAddress]
+      );
+      const spent = await client.query(
+        `SELECT COALESCE(SUM(amount), 0) AS spent
+         FROM burn_credit_spends
+         WHERE wallet_address = $1`,
+        [walletAddress]
+      );
 
-    const balance = parseFloat(earned.rows[0].earned) - parseFloat(spent.rows[0].spent);
-    if (balance < amount) {
+      const balance = parseFloat(earned.rows[0].earned) - parseFloat(spent.rows[0].spent);
+      if (balance < amount) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+
+      await client.query(
+        `INSERT INTO burn_credit_spends (wallet_address, amount, feature, metadata)
+         VALUES ($1, $2, $3, $4)`,
+        [walletAddress, amount, feature, JSON.stringify(metadata)]
+      );
+
+      await client.query('COMMIT');
+      return true;
+    } catch (error) {
       await client.query('ROLLBACK');
-      return false;
+      // Serialization failure — retry (PostgreSQL code 40001)
+      if (error.code === '40001' && attempt < MAX_RETRIES - 1) {
+        continue;
+      }
+      throw error;
+    } finally {
+      client.release();
     }
-
-    await client.query(
-      `INSERT INTO burn_credit_spends (wallet_address, amount, feature, metadata)
-       VALUES ($1, $2, $3, $4)`,
-      [walletAddress, amount, feature, JSON.stringify(metadata)]
-    );
-
-    await client.query('COMMIT');
-    return true;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
   }
+  return false;
 }
 
 // Get burn credit history for a wallet
@@ -2793,6 +2801,20 @@ async function getBurnCreditHistory(walletAddress, limit = 20) {
   const result = await pool.query(
     `SELECT tx_signature, token_amount, credits_awarded, conversion_rate, status, created_at
      FROM burn_credits
+     WHERE wallet_address = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [walletAddress, limit]
+  );
+  return result.rows;
+}
+
+// Get burn credit spend history for a wallet
+async function getBurnCreditSpendHistory(walletAddress, limit = 20) {
+  if (!pool) return [];
+  const result = await pool.query(
+    `SELECT amount, feature, metadata, created_at
+     FROM burn_credit_spends
      WHERE wallet_address = $1
      ORDER BY created_at DESC
      LIMIT $2`,
@@ -2920,5 +2942,6 @@ module.exports = {
   recordBurnCredit,
   getBurnCreditBalance,
   getBurnCreditHistory,
+  getBurnCreditSpendHistory,
   spendBurnCredits
 };

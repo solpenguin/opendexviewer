@@ -663,6 +663,10 @@ const api = {
       return api.request(`/api/burn-credits/history/${wallet}`);
     },
 
+    async getSpendHistory(wallet) {
+      return api.request(`/api/burn-credits/spend-history/${wallet}`);
+    },
+
     async submit(data) {
       return api.request('/api/burn-credits/submit', {
         method: 'POST',

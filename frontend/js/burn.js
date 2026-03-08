@@ -192,14 +192,17 @@ const burnPage = {
     const mainForm = document.getElementById('burn-main-form');
     const statsSection = document.getElementById('burn-stats-section');
     const historySection = document.getElementById('burn-history-section');
+    const spendHistorySection = document.getElementById('burn-spend-history-section');
 
     if (connectPrompt) connectPrompt.style.display = 'none';
     if (mainForm) mainForm.style.display = 'block';
     if (statsSection) statsSection.style.display = 'block';
     if (historySection) historySection.style.display = 'block';
+    if (spendHistorySection) spendHistorySection.style.display = 'block';
 
     this.loadBalance();
     this.loadHistory();
+    this.loadSpendHistory();
     this.loadOdBalance();
   },
 
@@ -208,11 +211,13 @@ const burnPage = {
     const mainForm = document.getElementById('burn-main-form');
     const statsSection = document.getElementById('burn-stats-section');
     const historySection = document.getElementById('burn-history-section');
+    const spendHistorySection = document.getElementById('burn-spend-history-section');
 
     if (connectPrompt) connectPrompt.style.display = '';
     if (mainForm) mainForm.style.display = 'none';
     if (statsSection) statsSection.style.display = 'none';
     if (historySection) historySection.style.display = 'none';
+    if (spendHistorySection) spendHistorySection.style.display = 'none';
 
     // Reset balance display
     const balVal = document.getElementById('burn-od-balance-val');
@@ -581,6 +586,61 @@ const burnPage = {
     } catch (error) {
       console.error('Failed to load burn history:', error);
     }
+  },
+
+  async loadSpendHistory() {
+    if (!this.walletAddress) return;
+
+    const tbody = document.getElementById('burn-spend-history-body');
+    if (!tbody) return;
+
+    try {
+      const data = await api.burnCredits.getSpendHistory(this.walletAddress);
+      const history = data.history || [];
+
+      if (history.length === 0) {
+        tbody.innerHTML = `
+          <tr class="empty-row">
+            <td colspan="4">
+              <div class="empty-state"><span>No spending history yet</span></div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = history.map(entry => {
+        const date = new Date(entry.created_at);
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const featureLabel = this.formatFeatureName(entry.feature);
+        const details = this.formatSpendDetails(entry.feature, entry.metadata);
+
+        return `
+          <tr>
+            <td>${this.escapeHtml(dateStr)}</td>
+            <td class="burn-history-bc">${this.formatNumber(parseFloat(entry.amount))}</td>
+            <td>${this.escapeHtml(featureLabel)}</td>
+            <td class="burn-spend-details">${details}</td>
+          </tr>`;
+      }).join('');
+    } catch (error) {
+      console.error('Failed to load spend history:', error);
+    }
+  },
+
+  formatFeatureName(feature) {
+    const names = {
+      'ai_holder_analysis': 'AI Holder Analysis',
+    };
+    return names[feature] || feature.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  },
+
+  formatSpendDetails(feature, metadata) {
+    if (!metadata) return '';
+    if (metadata.mint) {
+      const short = metadata.mint.slice(0, 6) + '...' + metadata.mint.slice(-4);
+      return this.escapeHtml(short);
+    }
+    return '';
   },
 
   refreshHeaderBadge() {

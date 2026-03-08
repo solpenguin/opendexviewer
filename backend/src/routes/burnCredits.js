@@ -13,7 +13,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const solana = require('../services/solana');
-const { strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
+const { defaultLimiter, strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
 // Wallet signature verification not needed — on-chain tx signer check is sufficient
 
 // $OD token mint address
@@ -30,7 +30,7 @@ const TX_SIGNATURE_REGEX = /^[1-9A-HJ-NP-Za-km-z]{64,128}$/;
  * Returns the $OD token balance for a wallet (uses backend Helius RPC)
  * This avoids the frontend hitting the rate-limited public Solana RPC
  */
-router.get('/od-balance/:wallet', async (req, res) => {
+router.get('/od-balance/:wallet', defaultLimiter, async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -64,7 +64,7 @@ router.get('/od-balance/:wallet', async (req, res) => {
  * GET /api/burn-credits/blockhash
  * Returns the latest blockhash (proxied through backend Helius RPC)
  */
-router.get('/blockhash', async (req, res) => {
+router.get('/blockhash', defaultLimiter, async (req, res) => {
   try {
     const result = await solana.rpcCall('getLatestBlockhash', [{ commitment: 'confirmed' }]);
     if (!result || !result.value) {
@@ -85,7 +85,7 @@ router.get('/blockhash', async (req, res) => {
  * Sends a signed transaction via backend Helius RPC (fallback for wallets without signAndSendTransaction)
  * Body: { transaction: base64-encoded serialized transaction }
  */
-router.post('/send-tx', strictLimiter, async (req, res) => {
+router.post('/send-tx', strictLimiter, veryStrictLimiter, async (req, res) => {
   const { transaction } = req.body;
 
   if (!transaction || typeof transaction !== 'string') {
@@ -113,7 +113,7 @@ router.post('/send-tx', strictLimiter, async (req, res) => {
  * GET /api/burn-credits/tx-status/:signature
  * Checks transaction confirmation status via backend Helius RPC
  */
-router.get('/tx-status/:signature', async (req, res) => {
+router.get('/tx-status/:signature', defaultLimiter, async (req, res) => {
   const { signature } = req.params;
 
   if (!TX_SIGNATURE_REGEX.test(signature)) {
@@ -142,7 +142,7 @@ router.get('/tx-status/:signature', async (req, res) => {
  * GET /api/burn-credits/config
  * Returns the current conversion rate and token info
  */
-router.get('/config', async (req, res) => {
+router.get('/config', defaultLimiter, async (req, res) => {
   try {
     const conversionRate = await db.getBurnConversionRate();
     const aiAnalysisCost = await db.getAIAnalysisCost();
@@ -163,7 +163,7 @@ router.get('/config', async (req, res) => {
  * GET /api/burn-credits/balance/:wallet
  * Returns the burn credit balance for a wallet
  */
-router.get('/balance/:wallet', async (req, res) => {
+router.get('/balance/:wallet', defaultLimiter, async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -183,7 +183,7 @@ router.get('/balance/:wallet', async (req, res) => {
  * GET /api/burn-credits/history/:wallet
  * Returns the burn credit history for a wallet
  */
-router.get('/history/:wallet', async (req, res) => {
+router.get('/history/:wallet', defaultLimiter, async (req, res) => {
   const { wallet } = req.params;
 
   if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
@@ -196,6 +196,26 @@ router.get('/history/:wallet', async (req, res) => {
   } catch (error) {
     console.error('[BurnCredits] History error:', error.message);
     res.status(500).json({ error: 'Failed to load burn credit history' });
+  }
+});
+
+/**
+ * GET /api/burn-credits/spend-history/:wallet
+ * Returns the burn credit spending history for a wallet
+ */
+router.get('/spend-history/:wallet', defaultLimiter, async (req, res) => {
+  const { wallet } = req.params;
+
+  if (!SOLANA_ADDRESS_REGEX.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  try {
+    const history = await db.getBurnCreditSpendHistory(wallet);
+    res.json({ history });
+  } catch (error) {
+    console.error('[BurnCredits] Spend history error:', error.message);
+    res.status(500).json({ error: 'Failed to load spend history' });
   }
 });
 
@@ -316,14 +336,18 @@ router.post('/submit', strictLimiter, veryStrictLimiter, async (req, res) => {
 
     // 6. Verify transaction is not too old (prevents retroactive submission at changed rates)
     const MAX_TX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-    if (tx.blockTime) {
-      const txAge = Date.now() - (tx.blockTime * 1000);
-      if (txAge > MAX_TX_AGE_MS) {
-        return res.status(400).json({
-          error: 'Transaction is too old. Burns must be submitted within 7 days.',
-          code: 'TX_TOO_OLD'
-        });
-      }
+    if (!tx.blockTime) {
+      return res.status(400).json({
+        error: 'Transaction has no block time. Please try again later.',
+        code: 'NO_BLOCK_TIME'
+      });
+    }
+    const txAge = Date.now() - (tx.blockTime * 1000);
+    if (txAge > MAX_TX_AGE_MS) {
+      return res.status(400).json({
+        error: 'Transaction is too old. Burns must be submitted within 7 days.',
+        code: 'TX_TOO_OLD'
+      });
     }
 
     // 7. Calculate burn credits (floor to 6 decimal places to prevent rounding exploits)
@@ -427,12 +451,24 @@ function analyzeBurnTransaction(tx, expectedWallet) {
     }
   }
 
+  // Build a map of token account address → mint for resolving plain `burn` instructions
+  // (which don't include the mint field, only the token account address)
+  const tokenAccountMints = {};
+  if (tx.meta?.preTokenBalances) {
+    for (const bal of tx.meta.preTokenBalances) {
+      if (bal.mint && accountKeys[bal.accountIndex]) {
+        tokenAccountMints[accountKeys[bal.accountIndex].pubkey] = bal.mint;
+      }
+    }
+  }
+
   for (const ix of allInstructions) {
     const parsed = ix.parsed;
     if (!parsed) continue;
 
     const program = ix.program || ix.programId;
-    if (program !== 'spl-token') continue;
+    // Accept both legacy SPL Token and Token-2022
+    if (program !== 'spl-token' && program !== 'spl-token-2022') continue;
 
     // Only accept burn and burnChecked instructions
     if (parsed.type !== 'burn' && parsed.type !== 'burnChecked') continue;
@@ -441,15 +477,24 @@ function analyzeBurnTransaction(tx, expectedWallet) {
     if (!info) continue;
 
     // Verify this is the $OD token mint
-    if (info.mint !== OD_TOKEN_MINT) continue;
+    // burnChecked includes info.mint; plain burn does not — resolve from token account
+    const mint = info.mint || tokenAccountMints[info.account];
+    if (mint !== OD_TOKEN_MINT) continue;
 
     // Verify the authority is the expected wallet
     if (info.authority !== expectedWallet && info.multisigAuthority !== expectedWallet) continue;
 
     // Extract the UI amount (human-readable, decimal-adjusted)
-    // For burn: tokenAmount.uiAmount is present when parsed
-    // For burnChecked: tokenAmount.uiAmount is always present
-    const uiAmount = parseFloat(info.tokenAmount?.uiAmount || 0);
+    // burnChecked: info.tokenAmount.uiAmount is always present
+    // plain burn: only info.amount (raw integer) — convert using OD decimals (6)
+    let uiAmount;
+    if (info.tokenAmount?.uiAmount !== undefined) {
+      uiAmount = parseFloat(info.tokenAmount.uiAmount);
+    } else if (info.amount) {
+      uiAmount = parseFloat(info.amount) / 1e6; // OD_DECIMALS = 6
+    } else {
+      continue;
+    }
 
     if (uiAmount > 0) {
       totalBurnAmount += uiAmount;
