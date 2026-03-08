@@ -131,6 +131,10 @@ services:
       - key: BIRDEYE_API_KEY
         sync: false
 
+      # SSL certificate verification for PostgreSQL (set to 'false' for Render's self-signed certs)
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+
       # Application settings
       - key: NODE_ENV
         value: production

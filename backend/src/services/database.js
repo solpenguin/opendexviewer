@@ -83,9 +83,9 @@ function createPool() {
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Use SSL in production. rejectUnauthorized: true requires proper CA cert from Render.
-    // Set DB_SSL_REJECT_UNAUTHORIZED=false only if using Render's internal network with self-signed certs.
-    ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
+    // SSL in production: default rejectUnauthorized to false for Render's self-signed certs.
+    // Set DB_SSL_REJECT_UNAUTHORIZED=true only if you have proper CA certs.
+    ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true' } : false,
     max: maxConnections,                    // Maximum connections in pool
     min: parseInt(process.env.DB_POOL_MIN) || (isProduction ? 2 : 2), // Keep low to avoid exhausting Render's connection limit
     idleTimeoutMillis: 60000,               // Close idle connections after 60s
