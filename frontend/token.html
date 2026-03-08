@@ -432,7 +432,7 @@
               <span class="holder-metric-value" id="holders-top1">--</span>
             </div>
             <div class="holder-metric">
-              <span class="holder-metric-label">Avg Hold Time</span>
+              <span class="holder-metric-label">Avg Hold (All Tokens)</span>
               <span class="holder-metric-value" id="holders-avg-hold-time">--</span>
             </div>
             <div class="holder-metric">
@@ -478,6 +478,48 @@
               </div>
             </div>
           </div>
+          <!-- AI Analysis Button -->
+          <button class="ai-analysis-btn" id="ai-analysis-btn" disabled title="Waiting for holder data...">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/>
+              <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.58 3.25 3.93"/>
+              <path d="M8 14h8"/><path d="M9 18h6"/>
+            </svg>
+            AI Holder Analysis
+          </button>
+          <!-- AI Analysis Modal -->
+          <div class="ai-analysis-overlay" id="ai-analysis-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Holder Analysis">
+            <div class="ai-analysis-modal">
+              <div class="ai-analysis-header">
+                <span class="ai-analysis-title">AI Holder Analysis</span>
+                <button class="ai-analysis-close" id="ai-analysis-close" aria-label="Close">&times;</button>
+              </div>
+              <div class="ai-analysis-body" id="ai-analysis-body">
+                <div class="ai-analysis-loading" id="ai-analysis-loading">
+                  <div class="loading-spinner"></div>
+                  <span>Analyzing holder data...</span>
+                </div>
+                <div class="ai-analysis-result" id="ai-analysis-result" style="display:none;">
+                  <div class="ai-score-ring">
+                    <svg viewBox="0 0 120 120">
+                      <circle cx="60" cy="60" r="52" fill="none" stroke="var(--border-subtle)" stroke-width="8"/>
+                      <circle cx="60" cy="60" r="52" fill="none" stroke-width="8" stroke-linecap="round"
+                        id="ai-score-circle" class="ai-score-circle"
+                        stroke-dasharray="326.73" stroke-dashoffset="326.73"
+                        transform="rotate(-90 60 60)"/>
+                    </svg>
+                    <span class="ai-score-value" id="ai-score-value">--</span>
+                    <span class="ai-score-label">/ 100</span>
+                  </div>
+                  <div class="ai-analysis-text" id="ai-analysis-text"></div>
+                  <div class="ai-analysis-footer">
+                    <span class="ai-analysis-disclaimer">Powered by Claude Haiku. Not financial advice.</span>
+                  </div>
+                </div>
+                <div class="ai-analysis-error" id="ai-analysis-error" style="display:none;"></div>
+              </div>
+            </div>
+          </div>
           <!-- Supply Info (Locked) -->
           <div class="holders-supply-row" id="holders-supply-row" style="display:none;">
             <div class="holders-supply-item">
@@ -495,7 +537,7 @@
                   <th class="text-right">Balance</th>
                   <th class="text-right">Value</th>
                   <th class="text-right">%</th>
-                  <th class="text-right holders-holdtime-col">Avg Hold Time</th>
+                  <th class="text-right holders-holdtime-col">Avg Hold (All)</th>
                   <th class="text-right holders-share-col">Holding Since</th>
                 </tr>
               </thead>

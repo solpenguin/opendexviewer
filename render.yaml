@@ -39,6 +39,8 @@ services:
         sync: false
       - key: BIRDEYE_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
 
       # Admin panel password (required for /admin)
       - key: ADMIN_PASSWORD

@@ -389,10 +389,7 @@ const jobProcessors = {
 
       for (const [wallet, metrics] of batchResults) {
         if (!metrics) {
-          // No data at all — cache sentinels for all
-          await cache.set(`wallet-hold-time:${wallet}`, -1, TTL.DAY);
-          await cache.set(`wallet-token-hold:${wallet}:${mint}`, -1, TTL.DAY);
-          await cache.set(`wallet-age:${wallet}`, -1, TTL.DAY);
+          // API error (timeout, rate limit) — don't cache, so it retries next request
           skipped++;
           continue;
         }
@@ -445,9 +442,10 @@ const jobProcessors = {
       );
 
       for (const [wallet, metrics] of batchResults) {
-        const avg = metrics?.avgHoldTime ?? -1;
-        const token = metrics?.tokenHoldTime ?? -1;
-        const age = metrics?.walletAge ?? -1;
+        if (!metrics) { skipped++; continue; } // API error — skip, don't cache sentinel
+        const avg = metrics.avgHoldTime ?? -1;
+        const token = metrics.tokenHoldTime ?? -1;
+        const age = metrics.walletAge ?? -1;
         await cache.set(`wallet-hold-time:${wallet}`, avg, TTL.DAY);
         await cache.set(`wallet-token-hold:${wallet}:${mint}`, token, TTL.DAY);
         await cache.set(`wallet-age:${wallet}`, age, TTL.DAY);

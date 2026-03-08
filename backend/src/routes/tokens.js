@@ -7,7 +7,8 @@ const solanaService = require('../services/solana');
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
 const { validateMint, validatePagination, validateSearch, asyncHandler, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
-const { searchLimiter, strictLimiter } = require('../middleware/rateLimit');
+const { searchLimiter, strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
+const Anthropic = require('@anthropic-ai/sdk');
 
 // Allowed values for token list query params — prevents cache key pollution
 const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'tech', 'meme'];
@@ -1721,17 +1722,17 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
                     })
                   );
                   for (const [wallet, metrics] of results) {
-                    const avg = metrics?.avgHoldTime ?? -1;
-                    const token = metrics?.tokenHoldTime ?? -1;
-                    const age = metrics?.walletAge ?? -1; // -1 = unknown (100+ txs)
+                    if (!metrics) { failCount++; continue; } // API error — skip, don't cache sentinel
+                    const avg = metrics.avgHoldTime ?? -1;
+                    const token = metrics.tokenHoldTime ?? -1;
+                    const age = metrics.walletAge ?? -1;
                     await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
                     await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
                     await cache.set(`wallet-age:${wallet}`, age, DAY_MS);
                     if (avg > 0 || token > 0) successCount++;
-                    else failCount++;
                   }
                 }
-                console.log(`[HoldTimes] Inline complete for ${bgMint}: ${successCount} with data, ${failCount} no data`);
+                console.log(`[HoldTimes] Inline complete for ${bgMint}: ${successCount} with data, ${failCount} failed`);
               } catch (err) {
                 console.error(`[HoldTimes] Inline failed for ${bgMint}:`, err.message);
               } finally {
@@ -1874,9 +1875,10 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
                   })
                 );
                 for (const [wallet, metrics] of results) {
-                  const avg = metrics?.avgHoldTime ?? -1;
-                  const token = metrics?.tokenHoldTime ?? -1;
-                  const age = metrics?.walletAge ?? -1;
+                  if (!metrics) continue; // API error — skip, don't cache sentinel
+                  const avg = metrics.avgHoldTime ?? -1;
+                  const token = metrics.tokenHoldTime ?? -1;
+                  const age = metrics.walletAge ?? -1;
                   await cache.set(`wallet-hold-time:${wallet}`, avg, DAY_MS);
                   await cache.set(`wallet-token-hold:${wallet}:${bgMint}`, token, DAY_MS);
                   await cache.set(`wallet-age:${wallet}`, age, DAY_MS);
@@ -1927,6 +1929,65 @@ function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
 
   return { distribution, sampleSize, analyzed: analyzed || denominator, computed: true };
 }
+
+// POST /api/tokens/:mint/holders/ai-analysis
+// Accepts pre-aggregated holder metrics, calls Claude Haiku for a 0-100 score + brief analysis.
+// Cached for 3 hours per mint. Very strict rate limit to protect API costs.
+router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, asyncHandler(async (req, res) => {
+  const { mint } = req.params;
+  const cacheKey = `ai-analysis:${mint}`;
+
+  // Return cached result if available
+  const cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'AI analysis not configured' });
+  }
+
+  // Validate incoming metrics (pre-aggregated by frontend to minimize token usage)
+  const m = req.body;
+  if (!m || typeof m.top5 !== 'number' || typeof m.top10 !== 'number') {
+    return res.status(400).json({ error: 'Missing required metrics' });
+  }
+
+  // Build minimal prompt — ~150 input tokens
+  const prompt = `Solana token holder analysis. Score 0-100 (higher=healthier). Reply ONLY as: SCORE:<number>\n<2-3 sentences>.
+
+Data (top holders by % supply):
+top5=${m.top5}% top10=${m.top10}% top20=${m.top20}% top1=${m.top1}%
+avgHoldAll=${m.avgHold||'N/A'} freshWallets=${m.freshWallets||'N/A'}
+conviction: >6h=${m.dh6h}% >24h=${m.dh24h}% >3d=${m.dh3d}% >1w=${m.dh1w}% >1M=${m.dh1m}%
+sampleSize=${m.sampleSize} analyzed=${m.analyzed}
+riskLevel=${m.riskLevel||'N/A'}`;
+
+  try {
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0]?.text || '';
+
+    // Parse score from response
+    const scoreMatch = text.match(/SCORE:\s*(\d+)/);
+    const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1]))) : null;
+    const analysis = text.replace(/SCORE:\s*\d+\s*\n?/, '').trim();
+
+    const result = { score, analysis, cached: false };
+
+    // Cache for 3 hours
+    await cache.set(cacheKey, { ...result, cached: true }, 3 * TTL.HOUR);
+
+    res.json(result);
+  } catch (err) {
+    console.error('[AI Analysis] Anthropic API error:', err.message);
+    res.status(502).json({ error: 'AI analysis temporarily unavailable' });
+  }
+}));
 
 // GET /api/tokens/:mint/similar - Find tokens with similar names/symbols
 // Anti-spoofing: helps users identify confusing or copycat token names

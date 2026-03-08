@@ -85,7 +85,8 @@
       "WebFetch(domain:app.unpkg.com)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)[:500]\\)\")",
       "Bash(python -m json.tool)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(grep -E \"\\\\.js$\")"
     ]
   }
 }

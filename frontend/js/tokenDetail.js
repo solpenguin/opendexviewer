@@ -313,6 +313,12 @@ const tokenDetail = {
     };
     bindHandler(holdersRefreshBtn, 'click', holdersRefreshHandler);
 
+    // AI Analysis button
+    const aiAnalysisBtn = document.getElementById('ai-analysis-btn');
+    if (aiAnalysisBtn) {
+      bindHandler(aiAnalysisBtn, 'click', () => this._openAIAnalysis());
+    }
+
     // Holders expand/collapse button
     const holdersExpandBtn = document.getElementById('holders-expand');
     const holdersExpandHandler = () => {
@@ -796,6 +802,11 @@ const tokenDetail = {
       this._holdTimesData = null;
       this._tokenHoldTimesData = null;
       this._holdTimesLoaded = false;
+      this._diamondHandsData = null;
+      this._diamondHandsLoaded = false;
+      this._aiAnalysisCache = null;
+      const aiBtn = document.getElementById('ai-analysis-btn');
+      if (aiBtn) { aiBtn.disabled = true; aiBtn.title = 'Waiting for holder data...'; }
       if (refreshBtn) refreshBtn.classList.add('spinning');
     }
 
@@ -1081,6 +1092,7 @@ const tokenDetail = {
           el.classList.remove('hold-time-pending', 'token-hold-pending');
         });
         this._updateAvgHoldTimeMetric();
+        this._checkAIAnalysisReady();
         const totalAvg = this._holdTimesData ? Object.keys(this._holdTimesData).length : 0;
         const totalToken = this._tokenHoldTimesData ? Object.keys(this._tokenHoldTimesData).length : 0;
         console.log(`[HoldTimes] Done: ${totalAvg} avg hold times, ${totalToken} token hold times loaded`);
@@ -1162,6 +1174,129 @@ const tokenDetail = {
     else el.classList.add('concentration-high');                   // red = many
   },
 
+  // Enable AI Analysis button once both hold times and diamond hands are loaded
+  _checkAIAnalysisReady() {
+    if (!this._holdTimesLoaded || !this._diamondHandsLoaded) return;
+    const btn = document.getElementById('ai-analysis-btn');
+    if (!btn) return;
+    btn.disabled = false;
+    btn.title = 'Get AI-powered holder analysis';
+  },
+
+  // Gather pre-aggregated metrics for AI analysis (minimal token usage)
+  _gatherAIMetrics() {
+    const metrics = {};
+    // Concentration from DOM (already computed)
+    const t5 = document.getElementById('holders-top5');
+    const t10 = document.getElementById('holders-top10');
+    const t20 = document.getElementById('holders-top20');
+    const t1 = document.getElementById('holders-top1');
+    metrics.top5 = t5 ? parseFloat(t5.textContent) || 0 : 0;
+    metrics.top10 = t10 ? parseFloat(t10.textContent) || 0 : 0;
+    metrics.top20 = t20 ? parseFloat(t20.textContent) || 0 : 0;
+    metrics.top1 = t1 ? parseFloat(t1.textContent) || 0 : 0;
+
+    // Avg hold time from DOM
+    const avgEl = document.getElementById('holders-avg-hold-time');
+    metrics.avgHold = avgEl ? avgEl.textContent.trim() : 'N/A';
+
+    // Fresh wallets from DOM
+    const freshEl = document.getElementById('holders-fresh-wallets');
+    metrics.freshWallets = freshEl ? freshEl.textContent.trim() : 'N/A';
+
+    // Risk level from DOM
+    const riskBadge = document.getElementById('holders-risk-badge');
+    metrics.riskLevel = riskBadge ? riskBadge.textContent.trim() : 'N/A';
+
+    // Diamond hands from stored data
+    if (this._diamondHandsData && this._diamondHandsData.distribution) {
+      const d = this._diamondHandsData.distribution;
+      metrics.dh6h = d['6h'] ?? 0;
+      metrics.dh24h = d['24h'] ?? 0;
+      metrics.dh3d = d['3d'] ?? 0;
+      metrics.dh1w = d['1w'] ?? 0;
+      metrics.dh1m = d['1m'] ?? 0;
+      metrics.sampleSize = this._diamondHandsData.sampleSize || 0;
+      metrics.analyzed = this._diamondHandsData.analyzed || 0;
+    }
+
+    return metrics;
+  },
+
+  // Open AI analysis modal and fetch/display results
+  async _openAIAnalysis() {
+    const overlay = document.getElementById('ai-analysis-overlay');
+    const loading = document.getElementById('ai-analysis-loading');
+    const result = document.getElementById('ai-analysis-result');
+    const errorEl = document.getElementById('ai-analysis-error');
+    if (!overlay) return;
+
+    overlay.style.display = 'flex';
+    loading.style.display = 'flex';
+    result.style.display = 'none';
+    errorEl.style.display = 'none';
+
+    // Close handlers
+    const close = () => {
+      overlay.style.display = 'none';
+      document.removeEventListener('keydown', escHandler);
+    };
+    const escHandler = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', escHandler);
+    document.getElementById('ai-analysis-close').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+    // Use cached result if available (same page session)
+    if (this._aiAnalysisCache) {
+      this._renderAIResult(this._aiAnalysisCache);
+      return;
+    }
+
+    try {
+      const metrics = this._gatherAIMetrics();
+      const data = await api.request(`/api/tokens/${this.mint}/holders/ai-analysis`, {
+        method: 'POST',
+        body: JSON.stringify(metrics),
+        retries: 1
+      });
+
+      if (data.error) throw new Error(data.error);
+      this._aiAnalysisCache = data;
+      this._renderAIResult(data);
+    } catch (err) {
+      loading.style.display = 'none';
+      errorEl.style.display = 'block';
+      errorEl.textContent = err.message || 'Failed to get AI analysis. Try again later.';
+    }
+  },
+
+  // Render AI analysis score and text into the modal
+  _renderAIResult(data) {
+    const loading = document.getElementById('ai-analysis-loading');
+    const result = document.getElementById('ai-analysis-result');
+    const scoreVal = document.getElementById('ai-score-value');
+    const scoreCircle = document.getElementById('ai-score-circle');
+    const textEl = document.getElementById('ai-analysis-text');
+    loading.style.display = 'none';
+    result.style.display = 'flex';
+
+    const score = data.score != null ? data.score : '--';
+    scoreVal.textContent = score;
+
+    // Animate the ring (326.73 = 2πr circumference)
+    if (typeof score === 'number') {
+      const offset = 326.73 * (1 - score / 100);
+      scoreCircle.style.strokeDashoffset = offset;
+      // Color based on score
+      scoreCircle.style.stroke =
+        score >= 70 ? 'var(--success, #10b981)' :
+        score >= 40 ? 'var(--warning, #f59e0b)' :
+        'var(--error, #ef4444)';
+    }
+
+    textEl.textContent = data.analysis || '';
+  },
+
   // Load diamond hands distribution with polling
   async _loadDiamondHands(attempt = 0) {
     const MAX_POLLS = 8;
@@ -1196,7 +1331,11 @@ const tokenDetail = {
         if (!data.distribution || !data.analyzed) {
           const section = document.getElementById('diamond-hands-section');
           if (section) section.style.display = 'none';
+        } else {
+          this._diamondHandsData = data;
         }
+        this._diamondHandsLoaded = true;
+        this._checkAIAnalysisReady();
         console.log(`[DiamondHands] Done: sample=${data.sampleSize}, analyzed=${data.analyzed}`);
       }
     } catch (error) {
