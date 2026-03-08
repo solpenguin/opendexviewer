@@ -463,10 +463,14 @@ const burnPage = {
     const resultEl = document.getElementById('burn-result');
     const resultDetails = document.getElementById('burn-result-details');
     if (resultEl && resultDetails) {
+      const sig = result.txSignature || txSignature;
+      const shortSig = sig.slice(0, 8) + '...' + sig.slice(-6);
+      const solscanUrl = `https://solscan.io/tx/${encodeURIComponent(sig)}`;
       resultDetails.innerHTML = `
         <strong>${this.formatNumber(result.tokensBurned)} $OD</strong> burned
         &rarr; <strong>${this.formatNumber(result.creditsAwarded)} BC</strong> earned<br>
-        New balance: <strong>${this.formatNumber(result.newBalance)} BC</strong>
+        New balance: <strong>${this.formatNumber(result.newBalance)} BC</strong><br>
+        <a href="${solscanUrl}" target="_blank" rel="noopener" class="burn-tx-link">${shortSig}</a>
       `;
       resultEl.style.display = 'block';
     }

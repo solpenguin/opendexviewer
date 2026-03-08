@@ -10920,6 +10920,18 @@ body.landscape .hero h1 {
 .burn-result-details strong {
   color: var(--text-primary);
 }
+.burn-tx-link {
+  display: inline-block;
+  margin-top: 0.25rem;
+  color: rgb(96, 165, 250);
+  font-size: 0.8rem;
+  font-family: var(--font-mono, monospace);
+  text-decoration: none;
+}
+.burn-tx-link:hover {
+  text-decoration: underline;
+  color: rgb(147, 197, 253);
+}
 
 /* Error */
 .burn-error {
