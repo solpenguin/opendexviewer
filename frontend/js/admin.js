@@ -308,6 +308,9 @@ const adminPanel = {
     // Development mode toggle
     document.getElementById('dev-mode-toggle')?.addEventListener('change', (e) => this.toggleDevMode(e.target.checked));
 
+    // Burn config save button
+    document.getElementById('save-burn-config-btn')?.addEventListener('click', () => this.saveBurnConfig());
+
     // Database management buttons
     document.getElementById('check-database-btn')?.addEventListener('click', () => this.checkDatabaseStatus());
     document.getElementById('repair-database-btn')?.addEventListener('click', () => this.repairDatabase());
@@ -982,7 +985,7 @@ const adminPanel = {
   async loadSettings() {
     try {
       const result = await adminApi.getSettings();
-      const { developmentMode } = result.data;
+      const { developmentMode, burnConfig } = result.data;
 
       // Update toggle state
       const toggle = document.getElementById('dev-mode-toggle');
@@ -992,6 +995,14 @@ const adminPanel = {
 
       // Update warning visibility
       this.updateDevModeWarning(developmentMode);
+
+      // Load burn config values
+      if (burnConfig) {
+        const rateInput = document.getElementById('burn-conversion-rate');
+        const costInput = document.getElementById('ai-analysis-cost');
+        if (rateInput) rateInput.value = burnConfig.conversionRate;
+        if (costInput) costInput.value = burnConfig.aiAnalysisCost;
+      }
 
       // Also load database status when settings tab is opened
       this.checkDatabaseStatus();
@@ -1020,6 +1031,40 @@ const adminPanel = {
       if (toggle) {
         toggle.checked = !enabled;
       }
+    }
+  },
+
+  // Save burn config
+  async saveBurnConfig() {
+    const rateInput = document.getElementById('burn-conversion-rate');
+    const costInput = document.getElementById('ai-analysis-cost');
+    const conversionRate = rateInput ? parseFloat(rateInput.value) : null;
+    const aiAnalysisCost = costInput ? parseFloat(costInput.value) : null;
+
+    if (conversionRate !== null && (isNaN(conversionRate) || conversionRate < 1)) {
+      toast.error('Conversion rate must be at least 1');
+      return;
+    }
+    if (aiAnalysisCost !== null && (isNaN(aiAnalysisCost) || aiAnalysisCost < 0)) {
+      toast.error('AI analysis cost cannot be negative');
+      return;
+    }
+
+    try {
+      const burnConfig = {};
+      if (conversionRate !== null) burnConfig.conversionRate = conversionRate;
+      if (aiAnalysisCost !== null) burnConfig.aiAnalysisCost = aiAnalysisCost;
+
+      const result = await adminApi.updateSettings({ burnConfig });
+      const updated = result.data.burnConfig;
+
+      if (rateInput && updated) rateInput.value = updated.conversionRate;
+      if (costInput && updated) costInput.value = updated.aiAnalysisCost;
+
+      toast.success('Burn config saved');
+    } catch (error) {
+      console.error('Failed to save burn config:', error);
+      toast.error('Failed to save burn config');
     }
   },
 

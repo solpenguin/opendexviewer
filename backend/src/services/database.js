@@ -425,8 +425,10 @@ async function initializeDatabase() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
 
-      -- Seed default conversion rate if not set (1000 $OD = 1 BC)
+      -- Seed default burn config if not set
       INSERT INTO burn_config (key, value) VALUES ('conversion_rate', '1000')
+        ON CONFLICT (key) DO NOTHING;
+      INSERT INTO burn_config (key, value) VALUES ('ai_analysis_cost', '25')
         ON CONFLICT (key) DO NOTHING;
     `);
 
@@ -2667,6 +2669,30 @@ async function setBurnConversionRate(rate) {
   return rate;
 }
 
+// Get the AI analysis cost in BC
+async function getAIAnalysisCost() {
+  if (!pool) return 25;
+  try {
+    const result = await pool.query(
+      "SELECT value FROM burn_config WHERE key = 'ai_analysis_cost'"
+    );
+    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 25;
+  } catch {
+    return 25;
+  }
+}
+
+// Set the AI analysis cost in BC (admin only)
+async function setAIAnalysisCost(cost) {
+  if (!pool) throw new Error('Database not available');
+  await pool.query(
+    `INSERT INTO burn_config (key, value, updated_at) VALUES ('ai_analysis_cost', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+    [String(cost)]
+  );
+  return cost;
+}
+
 // Check if a transaction signature has already been submitted
 async function isBurnTxUsed(txSignature) {
   if (!pool) return false;
@@ -2888,6 +2914,8 @@ module.exports = {
   // Burn credits operations
   getBurnConversionRate,
   setBurnConversionRate,
+  getAIAnalysisCost,
+  setAIAnalysisCost,
   isBurnTxUsed,
   recordBurnCredit,
   getBurnCreditBalance,

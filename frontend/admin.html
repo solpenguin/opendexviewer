@@ -489,6 +489,37 @@
           </div>
 
           <div class="settings-section">
+            <h3>Burn Credits</h3>
+            <p class="settings-description">Configure burn credit conversion rates and feature costs.</p>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-label">Conversion Rate</span>
+                <span class="setting-hint">How many $OD tokens = 1 Burn Credit</span>
+              </div>
+              <div class="setting-input-group">
+                <input type="number" id="burn-conversion-rate" class="setting-input" min="1" step="1" placeholder="1000">
+                <span class="setting-input-suffix">$OD = 1 BC</span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-label">AI Analysis Cost</span>
+                <span class="setting-hint">Burn Credits charged per AI holder analysis</span>
+              </div>
+              <div class="setting-input-group">
+                <input type="number" id="ai-analysis-cost" class="setting-input" min="0" step="1" placeholder="25">
+                <span class="setting-input-suffix">BC</span>
+              </div>
+            </div>
+
+            <div class="setting-actions">
+              <button id="save-burn-config-btn" class="btn btn-primary">Save Burn Config</button>
+            </div>
+          </div>
+
+          <div class="settings-section">
             <h3>Manual Approval</h3>
             <p class="settings-description">As an admin, you can manually approve any pending submission regardless of vote counts or verification status. Use the Submissions tab to approve/reject submissions.</p>
           </div>

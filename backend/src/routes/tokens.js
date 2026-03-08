@@ -1932,9 +1932,8 @@ function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
 
 // POST /api/tokens/:mint/holders/ai-analysis
 // Accepts pre-aggregated holder metrics, calls Claude Haiku for a 0-100 score + brief analysis.
-// Costs 5 Burn Credits per analysis (cached results are free).
+// Cost configurable via admin panel (default 25 BC). Cached results are free.
 // Cached for 3 hours per mint. Very strict rate limit to protect API costs.
-const AI_ANALYSIS_COST = 5; // Burn Credits per analysis
 router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, asyncHandler(async (req, res) => {
   const { mint } = req.params;
   const cacheKey = `ai-analysis:${mint}`;
@@ -1960,14 +1959,15 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
     return res.status(400).json({ error: 'Wallet connection required to use AI analysis', code: 'WALLET_REQUIRED' });
   }
 
-  // Charge Burn Credits
-  const charged = await db.spendBurnCredits(walletAddress, AI_ANALYSIS_COST, 'ai_holder_analysis', { mint });
+  // Charge Burn Credits (cost configurable via admin panel)
+  const aiAnalysisCost = await db.getAIAnalysisCost();
+  const charged = await db.spendBurnCredits(walletAddress, aiAnalysisCost, 'ai_holder_analysis', { mint });
   if (!charged) {
     const balance = await db.getBurnCreditBalance(walletAddress);
     return res.status(402).json({
-      error: `Insufficient Burn Credits. This analysis costs ${AI_ANALYSIS_COST} BC.`,
+      error: `Insufficient Burn Credits. This analysis costs ${aiAnalysisCost} BC.`,
       code: 'INSUFFICIENT_BC',
-      required: AI_ANALYSIS_COST,
+      required: aiAnalysisCost,
       balance: balance.balance
     });
   }

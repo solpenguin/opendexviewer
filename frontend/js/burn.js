@@ -258,15 +258,16 @@ const burnPage = {
     }
   },
 
-  // Poll backend for transaction confirmation
-  async waitForConfirmation(txSignature, maxAttempts = 30, intervalMs = 2000) {
+  // Poll backend for transaction finalization
+  // Waits for 'finalized' so getTransaction (jsonParsed) reliably returns data
+  async waitForConfirmation(txSignature, maxAttempts = 40, intervalMs = 2000) {
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const status = await api.burnCredits.getTxStatus(txSignature);
         if (status.err) {
           throw new Error('Transaction failed on-chain');
         }
-        if (status.confirmed) {
+        if (status.confirmationStatus === 'finalized') {
           return;
         }
       } catch (error) {

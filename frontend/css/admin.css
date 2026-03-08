@@ -1957,3 +1957,28 @@
   align-items: center;
   gap: 0.5rem;
 }
+
+.setting-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.setting-input {
+  width: 100px;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  text-align: right;
+}
+.setting-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.setting-input-suffix {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}

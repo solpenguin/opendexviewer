@@ -625,10 +625,20 @@ router.get('/settings/development-mode',
 router.get('/settings',
   validateAdminSession,
   asyncHandler(async (req, res) => {
+    // Load burn config from database
+    let burnConfig = { conversionRate: 1000, aiAnalysisCost: 25 };
+    try {
+      burnConfig.conversionRate = await db.getBurnConversionRate();
+      burnConfig.aiAnalysisCost = await db.getAIAnalysisCost();
+    } catch (e) {
+      console.error('[Admin] Failed to load burn config:', e.message);
+    }
+
     res.json({
       success: true,
       data: {
-        developmentMode: adminSettings.developmentMode
+        developmentMode: adminSettings.developmentMode,
+        burnConfig
       }
     });
   })
@@ -641,7 +651,7 @@ router.get('/settings',
 router.patch('/settings',
   validateAdminSession,
   asyncHandler(async (req, res) => {
-    const { developmentMode } = req.body;
+    const { developmentMode, burnConfig } = req.body;
 
     if (typeof developmentMode === 'boolean') {
       const previous = adminSettings.developmentMode;
@@ -651,10 +661,30 @@ router.patch('/settings',
       }
     }
 
+    // Update burn config if provided
+    if (burnConfig) {
+      if (typeof burnConfig.conversionRate === 'number' && burnConfig.conversionRate > 0) {
+        await db.setBurnConversionRate(burnConfig.conversionRate);
+        console.log(`[Admin] Burn conversion rate updated to ${burnConfig.conversionRate}`);
+      }
+      if (typeof burnConfig.aiAnalysisCost === 'number' && burnConfig.aiAnalysisCost >= 0) {
+        await db.setAIAnalysisCost(burnConfig.aiAnalysisCost);
+        console.log(`[Admin] AI analysis cost updated to ${burnConfig.aiAnalysisCost}`);
+      }
+    }
+
+    // Reload current values
+    let currentBurnConfig = { conversionRate: 1000, aiAnalysisCost: 25 };
+    try {
+      currentBurnConfig.conversionRate = await db.getBurnConversionRate();
+      currentBurnConfig.aiAnalysisCost = await db.getAIAnalysisCost();
+    } catch (e) { /* use defaults */ }
+
     res.json({
       success: true,
       data: {
-        developmentMode: adminSettings.developmentMode
+        developmentMode: adminSettings.developmentMode,
+        burnConfig: currentBurnConfig
       }
     });
   })

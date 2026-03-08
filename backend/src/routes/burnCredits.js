@@ -145,10 +145,12 @@ router.get('/tx-status/:signature', async (req, res) => {
 router.get('/config', async (req, res) => {
   try {
     const conversionRate = await db.getBurnConversionRate();
+    const aiAnalysisCost = await db.getAIAnalysisCost();
     res.json({
       tokenMint: OD_TOKEN_MINT,
       tokenSymbol: '$OD',
       conversionRate,
+      aiAnalysisCost,
       description: `${conversionRate.toLocaleString()} $OD = 1 Burn Credit`
     });
   } catch (error) {
