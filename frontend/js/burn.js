@@ -378,7 +378,12 @@ const burnPage = {
 
       // Fetch blockhash via backend Helius RPC
       const bhData = await api.burnCredits.getBlockhash();
-      const { blockhash, lastValidBlockHeight } = bhData;
+      const blockhash = bhData && bhData.blockhash;
+      const lastValidBlockHeight = bhData && bhData.lastValidBlockHeight;
+
+      if (!blockhash) {
+        throw new Error('Failed to get blockhash from server. Please try again.');
+      }
 
       const transaction = new solanaWeb3.Transaction({
         feePayer: walletPubkey,
