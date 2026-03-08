@@ -795,6 +795,7 @@ const tokenDetail = {
       apiCache.clearPattern(`tokens:diamond-hands:${this.mint}`);
       this._holdTimesData = null;
       this._tokenHoldTimesData = null;
+      this._holdTimesLoaded = false;
       if (refreshBtn) refreshBtn.classList.add('spinning');
     }
 
@@ -948,15 +949,18 @@ const tokenDetail = {
         : h.isBurnt ? ' <span class="holder-label burnt-label" title="Burn Wallet">🔥Burn</span>'
         : '';
       const rowClass = h.isLP || h.isBurnt ? ' class="holder-excluded"' : '';
-      // Show avg hold time if available, otherwise a placeholder that will be filled lazily
+      // Show avg hold time if available. If loading is done (_holdTimesLoaded), show "--" for
+      // wallets without data instead of a pulsing placeholder (prevents expand/collapse reverting).
       const holdTimeStr = (h.isLP || h.isBurnt) ? '--'
         : (this._holdTimesData && this._holdTimesData[h.address])
           ? this._formatHoldTime(this._holdTimesData[h.address])
+          : this._holdTimesLoaded ? '--'
           : '<span class="hold-time-pending" data-wallet="' + h.address + '">...</span>';
       // Show token-specific hold time (how long they've held THIS token)
       const tokenHoldStr = (h.isLP || h.isBurnt) ? '--'
         : (this._tokenHoldTimesData && this._tokenHoldTimesData[h.address])
           ? this._formatHoldTime(this._tokenHoldTimesData[h.address])
+          : this._holdTimesLoaded ? '--'
           : '<span class="token-hold-pending" data-wallet="' + h.address + '">...</span>';
       return `<tr${rowClass}>
         <td>${h.rank}</td>
@@ -1026,6 +1030,15 @@ const tokenDetail = {
       const tokenCount = data.tokenHoldTimes ? Object.keys(data.tokenHoldTimes).length : 0;
       console.log(`[HoldTimes] Poll ${attempt}: computed=${data.computed}, avg=${avgCount}, token=${tokenCount}`);
 
+      // If the backend returned no data (likely holders cache miss), ensure the
+      // backend holders cache gets repopulated by making a fresh holders request.
+      // This is fire-and-forget — the next poll will pick up the results.
+      if (!data.computed && avgCount === 0 && tokenCount === 0 && attempt < 2) {
+        console.log(`[HoldTimes] Empty response — refreshing backend holders cache`);
+        apiCache.clearPattern(`tokens:holders:${this.mint}`);
+        api.tokens.getHolders(this.mint, { fresh: true }).catch(() => {});
+      }
+
       // Merge into existing data (re-polls add to previous results)
       if (data.holdTimes) {
         this._holdTimesData = Object.assign(this._holdTimesData || {}, data.holdTimes);
@@ -1042,6 +1055,8 @@ const tokenDetail = {
         console.log(`[HoldTimes] Not computed yet, re-polling in ${POLL_DELAYS[attempt]}ms`);
         this._holdTimesTimer = setTimeout(() => this._loadHoldTimes(attempt + 1), POLL_DELAYS[attempt]);
       } else {
+        // Mark loading complete so expand/collapse renders "--" instead of "..."
+        this._holdTimesLoaded = true;
         // Final pass — replace any remaining placeholders with dashes
         const remaining = document.querySelectorAll('.hold-time-pending, .token-hold-pending');
         if (remaining.length > 0) {
@@ -1058,6 +1073,7 @@ const tokenDetail = {
       }
     } catch (error) {
       console.warn('[HoldTimes] Failed:', error.message, error);
+      this._holdTimesLoaded = true;
       document.querySelectorAll('.hold-time-pending, .token-hold-pending').forEach(el => {
         el.textContent = '--';
         el.classList.remove('hold-time-pending', 'token-hold-pending');

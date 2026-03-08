@@ -1596,10 +1596,13 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: true });
     }
 
-    // Get holder data (likely already cached from the main holders call)
+    // Get holder data (likely already cached from the main holders call).
+    // If the cache is missing (expired/evicted), return computed: false so the
+    // frontend keeps polling — the main holders endpoint will repopulate it.
     const holdersCache = await cache.get(`holders:${mint}`);
     if (!holdersCache || !holdersCache.holders || holdersCache.holders.length === 0) {
-      return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: true });
+      console.log(`[HoldTimes] holders:${mint} cache miss — returning computed: false to trigger re-poll`);
+      return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: false });
     }
 
     // Only compute for real holders (skip LP and burn wallets)
