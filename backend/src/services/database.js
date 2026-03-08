@@ -2669,8 +2669,8 @@ async function isBurnTxUsed(txSignature) {
 async function recordBurnCredit({ walletAddress, txSignature, tokenAmount, creditsAwarded, conversionRate }) {
   if (!pool) throw new Error('Database not available');
   const result = await pool.query(
-    `INSERT INTO burn_credits (wallet_address, tx_signature, token_amount, credits_awarded, conversion_rate)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO burn_credits (wallet_address, tx_signature, token_amount, credits_awarded, conversion_rate, status)
+     VALUES ($1, $2, $3, $4, $5, 'confirmed')
      RETURNING *`,
     [walletAddress, txSignature, tokenAmount, creditsAwarded, conversionRate]
   );

@@ -640,6 +640,25 @@ const api = {
       return api.request(`/api/burn-credits/balance/${wallet}`);
     },
 
+    async getOdBalance(wallet) {
+      return api.request(`/api/burn-credits/od-balance/${wallet}`);
+    },
+
+    async getBlockhash() {
+      return api.request('/api/burn-credits/blockhash');
+    },
+
+    async sendTransaction(base64Tx) {
+      return api.request('/api/burn-credits/send-tx', {
+        method: 'POST',
+        body: JSON.stringify({ transaction: base64Tx })
+      });
+    },
+
+    async getTxStatus(signature) {
+      return api.request(`/api/burn-credits/tx-status/${signature}`);
+    },
+
     async getHistory(wallet) {
       return api.request(`/api/burn-credits/history/${wallet}`);
     },

@@ -156,15 +156,17 @@ const burnPage = {
     if (!input) return;
 
     const amount = parseFloat(input.value);
-    const isValid = amount > 0 && !isNaN(amount);
+    const isValid = amount >= 1 && !isNaN(amount);
     const hasBalance = this.odBalance !== null && this.odBalance > 0;
     const withinBalance = hasBalance && amount <= this.odBalance;
 
     if (executeBtn) executeBtn.disabled = !isValid || !withinBalance;
 
     if (executeText) {
-      if (!isValid || !input.value) {
+      if (!input.value || isNaN(amount) || amount <= 0) {
         executeText.textContent = 'Enter an amount';
+      } else if (amount < 1) {
+        executeText.textContent = 'Minimum 1 $OD';
       } else if (!hasBalance) {
         executeText.textContent = 'No $OD balance';
       } else if (!withinBalance) {
@@ -216,8 +218,27 @@ const burnPage = {
     if (balVal) balVal.textContent = '--';
   },
 
-  // Load $OD token balance from Solana RPC
+  // Load $OD token balance via backend API (uses Helius RPC, avoids public rate limits)
   async loadOdBalance() {
+    if (!this.walletAddress) return;
+
+    const balVal = document.getElementById('burn-od-balance-val');
+
+    try {
+      const data = await api.burnCredits.getOdBalance(this.walletAddress);
+      this.odBalance = (data && typeof data.balance === 'number') ? data.balance : 0;
+      if (balVal) balVal.textContent = this.formatNumber(this.odBalance);
+    } catch (error) {
+      console.error('[Burn] Failed to load $OD balance:', error);
+      // Fallback: try direct RPC if backend fails
+      await this.loadOdBalanceFallback();
+    }
+
+    this.onAmountChange();
+  },
+
+  // Fallback: load $OD balance directly from Solana RPC
+  async loadOdBalanceFallback() {
     if (!this.walletAddress || !this.connection) return;
 
     const balVal = document.getElementById('burn-od-balance-val');
@@ -230,13 +251,31 @@ const burnPage = {
       const accountInfo = await this.connection.getTokenAccountBalance(ata);
       this.odBalance = parseFloat(accountInfo.value.uiAmountString || '0');
       if (balVal) balVal.textContent = this.formatNumber(this.odBalance);
-    } catch (error) {
-      // Account doesn't exist = 0 balance
+    } catch (_) {
       this.odBalance = 0;
       if (balVal) balVal.textContent = '0';
     }
+  },
 
-    this.onAmountChange();
+  // Poll backend for transaction confirmation
+  async waitForConfirmation(txSignature, maxAttempts = 30, intervalMs = 2000) {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const status = await api.burnCredits.getTxStatus(txSignature);
+        if (status.err) {
+          throw new Error('Transaction failed on-chain');
+        }
+        if (status.confirmed) {
+          return;
+        }
+      } catch (error) {
+        // If it's an actual tx failure, throw immediately
+        if (error.message === 'Transaction failed on-chain') throw error;
+        // Otherwise keep polling (backend might be temporarily unavailable)
+      }
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+    throw new Error('Transaction confirmation timed out. Check your wallet for status.');
   },
 
   getAssociatedTokenAddress(walletPubkey, mintPubkey) {
@@ -285,13 +324,25 @@ const burnPage = {
       return;
     }
 
+    if (amount < 1) {
+      this.showError('Minimum burn amount is 1 $OD');
+      return;
+    }
+
+    // Prevent precision issues with amounts exceeding safe integer range when scaled
+    const MAX_SAFE_AMOUNT = Number.MAX_SAFE_INTEGER / Math.pow(10, this.OD_DECIMALS);
+    if (amount > MAX_SAFE_AMOUNT) {
+      this.showError('Amount is too large');
+      return;
+    }
+
     if (this.odBalance !== null && amount > this.odBalance) {
       this.showError('Insufficient $OD balance');
       return;
     }
 
-    if (!this.connection || typeof solanaWeb3 === 'undefined') {
-      this.showError('Solana connection not available. Please refresh the page.');
+    if (typeof solanaWeb3 === 'undefined') {
+      this.showError('Solana library not available. Please refresh the page.');
       return;
     }
 
@@ -325,7 +376,9 @@ const burnPage = {
 
       if (executeText) executeText.textContent = 'Getting blockhash...';
 
-      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+      // Fetch blockhash via backend Helius RPC
+      const bhData = await api.burnCredits.getBlockhash();
+      const { blockhash, lastValidBlockHeight } = bhData;
 
       const transaction = new solanaWeb3.Transaction({
         feePayer: walletPubkey,
@@ -336,26 +389,25 @@ const burnPage = {
       if (executeText) executeText.textContent = 'Approve in wallet...';
       if (statusEl) statusEl.textContent = 'Please approve the transaction in your wallet';
 
-      // Use signAndSendTransaction if available (preferred - wallet handles RPC)
+      // Use signAndSendTransaction if available (preferred - wallet handles its own RPC)
       let txSignature;
       if (wallet.provider.signAndSendTransaction) {
         const result = await wallet.provider.signAndSendTransaction(transaction);
         txSignature = result.signature;
       } else {
-        // Fallback: sign then send
+        // Fallback: sign locally, send via backend Helius RPC
         const signed = await wallet.provider.signTransaction(transaction);
-        txSignature = await this.connection.sendRawTransaction(signed.serialize());
+        const serialized = signed.serialize();
+        const base64Tx = btoa(String.fromCharCode(...serialized));
+        const sendResult = await api.burnCredits.sendTransaction(base64Tx);
+        txSignature = sendResult.signature;
       }
 
       if (executeText) executeText.textContent = 'Confirming on-chain...';
       if (statusEl) statusEl.textContent = 'Waiting for transaction confirmation...';
 
-      // Wait for confirmation
-      await this.connection.confirmTransaction({
-        signature: txSignature,
-        blockhash,
-        lastValidBlockHeight
-      }, 'confirmed');
+      // Poll for confirmation via backend RPC
+      await this.waitForConfirmation(txSignature);
 
       // Transaction confirmed - now submit to backend for credit
       if (executeText) executeText.textContent = 'Verifying burn...';
@@ -459,6 +511,7 @@ const burnPage = {
 
       this.loadBalance();
       this.loadHistory();
+      this.loadOdBalance();
       this.refreshHeaderBadge();
 
     } catch (error) {
