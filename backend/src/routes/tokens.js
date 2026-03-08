@@ -1954,11 +1954,27 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
 
   // Sanitize: clamp numbers, strip strings to safe short values
   const num = (v, min = 0, max = 100) => typeof v === 'number' ? Math.min(max, Math.max(min, v)) : 0;
-  const safe = (v) => typeof v === 'string' ? v.replace(/[^a-zA-Z0-9./%\- ]/g, '').slice(0, 20) : 'N/A';
+  const bigNum = (v) => typeof v === 'number' && v > 0 ? v : null;
+  const safe = (v) => typeof v === 'string' ? v.replace(/[^a-zA-Z0-9./%()$, \-]/g, '').slice(0, 30) : 'N/A';
+  const fmtUsd = (v) => { const n = bigNum(v); return n ? '$' + (n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toFixed(0)) : 'N/A'; };
 
-  // Build minimal prompt — ~200 input tokens
+  // Format token age from ISO timestamp
+  const fmtAge = (v) => {
+    if (!v) return 'N/A';
+    const ms = Date.now() - new Date(v).getTime();
+    if (ms < 0 || isNaN(ms)) return 'N/A';
+    const d = Math.floor(ms / 86400000);
+    if (d >= 365) return Math.floor(d / 365) + 'y ' + (d % 365 >= 30 ? Math.floor((d % 365) / 30) + 'mo' : '');
+    if (d >= 30) return Math.floor(d / 30) + 'mo ' + (d % 30) + 'd';
+    if (d >= 1) return d + 'd';
+    return Math.floor(ms / 3600000) + 'h';
+  };
+
+  // Build prompt — ~270 input tokens
   const prompt = `Score this Solana token's holder health 0-100 (100=best). Reply ONLY as: SCORE:<number>\n<2-3 sentences explaining key factors>.
 
+Market: mcap=${fmtUsd(m.marketCap)} vol24h=${fmtUsd(m.volume24h)} liq=${fmtUsd(m.liquidity)} holders=${bigNum(m.holders) || 'N/A'} age=${fmtAge(m.createdAt)}
+Locked supply: ${safe(m.locked)}
 Concentration (% of supply held by top N holders — lower=more distributed):
 top1=${num(m.top1)}% top5=${num(m.top5)}% top10=${num(m.top10)}% top20=${num(m.top20)}%
 Avg hold time across all tokens: ${safe(m.avgHold)}

@@ -2524,32 +2524,33 @@ a:hover {
 .diamond-bar-pct.dh-text-mid { color: var(--warning, #f59e0b); }
 .diamond-bar-pct.dh-text-low { color: var(--error, #ef4444); }
 
-/* AI Analysis Button */
+/* AI Analysis Button (header pill) */
 .ai-analysis-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-  margin: 0.75rem 0;
-  padding: 0.625rem;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+  gap: 0.325rem;
+  padding: 0.3rem 0.625rem;
+  background: rgba(139, 92, 246, 0.1);
   border: 1px solid rgba(139, 92, 246, 0.25);
-  border-radius: var(--radius-md);
+  border-radius: 999px;
   color: rgb(167, 139, 250);
-  font-size: 0.8125rem;
+  font-size: 0.6875rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 .ai-analysis-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.18));
+  background: rgba(139, 92, 246, 0.2);
   border-color: rgba(139, 92, 246, 0.45);
   color: rgb(196, 181, 253);
 }
 .ai-analysis-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
+}
+.ai-analysis-btn-label {
+  line-height: 1;
 }
 
 /* AI Analysis Modal */
@@ -7031,6 +7032,12 @@ select {
   }
   .holders-expand-btn {
     padding: 0.625rem;
+  }
+  .ai-analysis-btn-label {
+    display: none;
+  }
+  .ai-analysis-btn {
+    padding: 0.3rem 0.4rem;
   }
 }
 

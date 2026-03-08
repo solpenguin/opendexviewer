@@ -1210,7 +1210,6 @@ const tokenDetail = {
     const riskBadge = document.getElementById('holders-risk-badge');
     metrics.riskLevel = riskBadge ? riskBadge.textContent.trim() : 'N/A';
 
-    // Diamond hands from stored data
     // Diamond hands conviction data (defaults to 0 if not available)
     const dh = this._diamondHandsData;
     const dist = dh && dh.distribution || {};
@@ -1221,6 +1220,19 @@ const tokenDetail = {
     metrics.dh1m = dist['1m'] ?? 0;
     metrics.sampleSize = dh ? dh.sampleSize || 0 : 0;
     metrics.analyzed = dh ? dh.analyzed || 0 : 0;
+
+    // Market data from token object
+    if (this.token) {
+      metrics.marketCap = this.token.marketCap || null;
+      metrics.volume24h = this.token.volume24h || null;
+      metrics.liquidity = this.token.liquidity || null;
+      metrics.holders = this.token.holders || null;
+      metrics.createdAt = this.token.pairCreatedAt || null;
+    }
+
+    // Locked supply from DOM
+    const lockedEl = document.getElementById('holders-locked');
+    metrics.locked = lockedEl ? lockedEl.textContent.trim() : 'N/A';
 
     return metrics;
   },
