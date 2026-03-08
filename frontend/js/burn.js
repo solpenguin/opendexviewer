@@ -385,11 +385,11 @@ const burnPage = {
         throw new Error('Failed to get blockhash from server. Please try again.');
       }
 
-      const transaction = new solanaWeb3.Transaction({
-        feePayer: walletPubkey,
-        recentBlockhash: blockhash,
-        lastValidBlockHeight
-      }).add(burnIx);
+      const transaction = new solanaWeb3.Transaction();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = walletPubkey;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
+      transaction.add(burnIx);
 
       if (executeText) executeText.textContent = 'Approve in wallet...';
       if (statusEl) statusEl.textContent = 'Please approve the transaction in your wallet';
