@@ -36,7 +36,7 @@ const widgetBuilder = {
   },
 
   init() {
-    if (!document.getElementById('widget-builder-section')) return;
+    if (!document.getElementById('widget-token-address')) return;
     this.bindEvents();
   },
 
@@ -47,15 +47,19 @@ const widgetBuilder = {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = setTimeout(() => this.onTokenAddressChange(), 600);
     });
+    // Also handle paste immediately (no debounce wait)
+    addrInput.addEventListener('paste', () => {
+      setTimeout(() => this.onTokenAddressChange(), 50);
+    });
 
     // All checkboxes and controls trigger preview update
-    document.querySelectorAll('#widget-builder-section input[type="checkbox"]').forEach(cb => {
+    document.querySelectorAll('.widget-builder input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', () => this.updatePreview());
     });
-    document.querySelectorAll('#widget-builder-section input[type="color"]').forEach(el => {
+    document.querySelectorAll('.widget-builder input[type="color"]').forEach(el => {
       el.addEventListener('input', () => this.updatePreview());
     });
-    document.querySelectorAll('#widget-builder-section input[type="range"]').forEach(el => {
+    document.querySelectorAll('.widget-builder input[type="range"]').forEach(el => {
       el.addEventListener('input', (e) => {
         const id = e.target.id;
         if (id === 'widget-border-radius') {
@@ -73,7 +77,6 @@ const widgetBuilder = {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.widget-theme-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        // Update default colors based on theme
         const cfg = this.getConfig();
         if (btn.dataset.theme === 'light') {
           if (cfg.bgColor === '#0c0d10') document.getElementById('widget-bg-color').value = '#ffffff';
@@ -118,7 +121,9 @@ const widgetBuilder = {
       const [tokenRes, sentimentRes, communityRes, holdersRes] = await Promise.allSettled([
         api.tokens.get(mint),
         fetch(config.api.baseUrl + '/api/sentiment/' + mint).then(r => r.json()),
-        fetch(config.api.baseUrl + '/api/v1/community/' + mint).then(r => r.json()).catch(() => null),
+        api.tokens.getSubmissions
+          ? api.tokens.getSubmissions(mint).catch(() => null)
+          : fetch(config.api.baseUrl + '/api/v1/community/' + mint).then(r => r.json()).catch(() => null),
         api.tokens.getHolders(mint),
       ]);
 
@@ -127,11 +132,11 @@ const widgetBuilder = {
 
       if (tokenRes.status === 'fulfilled' && tokenRes.value) {
         this.tokenData = tokenRes.value;
-        const name = tokenRes.value.name || tokenRes.value.symbol || 'Unknown';
-        this.setTokenStatus('success', `Found: ${name} (${tokenRes.value.symbol || ''})`);
+        this.renderTokenEnrichment(tokenRes.value);
       } else {
         this.tokenData = null;
         this.setTokenStatus('error', 'Token not found — check the address');
+        this.clearTokenEnrichment();
         this.updatePreview();
         return;
       }
@@ -145,8 +150,38 @@ const widgetBuilder = {
       console.error('Widget builder fetch error:', err);
       this.setTokenStatus('error', 'Failed to load token data');
       this.tokenData = null;
+      this.clearTokenEnrichment();
       this.updatePreview();
     }
+  },
+
+  // Show enriched token info card below the address input
+  renderTokenEnrichment(token) {
+    const statusEl = document.getElementById('widget-token-status');
+    const name = token.name || 'Unknown Token';
+    const symbol = token.symbol || '';
+    const logo = token.logoUri || token.logoURI || token.logo || '';
+    const price = this.formatPrice(token.price);
+    const change = token.priceChange24h || 0;
+    const isPos = change >= 0;
+
+    let html = '<div class="widget-token-enriched">';
+    if (logo) {
+      html += `<img src="${this.escapeHtml(logo)}" width="24" height="24" class="widget-token-enriched-logo" alt="">`;
+    }
+    html += `<div class="widget-token-enriched-info">`;
+    html += `<span class="widget-token-enriched-name">${this.escapeHtml(name)} <span class="widget-token-enriched-symbol">${this.escapeHtml(symbol)}</span></span>`;
+    html += `<span class="widget-token-enriched-price">${price} <span class="widget-token-enriched-change ${isPos ? 'positive' : 'negative'}">${isPos ? '+' : ''}${Number(change).toFixed(2)}%</span></span>`;
+    html += `</div></div>`;
+
+    statusEl.className = 'widget-token-status success';
+    statusEl.innerHTML = html;
+  },
+
+  clearTokenEnrichment() {
+    const statusEl = document.getElementById('widget-token-status');
+    statusEl.className = 'widget-token-status';
+    statusEl.innerHTML = '';
   },
 
   setTokenStatus(type, message) {
@@ -214,7 +249,7 @@ const widgetBuilder = {
   },
 
   // Build the preview widget HTML
-  buildWidgetHTML(cfg, isEmbed) {
+  buildWidgetHTML(cfg) {
     const t = this.tokenData;
     if (!t) return '';
 
@@ -226,17 +261,18 @@ const widgetBuilder = {
     const borderCol = cfg.theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)';
     const statBg = cfg.theme === 'light' ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)';
 
-    const metrics = t.metrics || {};
-    const supplyInfo = t.supplyInfo || {};
-    const sentiment = this.sentimentData?.tally || {};
-    const community = this.communityData?.data || {};
-    const holdersArr = this.holdersData?.holders || [];
+    // Metrics come from the holders endpoint, not from tokenData
+    const metrics = (this.holdersData && this.holdersData.metrics) || {};
+    const sentiment = (this.sentimentData && this.sentimentData.tally) || {};
+    // Community data can be from getSubmissions (returns array) or /v1/community (returns { data: { links } })
+    const community = this.communityData;
+    const holdersArr = (this.holdersData && this.holdersData.holders) || [];
 
     let html = '';
     html += `<div class="odx-widget" style="background:${bg};color:${text};border-radius:${radius}px;width:${cfg.width}px;max-width:100%;border:1px solid ${borderCol};font-family:'Inter',sans-serif;line-height:1.5;">`;
 
     // Header
-    const logoUrl = t.logoUri || t.logo || '';
+    const logoUrl = t.logoUri || t.logoURI || t.logo || '';
     html += `<div style="display:flex;align-items:center;gap:0.625rem;padding:0.875rem 1rem;border-bottom:1px solid ${borderCol};">`;
     if (logoUrl) {
       html += `<img src="${this.escapeHtml(logoUrl)}" width="28" height="28" style="border-radius:50%;object-fit:cover;background:${statBg};" alt="">`;
@@ -274,15 +310,14 @@ const widgetBuilder = {
         html += `<div style="font-size:0.8125rem;font-weight:600;font-family:'JetBrains Mono',monospace;">${s.value}</div>`;
         html += `</div>`;
       });
-      // Pad odd count
       if (stats.length % 2 !== 0) {
         html += `<div style="background:${bg};"></div>`;
       }
       html += `</div>`;
     }
 
-    // Holder concentration bars
-    if (cfg.show.concentration && metrics.top1Pct != null) {
+    // Holder concentration bars — data comes from holdersData.metrics
+    if (cfg.show.concentration && (metrics.top1Pct != null || metrics.top5Pct != null)) {
       const bars = [
         { label: 'Top 1', pct: metrics.top1Pct },
         { label: 'Top 5', pct: metrics.top5Pct },
@@ -290,22 +325,24 @@ const widgetBuilder = {
         { label: 'Top 20', pct: metrics.top20Pct },
       ].filter(b => b.pct != null);
 
-      html += `<div style="padding:0.625rem 1rem;">`;
-      html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.5rem;">Holder Concentration</div>`;
-      bars.forEach(b => {
-        const barColor = this.concentrationColor(b.pct, accent);
-        html += `<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;margin-bottom:0.375rem;">`;
-        html += `<span style="min-width:48px;color:${textSub};">${b.label}</span>`;
-        html += `<div style="flex:1;height:6px;border-radius:3px;background:${statBg};overflow:hidden;">`;
-        html += `<div style="width:${Math.min(b.pct, 100)}%;height:100%;border-radius:3px;background:${barColor};"></div>`;
+      if (bars.length > 0) {
+        html += `<div style="padding:0.625rem 1rem;">`;
+        html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.5rem;">Holder Concentration</div>`;
+        bars.forEach(b => {
+          const barColor = this.concentrationColor(b.pct, accent);
+          html += `<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;margin-bottom:0.375rem;">`;
+          html += `<span style="min-width:48px;color:${textSub};">${b.label}</span>`;
+          html += `<div style="flex:1;height:6px;border-radius:3px;background:${statBg};overflow:hidden;">`;
+          html += `<div style="width:${Math.min(b.pct, 100)}%;height:100%;border-radius:3px;background:${barColor};"></div>`;
+          html += `</div>`;
+          html += `<span style="min-width:36px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:500;">${Number(b.pct).toFixed(1)}%</span>`;
+          html += `</div>`;
+        });
         html += `</div>`;
-        html += `<span style="min-width:36px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:500;">${Number(b.pct).toFixed(1)}%</span>`;
-        html += `</div>`;
-      });
-      html += `</div>`;
+      }
     }
 
-    // Risk badge
+    // Risk badge — data comes from holdersData.metrics
     if (cfg.show.risk && metrics.riskLevel) {
       const riskColors = { low: '#10b981', medium: '#f59e0b', high: '#ef4444' };
       const riskBg = { low: 'rgba(16,185,129,0.15)', medium: 'rgba(245,158,11,0.15)', high: 'rgba(239,68,68,0.15)' };
@@ -315,21 +352,31 @@ const widgetBuilder = {
       html += `${level} risk</span></div>`;
     }
 
-    // Sentiment bar
-    if (cfg.show.sentiment && (sentiment.bullish || sentiment.bearish)) {
-      const total = (sentiment.bullish || 0) + (sentiment.bearish || 0);
-      const bullPct = total > 0 ? ((sentiment.bullish || 0) / total * 100) : 50;
-      html += `<div style="padding:0.5rem 1rem;">`;
-      html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.375rem;">Sentiment</div>`;
-      html += `<div style="height:8px;border-radius:4px;background:rgba(239,68,68,0.25);overflow:hidden;">`;
-      html += `<div style="width:${bullPct}%;height:100%;border-radius:4px;background:#10b981;"></div>`;
-      html += `</div>`;
-      html += `<div style="display:flex;justify-content:space-between;font-size:0.6875rem;color:${textSub};margin-top:0.25rem;">`;
-      html += `<span>Bullish ${sentiment.bullish || 0}</span><span>Bearish ${sentiment.bearish || 0}</span>`;
-      html += `</div></div>`;
+    // Sentiment bar — data comes from /api/sentiment/:mint -> { tally: { bullish, bearish } }
+    if (cfg.show.sentiment) {
+      const bull = sentiment.bullish || 0;
+      const bear = sentiment.bearish || 0;
+      const total = bull + bear;
+      if (total > 0) {
+        const bullPct = (bull / total * 100);
+        html += `<div style="padding:0.5rem 1rem;">`;
+        html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.375rem;">Sentiment</div>`;
+        html += `<div style="height:8px;border-radius:4px;background:rgba(239,68,68,0.25);overflow:hidden;">`;
+        html += `<div style="width:${bullPct}%;height:100%;border-radius:4px;background:#10b981;"></div>`;
+        html += `</div>`;
+        html += `<div style="display:flex;justify-content:space-between;font-size:0.6875rem;color:${textSub};margin-top:0.25rem;">`;
+        html += `<span>Bullish ${bull}</span><span>Bearish ${bear}</span>`;
+        html += `</div></div>`;
+      } else {
+        // Show empty state
+        html += `<div style="padding:0.5rem 1rem;">`;
+        html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.375rem;">Sentiment</div>`;
+        html += `<div style="font-size:0.75rem;color:${textSub};opacity:0.6;">No votes yet</div>`;
+        html += `</div>`;
+      }
     }
 
-    // Top holders table
+    // Top holders table — data comes from holdersData.holders
     if (cfg.show.topHolders && holdersArr.length > 0) {
       const top5 = holdersArr.slice(0, 5);
       html += `<div style="padding:0.5rem 0;">`;
@@ -350,10 +397,20 @@ const widgetBuilder = {
       html += `</tbody></table></div>`;
     }
 
-    // Community links
-    if (cfg.show.community && community.links) {
-      const links = community.links;
-      const linkEntries = Object.entries(links).filter(([, v]) => v && v.url);
+    // Community links — handle both submission array format and /v1/community format
+    if (cfg.show.community && community) {
+      let linkEntries = [];
+      if (community.data && community.data.links) {
+        // /v1/community format: { data: { links: { twitter: { url }, ... } } }
+        linkEntries = Object.entries(community.data.links).filter(([, v]) => v && v.url);
+      } else if (Array.isArray(community)) {
+        // getSubmissions format: array of { submission_type, content_url }
+        const socials = community.filter(s => s.submission_type !== 'banner' && s.content_url);
+        linkEntries = socials.map(s => [s.submission_type, { url: s.content_url }]);
+      } else if (community.submissions) {
+        const socials = (community.submissions.socials || []).filter(s => s.content_url);
+        linkEntries = socials.map(s => [s.submission_type, { url: s.content_url }]);
+      }
       if (linkEntries.length > 0) {
         html += `<div style="display:flex;gap:0.375rem;padding:0.5rem 1rem 0.625rem;flex-wrap:wrap;">`;
         linkEntries.forEach(([type, data]) => {
@@ -376,7 +433,6 @@ const widgetBuilder = {
 
   // Build the embeddable <script> tag code
   buildEmbedCode(cfg) {
-    // Get the user's API key if available
     const apiKey = apiKeyManager.currentKey || 'YOUR_API_KEY';
 
     const showList = Object.entries(cfg.show)
@@ -428,10 +484,8 @@ const widgetBuilder = {
       return;
     }
 
-    // Render the live preview
-    container.innerHTML = this.buildWidgetHTML(cfg, false);
+    container.innerHTML = this.buildWidgetHTML(cfg);
 
-    // Render the embed code
     const embedCode = this.buildEmbedCode(cfg);
     codeOutput.innerHTML = '<code>' + this.escapeHtml(embedCode) + '</code>';
     copyBtn.disabled = false;
@@ -448,7 +502,6 @@ const widgetBuilder = {
         toast.success('Widget embed code copied to clipboard!');
       }
     } catch {
-      // Fallback
       const ta = document.createElement('textarea');
       ta.value = code;
       ta.style.position = 'fixed';

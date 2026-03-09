@@ -1,8 +1,14 @@
 // About Page - API Key Management
 const apiKeyManager = {
   currentKey: null, // Stores the current API key
+  STORAGE_KEY: 'opendex_api_key', // localStorage key for persisting the full API key
 
   init() {
+    // Restore full API key from localStorage if available
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY);
+      if (stored) this.currentKey = stored;
+    } catch (_) { /* localStorage unavailable */ }
     this.bindEvents();
     this.updateUI();
   },
@@ -85,18 +91,24 @@ const apiKeyManager = {
         if (infoCard) {
           infoCard.style.display = 'block';
 
-          // Store the key for copy functionality
-          this.currentKey = response.data.apiKey;
+          // Use stored full key from localStorage, or fall back to prefix from backend
+          const fullKey = this.currentKey;
+          const prefix = response.data.keyPrefix || '';
 
-          // Update the display with full API key
+          // If we have a stored key, verify prefix still matches (key wasn't revoked/regenerated)
+          if (fullKey && prefix && !fullKey.startsWith(prefix)) {
+            this.currentKey = null;
+            try { localStorage.removeItem(this.STORAGE_KEY); } catch (_) {}
+          }
+
+          // Update the display
           const keyDisplayEl = document.getElementById('api-key-display');
           const createdEl = document.getElementById('api-key-created-date');
           const lastUsedEl = document.getElementById('api-key-last-used');
           const requestsEl = document.getElementById('api-key-requests');
 
           if (keyDisplayEl) {
-            // Show full key or fallback to prefix if full key not available (legacy keys)
-            keyDisplayEl.textContent = response.data.apiKey || (response.data.keyPrefix + '...');
+            keyDisplayEl.textContent = this.currentKey || (prefix + '...');
           }
           if (createdEl) createdEl.textContent = new Date(response.data.createdAt).toLocaleDateString();
           if (lastUsedEl) {
@@ -137,8 +149,9 @@ const apiKeyManager = {
       const response = await api.apiKeys.register(wallet.address, name);
 
       if (response.success && response.data.apiKey) {
-        // Store the key
+        // Store the key in memory and localStorage for persistence
         this.currentKey = response.data.apiKey;
+        try { localStorage.setItem(this.STORAGE_KEY, this.currentKey); } catch (_) {}
 
         // Show the created card with the full key
         const createdCard = document.getElementById('api-key-created');
@@ -215,6 +228,7 @@ const apiKeyManager = {
 
       if (response.success) {
         this.currentKey = null;
+        try { localStorage.removeItem(this.STORAGE_KEY); } catch (_) {}
         toast.success('API key revoked successfully');
         this.updateUI();
       } else {

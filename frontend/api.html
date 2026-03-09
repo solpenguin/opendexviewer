@@ -102,9 +102,109 @@
       <p>Access community content programmatically for your apps and tools</p>
     </section>
 
-    <!-- Widget Builder Section -->
-    <section class="about-section api-section" id="widget-builder-section">
-      <div class="widget-builder">
+    <!-- Developer API Section -->
+    <section class="about-section api-section" id="api-section">
+      <!-- API Key Management -->
+      <div class="api-key-section">
+        <h3>Your API Key</h3>
+        <p class="api-key-description">Register for a free API key to access community content (banners, social links) for any token. One key per wallet.</p>
+
+        <!-- Not connected state -->
+        <div id="api-key-connect" class="api-key-card">
+          <div class="api-key-card-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2"/>
+              <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+            </svg>
+            <p>Connect your wallet to manage your API key</p>
+            <button type="button" id="connect-wallet-api" class="btn btn-secondary">Connect Wallet</button>
+          </div>
+        </div>
+
+        <!-- Has no key state -->
+        <div id="api-key-register" class="api-key-card" style="display: none;">
+          <div class="api-key-card-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <p>You don't have an API key yet</p>
+            <div class="api-key-register-form">
+              <input type="text" id="api-key-name" placeholder="App name (optional)" maxlength="100">
+              <button type="button" id="register-api-key-btn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Generate API Key
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Has key state -->
+        <div id="api-key-info" class="api-key-card" style="display: none;">
+          <div class="api-key-card-header">
+            <div class="api-key-status active">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Active
+            </div>
+            <button type="button" id="revoke-api-key-btn" class="btn btn-ghost btn-sm btn-danger">Revoke Key</button>
+          </div>
+          <div class="api-key-details">
+            <div class="api-key-row api-key-row-full">
+              <span class="api-key-label">API Key</span>
+              <div class="api-key-display-wrapper">
+                <span class="api-key-value api-key-full-value" id="api-key-display">--------</span>
+                <button type="button" id="copy-api-key-btn" class="btn btn-ghost btn-sm" title="Copy API Key">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Created</span>
+              <span class="api-key-value" id="api-key-created-date">--</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Last Used</span>
+              <span class="api-key-value" id="api-key-last-used">Never</span>
+            </div>
+            <div class="api-key-row">
+              <span class="api-key-label">Requests</span>
+              <span class="api-key-value" id="api-key-requests">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- New key created state (shows full key once) -->
+        <div id="api-key-created" class="api-key-card api-key-created-card" style="display: none;">
+          <div class="api-key-success-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <h4>API Key Created!</h4>
+          </div>
+          <p class="api-key-warning">Save this key now - it will only be shown once!</p>
+          <div class="api-key-display">
+            <code id="api-key-full"></code>
+            <button type="button" id="copy-api-key-created-btn" class="btn btn-ghost btn-sm" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <button type="button" id="api-key-done-btn" class="btn btn-primary">I've Saved My Key</button>
+        </div>
+      </div>
+
+      <!-- Widget Builder -->
+      <div class="widget-builder" id="widget-builder-section">
         <div class="widget-builder-header">
           <div class="widget-builder-title-row">
             <div class="widget-builder-icon">
@@ -120,15 +220,47 @@
         </div>
 
         <div class="widget-builder-body">
-          <!-- Left: Controls -->
-          <div class="widget-builder-controls">
-            <!-- Token Address -->
+          <!-- Token Address (top, full width) -->
+          <div class="widget-builder-token-row">
             <div class="widget-control-group">
               <label class="widget-control-label">Token Contract Address</label>
               <input type="text" id="widget-token-address" class="widget-input" placeholder="Enter Solana token mint address..." spellcheck="false">
               <div id="widget-token-status" class="widget-token-status"></div>
             </div>
+          </div>
 
+          <!-- Preview (center, full width) -->
+          <div class="widget-builder-preview-area">
+            <div class="widget-preview-label">Live Preview</div>
+            <div class="widget-preview-container" id="widget-preview-container">
+              <div class="widget-preview" id="widget-preview">
+                <div class="widget-preview-placeholder">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                  </svg>
+                  <span>Enter a token address to see preview</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Copy Code -->
+            <div class="widget-code-section">
+              <div class="widget-code-header">
+                <span class="widget-code-label">Embed Code</span>
+                <button type="button" id="widget-copy-code" class="btn btn-ghost btn-sm" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                  </svg>
+                  Copy Code
+                </button>
+              </div>
+              <pre class="widget-code-block" id="widget-code-output"><code><!-- Configure your widget above to generate embed code --></code></pre>
+            </div>
+          </div>
+
+          <!-- Options (below preview, in columns) -->
+          <div class="widget-builder-controls">
             <!-- Data Modules -->
             <div class="widget-control-group">
               <label class="widget-control-label">Data to Display</label>
@@ -248,36 +380,6 @@
               </select>
             </div>
           </div>
-
-          <!-- Right: Preview + Code -->
-          <div class="widget-builder-preview-area">
-            <div class="widget-preview-label">Live Preview</div>
-            <div class="widget-preview-container" id="widget-preview-container">
-              <div class="widget-preview" id="widget-preview">
-                <div class="widget-preview-placeholder">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                  </svg>
-                  <span>Enter a token address to see preview</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Copy Code -->
-            <div class="widget-code-section">
-              <div class="widget-code-header">
-                <span class="widget-code-label">Embed Code</span>
-                <button type="button" id="widget-copy-code" class="btn btn-ghost btn-sm" disabled>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2"/>
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-                  </svg>
-                  Copy Code
-                </button>
-              </div>
-              <pre class="widget-code-block" id="widget-code-output"><code><!-- Configure your widget above to generate embed code --></code></pre>
-            </div>
-          </div>
         </div>
 
         <!-- How It Works Steps -->
@@ -288,7 +390,7 @@
               <div class="widget-guide-step-number">1</div>
               <div class="widget-guide-step-content">
                 <strong>Get Your API Key</strong>
-                <p>Scroll down to the <em>Your API Key</em> section below, connect your wallet, and generate a free API key. This key authenticates your widget and is automatically embedded in the code you copy.</p>
+                <p>Use the <em>Your API Key</em> section above to connect your wallet and generate a free API key. This key authenticates your widget and is automatically embedded in the code you copy.</p>
               </div>
             </div>
             <div class="widget-guide-step">
@@ -326,7 +428,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
               </svg>
-              <span><strong>API Key in the embed code:</strong> If you have an active API key, it is automatically inserted into the generated snippet. If you see <code>YOUR_API_KEY</code>, generate a key first in the section below.</span>
+              <span><strong>API Key in the embed code:</strong> If you have an active API key, it is automatically inserted into the generated snippet. If you see <code>YOUR_API_KEY</code>, generate a key first using the section above.</span>
             </div>
             <div class="widget-guide-note">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -341,108 +443,6 @@
               <span><strong>Responsive:</strong> The widget respects <code>max-width: 100%</code>, so it adapts to smaller containers. Set the width to your preferred maximum size.</span>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Developer API Section -->
-    <section class="about-section api-section" id="api-section">
-      <!-- API Key Management -->
-      <div class="api-key-section">
-        <h3>Your API Key</h3>
-        <p class="api-key-description">Register for a free API key to access community content (banners, social links) for any token. One key per wallet.</p>
-
-        <!-- Not connected state -->
-        <div id="api-key-connect" class="api-key-card">
-          <div class="api-key-card-content">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="5" width="20" height="14" rx="2"/>
-              <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
-            </svg>
-            <p>Connect your wallet to manage your API key</p>
-            <button type="button" id="connect-wallet-api" class="btn btn-secondary">Connect Wallet</button>
-          </div>
-        </div>
-
-        <!-- Has no key state -->
-        <div id="api-key-register" class="api-key-card" style="display: none;">
-          <div class="api-key-card-content">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-            </svg>
-            <p>You don't have an API key yet</p>
-            <div class="api-key-register-form">
-              <input type="text" id="api-key-name" placeholder="App name (optional)" maxlength="100">
-              <button type="button" id="register-api-key-btn" class="btn btn-primary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Generate API Key
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Has key state -->
-        <div id="api-key-info" class="api-key-card" style="display: none;">
-          <div class="api-key-card-header">
-            <div class="api-key-status active">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Active
-            </div>
-            <button type="button" id="revoke-api-key-btn" class="btn btn-ghost btn-sm btn-danger">Revoke Key</button>
-          </div>
-          <div class="api-key-details">
-            <div class="api-key-row api-key-row-full">
-              <span class="api-key-label">API Key</span>
-              <div class="api-key-display-wrapper">
-                <span class="api-key-value api-key-full-value" id="api-key-display">--------</span>
-                <button type="button" id="copy-api-key-btn" class="btn btn-ghost btn-sm" title="Copy API Key">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2"/>
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div class="api-key-row">
-              <span class="api-key-label">Created</span>
-              <span class="api-key-value" id="api-key-created-date">--</span>
-            </div>
-            <div class="api-key-row">
-              <span class="api-key-label">Last Used</span>
-              <span class="api-key-value" id="api-key-last-used">Never</span>
-            </div>
-            <div class="api-key-row">
-              <span class="api-key-label">Requests</span>
-              <span class="api-key-value" id="api-key-requests">0</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- New key created state (shows full key once) -->
-        <div id="api-key-created" class="api-key-card api-key-created-card" style="display: none;">
-          <div class="api-key-success-header">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            <h4>API Key Created!</h4>
-          </div>
-          <p class="api-key-warning">Save this key now - it will only be shown once!</p>
-          <div class="api-key-display">
-            <code id="api-key-full"></code>
-            <button type="button" id="copy-api-key-created-btn" class="btn btn-ghost btn-sm" title="Copy to clipboard">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-            </button>
-          </div>
-          <button type="button" id="api-key-done-btn" class="btn btn-primary">I've Saved My Key</button>
         </div>
       </div>
 
