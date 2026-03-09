@@ -282,6 +282,16 @@ const tokenDetail = {
       bindHandler(tab, 'click', handler);
     });
 
+    // Similar tokens toggle (collapsed by default)
+    const similarToggleBtn = document.getElementById('similar-tokens-toggle');
+    const similarToggleHandler = () => {
+      const body = document.getElementById('similar-tokens-body');
+      const isExpanded = similarToggleBtn.getAttribute('aria-expanded') === 'true';
+      similarToggleBtn.setAttribute('aria-expanded', !isExpanded);
+      if (body) body.style.display = isExpanded ? 'none' : 'block';
+    };
+    bindHandler(similarToggleBtn, 'click', similarToggleHandler);
+
     // Similar tokens refresh button
     const similarRefreshBtn = document.getElementById('similar-tokens-refresh');
     const similarRefreshHandler = () => {
@@ -729,6 +739,16 @@ const tokenDetail = {
     if (loadingEl) loadingEl.style.display = 'none';
 
     const results = Array.isArray(similar) ? similar : (similar && similar.results) || [];
+    // Update count badge in header
+    const countEl = document.getElementById('similar-tokens-count');
+    if (countEl) {
+      if (results.length > 0) {
+        countEl.textContent = `(${results.length})`;
+        countEl.style.display = '';
+      } else {
+        countEl.style.display = 'none';
+      }
+    }
     if (results.length === 0) {
       if (sectionEl) sectionEl.classList.add('similar-tokens-empty');
       if (listEl) {

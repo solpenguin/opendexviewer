@@ -156,61 +156,32 @@ const tokenList = {
     const searchClear = document.getElementById('search-clear');
 
     if (searchInput) {
-      this._dropdownIndex = -1;
-
-      // Live search on input
+      // Auto-search after user stops typing (debounced)
       searchInput.addEventListener('input', utils.debounce((e) => {
         const value = e.target.value.trim();
         if (searchClear) searchClear.style.display = value ? 'block' : 'none';
 
         if (value.length >= 2) {
-          this.showSearchDropdown(value);
-        } else {
-          this.hideSearchDropdown();
+          this.search(value);
+        } else if (value.length === 0) {
+          this.clearSearch();
         }
-      }, 300));
+      }, 400));
 
-      // Keyboard navigation
+      // Keyboard shortcuts
       searchInput.addEventListener('keydown', (e) => {
-        const dropdown = document.getElementById('search-results');
-        const items = dropdown ? dropdown.querySelectorAll('.search-result-item') : [];
-
-        if (e.key === 'ArrowDown') {
+        if (e.key === 'Enter') {
           e.preventDefault();
-          if (dropdown && dropdown.style.display !== 'none' && items.length > 0) {
-            this._dropdownIndex = Math.min(this._dropdownIndex + 1, items.length - 1);
-            this._highlightDropdownItem(items);
-          }
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          if (dropdown && dropdown.style.display !== 'none' && items.length > 0) {
-            this._dropdownIndex = Math.max(this._dropdownIndex - 1, 0);
-            this._highlightDropdownItem(items);
-          }
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          if (this._dropdownIndex >= 0 && items[this._dropdownIndex]) {
-            items[this._dropdownIndex].click();
-          } else {
-            this.search(searchInput.value);
-          }
-          this.hideSearchDropdown();
+          this.search(searchInput.value);
         } else if (e.key === 'Escape') {
-          this.hideSearchDropdown();
           searchInput.blur();
         }
-      });
-
-      // Hide dropdown on blur (with delay for click)
-      searchInput.addEventListener('blur', () => {
-        setTimeout(() => this.hideSearchDropdown(), 200);
       });
     }
 
     if (searchBtn) {
       searchBtn.addEventListener('click', () => {
         this.search(document.getElementById('search-input').value);
-        this.hideSearchDropdown();
       });
     }
 
@@ -336,13 +307,6 @@ const tokenList = {
         }
       });
     }
-
-    // Click outside to close search dropdown
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.search-container')) {
-        this.hideSearchDropdown();
-      }
-    });
 
     // Event delegation for dynamically rendered data-action buttons
     document.addEventListener('click', (e) => {
@@ -626,108 +590,6 @@ const tokenList = {
       this.isLoading = false;
       if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenList.search', performance.now() - _t0, _ok, 'frontend');
     }
-  },
-
-  // Show search dropdown with results
-  // Uses DOM methods for XSS safety instead of innerHTML with user data
-  async showSearchDropdown(query) {
-    const dropdown = document.getElementById('search-results');
-    if (!dropdown) return;
-
-    this._dropdownIndex = -1;
-
-    // Show loading state immediately
-    dropdown.innerHTML = '<div class="search-dropdown-loading"><div class="loading-spinner"></div></div>';
-    dropdown.style.display = 'block';
-
-    try {
-      const results = await api.tokens.search(query);
-      const limitedResults = results.slice(0, 8);
-
-      // Check if input has changed while we were fetching
-      const currentValue = document.getElementById('search-input')?.value.trim();
-      if (currentValue !== query) return;
-
-      // Clear loading state
-      dropdown.innerHTML = '';
-
-      if (limitedResults.length === 0) {
-        const noResults = document.createElement('div');
-        noResults.className = 'search-no-results';
-        noResults.textContent = 'No tokens found';
-        dropdown.appendChild(noResults);
-      } else {
-        limitedResults.forEach(token => {
-          // Handle different property names from various API responses
-          const address = token.mintAddress || token.address || token.mint;
-          const logo = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
-
-          const link = document.createElement('a');
-          link.href = `token.html?mint=${encodeURIComponent(address)}`;
-          link.className = 'search-result-item';
-
-          const img = document.createElement('img');
-          img.className = 'search-result-logo';
-          img.src = logo;
-          img.alt = token.symbol || '';
-          img.onerror = function() { this.onerror = null; this.src = utils.getDefaultLogo(); };
-
-          const info = document.createElement('div');
-          info.className = 'search-result-info';
-
-          const name = document.createElement('span');
-          name.className = 'search-result-name';
-          name.textContent = token.name || 'Unknown'; // Safe: textContent
-
-          const symbol = document.createElement('span');
-          symbol.className = 'search-result-symbol';
-          symbol.textContent = token.symbol || '???'; // Safe: textContent
-
-          const price = document.createElement('span');
-          price.className = 'search-result-price';
-          price.textContent = utils.formatPrice(token.price);
-
-          info.appendChild(name);
-          info.appendChild(symbol);
-          link.appendChild(img);
-          link.appendChild(info);
-          link.appendChild(price);
-          dropdown.appendChild(link);
-        });
-
-        // "Press Enter" hint
-        if (results.length > 8) {
-          const hint = document.createElement('div');
-          hint.className = 'search-dropdown-hint';
-          hint.textContent = `Press Enter for all ${results.length} results`;
-          dropdown.appendChild(hint);
-        }
-      }
-    } catch (error) {
-      console.error('Search dropdown error:', error);
-      dropdown.innerHTML = '';
-      const errDiv = document.createElement('div');
-      errDiv.className = 'search-no-results';
-      errDiv.textContent = 'Search failed — try again';
-      dropdown.appendChild(errDiv);
-    }
-  },
-
-  // Highlight active dropdown item during keyboard navigation
-  _highlightDropdownItem(items) {
-    items.forEach((item, i) => {
-      item.classList.toggle('search-result-active', i === this._dropdownIndex);
-      if (i === this._dropdownIndex) item.scrollIntoView({ block: 'nearest' });
-    });
-  },
-
-  // Hide search dropdown
-  hideSearchDropdown() {
-    const dropdown = document.getElementById('search-results');
-    if (dropdown) {
-      dropdown.style.display = 'none';
-    }
-    this._dropdownIndex = -1;
   },
 
   // Clear search

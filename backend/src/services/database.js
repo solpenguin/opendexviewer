@@ -522,7 +522,7 @@ async function searchTokens(query, limit = 10) {
   const searchPattern = `%${escapedQuery.toLowerCase()}%`;
 
   const result = await pool.query(
-    `SELECT mint_address, name, symbol, decimals, logo_uri, created_at
+    `SELECT mint_address, name, symbol, decimals, logo_uri, price, market_cap, volume_24h, created_at
      FROM tokens
      WHERE LOWER(name) LIKE $1
         OR LOWER(symbol) LIKE $1
@@ -546,6 +546,9 @@ async function searchTokens(query, limit = 10) {
     symbol: row.symbol,
     decimals: row.decimals,
     logoURI: row.logo_uri,
+    price: row.price ? parseFloat(row.price) : 0,
+    marketCap: row.market_cap ? parseFloat(row.market_cap) : null,
+    volume24h: row.volume_24h ? parseFloat(row.volume_24h) : null,
     source: 'local'
   }));
 }
@@ -553,27 +556,23 @@ async function searchTokens(query, limit = 10) {
 // Find tokens with similar names or symbols using pg_trgm similarity scoring
 // Used for anti-spoofing: helps users identify confusing or copycat token names
 async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
-  if (!pool || (!name && !symbol)) return [];
+  if (!pool || !name) return [];
 
   const safeName = (name || '').slice(0, 100).toLowerCase();
-  const safeSymbol = (symbol || '').slice(0, 20).toLowerCase();
 
-  // Combined similarity: 40% name weight + 60% symbol weight
-  // Symbol weighted higher because symbol spoofing is more deceptive (what traders see in order books)
-  // Minimum threshold of 0.15 on either name or symbol prevents irrelevant noise
+  // Search by token name similarity only (not ticker/symbol)
+  // Minimum threshold of 0.15 prevents irrelevant noise
   const result = await pool.query(
     `SELECT
        mint_address, name, symbol, decimals, logo_uri, pair_created_at,
        price, market_cap, volume_24h,
-       similarity(LOWER(name), $1) AS name_sim,
-       similarity(LOWER(symbol), $2) AS symbol_sim,
-       (similarity(LOWER(name), $1) * 0.4 + similarity(LOWER(symbol), $2) * 0.6) AS combined_score
+       similarity(LOWER(name), $1) AS name_sim
      FROM tokens
-     WHERE mint_address != $3
-       AND (similarity(LOWER(name), $1) > 0.15 OR similarity(LOWER(symbol), $2) > 0.15)
-     ORDER BY combined_score DESC
-     LIMIT $4`,
-    [safeName, safeSymbol, mintAddress, limit]
+     WHERE mint_address != $2
+       AND similarity(LOWER(name), $1) > 0.15
+     ORDER BY name_sim DESC
+     LIMIT $3`,
+    [safeName, mintAddress, limit]
   );
 
   return result.rows.map(row => ({
@@ -586,9 +585,9 @@ async function findSimilarTokens(mintAddress, name, symbol, limit = 5) {
     price: parseFloat(row.price) || null,
     marketCap: parseFloat(row.market_cap) || null,
     volume24h: parseFloat(row.volume_24h) || null,
-    similarityScore: parseFloat(row.combined_score.toFixed(3)),
+    similarityScore: parseFloat(row.name_sim.toFixed(3)),
     nameSimilarity: parseFloat(row.name_sim.toFixed(3)),
-    symbolSimilarity: parseFloat(row.symbol_sim.toFixed(3)),
+    symbolSimilarity: null,
     source: 'local'
   }));
 }

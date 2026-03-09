@@ -657,6 +657,9 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
           symbol: localToken.symbol,
           decimals: localToken.decimals,
           logoURI: localToken.logo_uri,
+          price: localToken.price ? parseFloat(localToken.price) : 0,
+          marketCap: localToken.market_cap ? parseFloat(localToken.market_cap) : null,
+          volume24h: localToken.volume_24h ? parseFloat(localToken.volume_24h) : null,
           source: 'local'
         };
       }
@@ -2067,7 +2070,7 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
 
     // Run inline DB similarity query (~5-20ms)
     let results = [];
-    if (tokenName || tokenSymbol) {
+    if (tokenName) {
       try {
         results = await db.findSimilarTokens(mint, tokenName, tokenSymbol, 5);
       } catch (err) {
