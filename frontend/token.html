@@ -226,8 +226,10 @@
 
       <!-- Main Content Grid -->
       <div class="token-content-grid">
-        <!-- Chart Section -->
-        <section class="chart-section">
+        <!-- Left Column -->
+        <div class="token-col-left">
+          <!-- Chart Section -->
+          <section class="chart-section">
           <div class="chart-header">
             <div class="chart-title-row">
               <h2 id="chart-title">Price Chart</h2>
@@ -307,45 +309,6 @@
             <div class="chart-stat">
               <span class="label">Volume</span>
               <span id="chart-volume" class="value">--</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- Stats Section -->
-        <section class="stats-section">
-          <h2>Token Statistics</h2>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <span class="stat-label">Market Cap</span>
-              <span id="stat-mcap" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">24h Volume</span>
-              <span id="stat-volume" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Total Liquidity</span>
-              <span id="stat-liquidity" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Holders</span>
-              <span id="stat-holders" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Total Supply</span>
-              <span id="stat-supply" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Circulating</span>
-              <span id="stat-circulating" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Token Age</span>
-              <span id="stat-age" class="stat-value">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Page Views</span>
-              <span id="stat-views" class="stat-value">--</span>
             </div>
           </div>
         </section>
@@ -519,7 +482,48 @@
             </svg>
           </button>
         </section>
-        <!-- Trade Section -->
+        </div>
+        <div class="token-col-right">
+          <!-- Stats Section -->
+          <section class="stats-section">
+            <h2>Token Statistics</h2>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <span class="stat-label">Market Cap</span>
+                <span id="stat-mcap" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">24h Volume</span>
+                <span id="stat-volume" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Total Liquidity</span>
+                <span id="stat-liquidity" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Holders</span>
+                <span id="stat-holders" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Total Supply</span>
+                <span id="stat-supply" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Circulating</span>
+                <span id="stat-circulating" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Token Age</span>
+                <span id="stat-age" class="stat-value">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Page Views</span>
+                <span id="stat-views" class="stat-value">--</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Trade Section -->
         <section class="trade-section">
           <h2>Trade</h2>
           <div class="trade-links">
@@ -599,6 +603,7 @@
             <div id="similar-tokens-list" class="similar-tokens-list" style="display:none;"></div>
           </div>
         </section>
+        </div>
 
       </div>
 
