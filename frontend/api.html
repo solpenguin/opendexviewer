@@ -102,6 +102,249 @@
       <p>Access community content programmatically for your apps and tools</p>
     </section>
 
+    <!-- Widget Builder Section -->
+    <section class="about-section api-section" id="widget-builder-section">
+      <div class="widget-builder">
+        <div class="widget-builder-header">
+          <div class="widget-builder-title-row">
+            <div class="widget-builder-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+              </svg>
+            </div>
+            <div>
+              <h3>Embeddable Widget Builder</h3>
+              <p class="widget-builder-subtitle">Create customizable token analytics widgets for your site</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="widget-builder-body">
+          <!-- Left: Controls -->
+          <div class="widget-builder-controls">
+            <!-- Token Address -->
+            <div class="widget-control-group">
+              <label class="widget-control-label">Token Contract Address</label>
+              <input type="text" id="widget-token-address" class="widget-input" placeholder="Enter Solana token mint address..." spellcheck="false">
+              <div id="widget-token-status" class="widget-token-status"></div>
+            </div>
+
+            <!-- Data Modules -->
+            <div class="widget-control-group">
+              <label class="widget-control-label">Data to Display</label>
+              <div class="widget-checkbox-grid">
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-price" checked>
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Price &amp; 24h Change</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-mcap" checked>
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Market Cap</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-volume">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>24h Volume</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-liquidity">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Liquidity</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-holders" checked>
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Holder Count</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-concentration">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Holder Concentration</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-risk">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Risk Badge</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-supply">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Supply Info</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-age">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Token Age</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-sentiment">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Sentiment</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-top-holders">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Top Holders Table</span>
+                </label>
+                <label class="widget-checkbox">
+                  <input type="checkbox" id="widget-show-community">
+                  <span class="widget-checkbox-mark"></span>
+                  <span>Community Links</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Appearance -->
+            <div class="widget-control-group">
+              <label class="widget-control-label">Appearance</label>
+              <div class="widget-appearance-grid">
+                <div class="widget-color-row">
+                  <label class="widget-color-label">Theme</label>
+                  <div class="widget-theme-toggle">
+                    <button type="button" class="widget-theme-btn active" data-theme="dark">Dark</button>
+                    <button type="button" class="widget-theme-btn" data-theme="light">Light</button>
+                  </div>
+                </div>
+                <div class="widget-color-row">
+                  <label class="widget-color-label">Accent Color</label>
+                  <input type="color" id="widget-accent-color" class="widget-color-picker" value="#6366f1">
+                </div>
+                <div class="widget-color-row">
+                  <label class="widget-color-label">Background</label>
+                  <input type="color" id="widget-bg-color" class="widget-color-picker" value="#0c0d10">
+                </div>
+                <div class="widget-color-row">
+                  <label class="widget-color-label">Text Color</label>
+                  <input type="color" id="widget-text-color" class="widget-color-picker" value="#f0f2f5">
+                </div>
+                <div class="widget-color-row">
+                  <label class="widget-color-label">Border Radius</label>
+                  <div class="widget-range-row">
+                    <input type="range" id="widget-border-radius" min="0" max="24" value="14" class="widget-range">
+                    <span id="widget-radius-value" class="widget-range-value">14px</span>
+                  </div>
+                </div>
+                <div class="widget-color-row">
+                  <label class="widget-color-label">Width</label>
+                  <div class="widget-range-row">
+                    <input type="range" id="widget-width" min="280" max="600" value="400" step="10" class="widget-range">
+                    <span id="widget-width-value" class="widget-range-value">400px</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Refresh Interval -->
+            <div class="widget-control-group">
+              <label class="widget-control-label">Auto-Refresh Interval</label>
+              <select id="widget-refresh-interval" class="widget-select">
+                <option value="0">No auto-refresh</option>
+                <option value="60">Every 1 minute</option>
+                <option value="300" selected>Every 5 minutes</option>
+                <option value="600">Every 10 minutes</option>
+                <option value="1800">Every 30 minutes</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Right: Preview + Code -->
+          <div class="widget-builder-preview-area">
+            <div class="widget-preview-label">Live Preview</div>
+            <div class="widget-preview-container" id="widget-preview-container">
+              <div class="widget-preview" id="widget-preview">
+                <div class="widget-preview-placeholder">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                  </svg>
+                  <span>Enter a token address to see preview</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Copy Code -->
+            <div class="widget-code-section">
+              <div class="widget-code-header">
+                <span class="widget-code-label">Embed Code</span>
+                <button type="button" id="widget-copy-code" class="btn btn-ghost btn-sm" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                  </svg>
+                  Copy Code
+                </button>
+              </div>
+              <pre class="widget-code-block" id="widget-code-output"><code><!-- Configure your widget above to generate embed code --></code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- How It Works Steps -->
+        <div class="widget-builder-guide">
+          <h4 class="widget-guide-title">How to Use the Widget Builder</h4>
+          <div class="widget-guide-steps">
+            <div class="widget-guide-step">
+              <div class="widget-guide-step-number">1</div>
+              <div class="widget-guide-step-content">
+                <strong>Get Your API Key</strong>
+                <p>Scroll down to the <em>Your API Key</em> section below, connect your wallet, and generate a free API key. This key authenticates your widget and is automatically embedded in the code you copy.</p>
+              </div>
+            </div>
+            <div class="widget-guide-step">
+              <div class="widget-guide-step-number">2</div>
+              <div class="widget-guide-step-content">
+                <strong>Enter a Token Address</strong>
+                <p>Paste any Solana token mint address into the field above. The builder will fetch live data and display it in the preview panel on the right.</p>
+              </div>
+            </div>
+            <div class="widget-guide-step">
+              <div class="widget-guide-step-number">3</div>
+              <div class="widget-guide-step-content">
+                <strong>Choose Your Data</strong>
+                <p>Toggle the data modules you want shown: price, market cap, holder analytics, sentiment, community links, and more. The preview updates instantly.</p>
+              </div>
+            </div>
+            <div class="widget-guide-step">
+              <div class="widget-guide-step-number">4</div>
+              <div class="widget-guide-step-content">
+                <strong>Customize Appearance</strong>
+                <p>Pick a dark or light theme, adjust colors, border radius, and width to match your site's design. Set an auto-refresh interval to keep data current.</p>
+              </div>
+            </div>
+            <div class="widget-guide-step">
+              <div class="widget-guide-step-number">5</div>
+              <div class="widget-guide-step-content">
+                <strong>Copy &amp; Embed</strong>
+                <p>Click <em>Copy Code</em> to grab the embed snippet. Paste it into any HTML page &mdash; your API key is already included. The widget loads asynchronously and won't block your page.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="widget-guide-notes">
+            <div class="widget-guide-note">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span><strong>API Key in the embed code:</strong> If you have an active API key, it is automatically inserted into the generated snippet. If you see <code>YOUR_API_KEY</code>, generate a key first in the section below.</span>
+            </div>
+            <div class="widget-guide-note">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <span><strong>Rate limits apply:</strong> Each widget refresh counts as API requests against your key's <strong>100 requests/minute</strong> limit. Choose a reasonable refresh interval for your traffic level.</span>
+            </div>
+            <div class="widget-guide-note">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <span><strong>Responsive:</strong> The widget respects <code>max-width: 100%</code>, so it adapts to smaller containers. Set the width to your preferred maximum size.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Developer API Section -->
     <section class="about-section api-section" id="api-section">
       <!-- API Key Management -->
@@ -373,6 +616,7 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="js/wallet.js"></script>
   <script src="js/about.js"></script>
+  <script src="js/widgetBuilder.js"></script>
   <script src="js/announcements.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');

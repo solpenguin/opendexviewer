@@ -713,6 +713,13 @@ const HOLD_TIME_EXCLUDE_MINTS = new Set([
   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
 ]);
 
+// NFT transaction types to exclude from hold time calculations
+const HOLD_TIME_EXCLUDE_TYPES = new Set([
+  'NFT_SALE', 'NFT_LISTING', 'NFT_CANCEL_LISTING', 'NFT_BID',
+  'NFT_BID_CANCELLED', 'NFT_MINT', 'BURN', 'BURN_NFT',
+  'COMPRESSED_NFT_MINT', 'COMPRESSED_NFT_TRANSFER',
+]);
+
 async function getWalletHoldMetrics(walletAddress, tokenMint) {
   // Fetch ALL transaction types (not just SWAP) so we catch token transfers too
   const transactions = await getTransactionsForAddress(walletAddress, { limit: 100 });
@@ -721,7 +728,7 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
     return { avgHoldTime: null, tokenHoldTime: null, walletAge: null };
   }
 
-  // Track per-token buy/sell timestamps for avg hold time (SWAP transactions only)
+  // Track per-token buy/sell timestamps for avg hold time
   const tokenEvents = new Map();
   // Track earliest receive of the specific token (any transaction type)
   let earliestTokenReceive = null;
@@ -731,6 +738,9 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
   for (const tx of transactions) {
     const timestamp = (tx.timestamp || 0) * 1000; // seconds → ms
     if (!timestamp || !tx.tokenTransfers) continue;
+
+    // Skip NFT-related transactions to avoid skewing hold time averages
+    if (HOLD_TIME_EXCLUDE_TYPES.has(tx.type)) continue;
 
     // Track oldest tx for wallet age (only reliable if we got < 100 txs)
     if (!oldestTxTimestamp || timestamp < oldestTxTimestamp) {
@@ -748,8 +758,10 @@ async function getWalletHoldMetrics(walletAddress, tokenMint) {
         }
       }
 
-      // Track avg hold time from SWAP transactions only, excluding base currencies
-      if (tx.type === 'SWAP' && !HOLD_TIME_EXCLUDE_MINTS.has(mint)) {
+      // Track avg hold time from all transaction types, excluding base currencies.
+      // Previously only SWAP was tracked, but many wallets interact via transfers,
+      // Jupiter routes, and other tx types that Helius classifies differently.
+      if (!HOLD_TIME_EXCLUDE_MINTS.has(mint)) {
         if (transfer.toUserAccount === walletAddress) {
           if (!tokenEvents.has(mint)) {
             tokenEvents.set(mint, { firstBuy: timestamp, lastSell: null });
