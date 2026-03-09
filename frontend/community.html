@@ -282,24 +282,7 @@
       });
       window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
     })();
-    (function() {
-      var dropdowns = document.querySelectorAll('.nav-dropdown');
-      dropdowns.forEach(function(dd) {
-        var toggle = dd.querySelector('.nav-dropdown-toggle');
-        if (!toggle) return;
-        toggle.addEventListener('click', function(e) {
-          if (!matchMedia('(hover: none)').matches) return;
-          if (dd.classList.contains('open')) return;
-          e.preventDefault();
-          dd.classList.add('open');
-        });
-      });
-      document.addEventListener('click', function(e) {
-        dropdowns.forEach(function(dd) {
-          if (!dd.contains(e.target)) dd.classList.remove('open');
-        });
-      });
-    })();
+    /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
   </script>
 </body>
 </html>
