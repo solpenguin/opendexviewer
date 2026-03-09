@@ -2340,6 +2340,213 @@ a:hover {
   color: var(--accent-primary);
 }
 
+/* Sidebar Expand Button (shared by Similar Tokens & OG Finder) */
+.sidebar-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.sidebar-expand-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
+}
+
+/* OG Finder Inline Section (Token Detail Sidebar) */
+.ogfinder-inline-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 1.5rem;
+  margin-bottom: 0;
+}
+
+.ogfinder-inline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.ogfinder-inline-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ogfinder-inline-header h2 svg {
+  opacity: 0.7;
+}
+
+.ogfinder-inline-desc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  padding: 0.625rem 0.875rem;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  border-radius: var(--radius-lg);
+}
+
+.ogfinder-inline-count {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* OG Finder token card overrides (reuses similar-token-card) */
+.ogfinder-token-card {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.ogfinder-token-card:hover {
+  border-color: var(--border-color);
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+
+.ogfinder-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ogfinder-badge-graduated {
+  color: var(--green);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.ogfinder-badge-bonding {
+  color: var(--yellow);
+  background: rgba(255, 180, 50, 0.1);
+}
+
+.ogfinder-age {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-muted);
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Sidebar Modal Overlay (shared by Similar Tokens & OG Finder popups) */
+.sidebar-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.sidebar-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+
+.sidebar-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.sidebar-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sidebar-modal-title-row h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sidebar-modal-title-row svg {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.sidebar-modal-count {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.sidebar-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-modal-close:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
+}
+
+.sidebar-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sidebar-modal-body .similar-tokens-list {
+  gap: 0.625rem;
+}
+
 /* Holder Analytics Section */
 
 .holders-header {
@@ -7119,6 +7326,25 @@ select {
 
   .similar-token-divider {
     display: none;
+  }
+
+  .ogfinder-inline-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .sidebar-modal {
+    max-height: 90vh;
+    margin: 0.5rem;
+  }
+
+  .sidebar-modal-header {
+    padding: 1rem;
+  }
+
+  .sidebar-modal-body {
+    padding: 1rem;
   }
 
   .holders-supply-row {

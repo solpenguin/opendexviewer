@@ -306,6 +306,50 @@ const tokenDetail = {
     };
     bindHandler(similarRefreshBtn, 'click', similarRefreshHandler);
 
+    // Similar Tokens expand button (open modal)
+    const similarExpandBtn = document.getElementById('similar-tokens-expand');
+    bindHandler(similarExpandBtn, 'click', () => this._openSidebarModal('similar'));
+
+    // Similar Tokens modal close
+    const similarModalClose = document.getElementById('similar-modal-close');
+    bindHandler(similarModalClose, 'click', () => this._closeSidebarModal('similar'));
+    const similarModalOverlay = document.getElementById('similar-tokens-modal-overlay');
+    bindHandler(similarModalOverlay, 'click', (e) => {
+      if (e.target === similarModalOverlay) this._closeSidebarModal('similar');
+    });
+
+    // OG Finder inline toggle (collapsed by default)
+    const ogfinderToggleBtn = document.getElementById('ogfinder-inline-toggle');
+    const ogfinderToggleHandler = () => {
+      const body = document.getElementById('ogfinder-inline-body');
+      const isExpanded = ogfinderToggleBtn.getAttribute('aria-expanded') === 'true';
+      ogfinderToggleBtn.setAttribute('aria-expanded', !isExpanded);
+      if (body) body.style.display = isExpanded ? 'none' : 'block';
+      // Auto-search on first expand
+      if (!isExpanded && !this._ogfinderLoaded) {
+        this.loadOGFinder();
+      }
+    };
+    bindHandler(ogfinderToggleBtn, 'click', ogfinderToggleHandler);
+
+    // OG Finder expand button (open modal)
+    const ogfinderExpandBtn = document.getElementById('ogfinder-inline-expand');
+    bindHandler(ogfinderExpandBtn, 'click', () => this._openSidebarModal('ogfinder'));
+
+    // OG Finder full page link — set query param
+    const ogfinderFullpage = document.getElementById('ogfinder-inline-fullpage');
+    if (ogfinderFullpage && this.token) {
+      ogfinderFullpage.href = `ogfinder.html?q=${encodeURIComponent(this.token.name || '')}`;
+    }
+
+    // OG Finder modal close
+    const ogfinderModalClose = document.getElementById('ogfinder-modal-close');
+    bindHandler(ogfinderModalClose, 'click', () => this._closeSidebarModal('ogfinder'));
+    const ogfinderModalOverlay = document.getElementById('ogfinder-modal-overlay');
+    bindHandler(ogfinderModalOverlay, 'click', (e) => {
+      if (e.target === ogfinderModalOverlay) this._closeSidebarModal('ogfinder');
+    });
+
     // Holders refresh button — only allow if data is >1 minute stale
     const holdersRefreshBtn = document.getElementById('holders-refresh');
     const holdersRefreshHandler = () => {
@@ -596,6 +640,12 @@ const tokenDetail = {
     if (jupiterLink) {
       jupiterLink.href = `https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&buy=${this.mint}`;
     }
+
+    // OG Finder full-page link with token name query
+    const ogfinderFullpage = document.getElementById('ogfinder-inline-fullpage');
+    if (ogfinderFullpage) {
+      ogfinderFullpage.href = `ogfinder.html?q=${encodeURIComponent(token.name || '')}`;
+    }
   },
 
   // Load pools
@@ -821,6 +871,226 @@ const tokenDetail = {
           window.open(`https://app.bubblemaps.io/sol/token/${el.dataset.bubbleAddr}`, '_blank');
         });
       });
+    }
+  },
+
+  // ── OG Finder (inline + modal) ──
+
+  _ogfinderLoaded: false,
+  _ogfinderTokens: [],
+
+  async loadOGFinder() {
+    if (this._ogfinderLoaded) return;
+    const tokenName = (this.token && this.token.name) || '';
+    if (!tokenName) return;
+
+    const loadingEl = document.getElementById('ogfinder-inline-loading');
+    const listEl = document.getElementById('ogfinder-inline-list');
+    const emptyEl = document.getElementById('ogfinder-inline-empty');
+    const countEl = document.getElementById('ogfinder-inline-count');
+
+    if (loadingEl) loadingEl.style.display = 'flex';
+    if (listEl) listEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    try {
+      let tokens = [];
+      const useDirect = typeof directPumpfun !== 'undefined' && directPumpfun._available;
+
+      if (useDirect) {
+        try {
+          const raw = await directPumpfun.search(tokenName, 50);
+          tokens = raw.map(t => directPumpfun.normalise(t));
+
+          // Enrich logos
+          const mints = tokens.map(t => t.mint).filter(Boolean);
+          if (mints.length > 0) {
+            try {
+              const enrichResult = await api.ogfinder.enrich(mints);
+              const enriched = (enrichResult && enrichResult.data) || {};
+              tokens.forEach(t => { if (enriched[t.mint]) t.imageUri = enriched[t.mint]; });
+            } catch (e) { /* non-fatal */ }
+          }
+        } catch (directErr) {
+          console.warn('[OGFinder inline] Direct PumpFun failed, falling back to backend:', directErr.message);
+          tokens = [];
+        }
+      }
+
+      if (tokens.length === 0) {
+        const result = await api.ogfinder.search(tokenName);
+        tokens = (result && result.data && result.data.tokens) || [];
+      }
+
+      // Sort oldest first
+      tokens.sort((a, b) => (a.createdTimestamp || 0) - (b.createdTimestamp || 0));
+      this._ogfinderTokens = tokens;
+      this._ogfinderLoaded = true;
+
+      if (loadingEl) loadingEl.style.display = 'none';
+
+      if (tokens.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        if (countEl) countEl.style.display = 'none';
+        return;
+      }
+
+      if (countEl) {
+        countEl.textContent = `(${tokens.length})`;
+        countEl.style.display = '';
+      }
+
+      // Render inline (show up to 5)
+      this._renderOGFinderList(listEl, tokens.slice(0, 5));
+      if (listEl) listEl.style.display = 'flex';
+
+      // Update full-page link
+      const fullpageLink = document.getElementById('ogfinder-inline-fullpage');
+      if (fullpageLink) fullpageLink.href = `ogfinder.html?q=${encodeURIComponent(tokenName)}`;
+    } catch (err) {
+      console.error('[OGFinder inline] Search failed:', err);
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (emptyEl) {
+        emptyEl.textContent = 'Search failed. Try again later.';
+        emptyEl.style.display = 'block';
+      }
+    }
+  },
+
+  _formatOGAge(timestamp) {
+    if (!timestamp) return '--';
+    const diff = Date.now() - timestamp;
+    const days = Math.floor(diff / 86400000);
+    if (days < 1) return 'Today';
+    if (days === 1) return '1d ago';
+    if (days < 30) return days + 'd ago';
+    const months = Math.floor(days / 30);
+    if (months < 12) return months + 'mo ago';
+    const years = Math.floor(days / 365);
+    const remMonths = Math.floor((days - years * 365) / 30);
+    if (remMonths > 0) return years + 'y ' + remMonths + 'mo ago';
+    return years + 'y ago';
+  },
+
+  _renderOGFinderList(container, tokens) {
+    if (!container) return;
+    const defaultLogo = utils.getDefaultLogo();
+
+    container.innerHTML = tokens.map((token, i) => {
+      const mint = token.mint || '';
+      if (!mint) return '';
+      const logoUrl = this.escapeHtml(token.imageUri || defaultLogo);
+      const name = this.escapeHtml(token.name || 'Unknown');
+      const symbol = this.escapeHtml(token.symbol || '???');
+      const shortMint = mint.length > 12 ? mint.slice(0, 4) + '...' + mint.slice(-4) : mint;
+      const age = this._formatOGAge(token.createdTimestamp);
+      const mcap = token.marketCap ? utils.formatNumber(token.marketCap, '$') : '--';
+      const graduatedBadge = token.complete
+        ? '<span class="ogfinder-badge ogfinder-badge-graduated">Graduated</span>'
+        : '<span class="ogfinder-badge ogfinder-badge-bonding">Bonding</span>';
+
+      return `
+        <a href="token.html?mint=${encodeURIComponent(mint)}" class="similar-token-card ogfinder-token-card">
+          <img src="${logoUrl}" alt="${name}" class="similar-token-logo" onerror="this.onerror=null;this.src='${defaultLogo}';">
+          <div class="similar-token-info">
+            <div class="similar-token-name-row">
+              <span class="similar-token-name">${name}</span>
+              <span class="similar-token-symbol">${symbol}</span>
+              ${graduatedBadge}
+            </div>
+            <div class="similar-token-meta-row">
+              <span class="similar-token-address" title="${this.escapeHtml(mint)}">${this.escapeHtml(shortMint)}</span>
+              <span class="similar-token-divider"></span>
+              <span class="similar-token-stat"><span class="stat-label">MCap</span> <span class="stat-value">${mcap}</span></span>
+            </div>
+          </div>
+          <span class="ogfinder-age" title="Created ${age}">#${i + 1} &middot; ${age}</span>
+        </a>
+      `;
+    }).join('');
+  },
+
+  // ── Sidebar Modals (shared by Similar Tokens & OG Finder) ──
+
+  _openSidebarModal(type) {
+    const overlayId = type === 'similar' ? 'similar-tokens-modal-overlay' : 'ogfinder-modal-overlay';
+    const overlay = document.getElementById(overlayId);
+    if (!overlay) return;
+
+    // Populate modal content
+    if (type === 'similar') {
+      this._populateSimilarModal();
+    } else {
+      // Auto-load if not yet loaded
+      if (!this._ogfinderLoaded) {
+        this.loadOGFinder().then(() => this._populateOGFinderModal());
+      } else {
+        this._populateOGFinderModal();
+      }
+    }
+
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // ESC to close
+    this._sidebarModalEsc = (e) => {
+      if (e.key === 'Escape') this._closeSidebarModal(type);
+    };
+    document.addEventListener('keydown', this._sidebarModalEsc);
+  },
+
+  _closeSidebarModal(type) {
+    const overlayId = type === 'similar' ? 'similar-tokens-modal-overlay' : 'ogfinder-modal-overlay';
+    const overlay = document.getElementById(overlayId);
+    if (overlay) overlay.style.display = 'none';
+    document.body.style.overflow = '';
+    if (this._sidebarModalEsc) {
+      document.removeEventListener('keydown', this._sidebarModalEsc);
+      this._sidebarModalEsc = null;
+    }
+  },
+
+  _populateSimilarModal() {
+    const modalList = document.getElementById('similar-modal-list');
+    const modalCount = document.getElementById('similar-modal-count');
+    const inlineList = document.getElementById('similar-tokens-list');
+
+    if (modalList && inlineList) {
+      modalList.innerHTML = inlineList.innerHTML;
+      // Re-bind bubblemaps clicks
+      modalList.querySelectorAll('.similar-token-bubble[data-bubble-addr]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open(`https://app.bubblemaps.io/sol/token/${el.dataset.bubbleAddr}`, '_blank');
+        });
+      });
+      // Re-bind logo fallbacks
+      const defaultLogo = utils.getDefaultLogo();
+      modalList.querySelectorAll('.similar-token-logo').forEach(img => {
+        img.onerror = function() { this.onerror = null; this.src = defaultLogo; };
+      });
+    }
+
+    const countEl = document.getElementById('similar-tokens-count');
+    if (modalCount && countEl) {
+      modalCount.textContent = countEl.textContent;
+    }
+  },
+
+  _populateOGFinderModal() {
+    const modalList = document.getElementById('ogfinder-modal-list');
+    const modalCount = document.getElementById('ogfinder-modal-count');
+
+    if (modalList) {
+      // Render all tokens (not just the first 5)
+      this._renderOGFinderList(modalList, this._ogfinderTokens);
+    }
+
+    if (modalCount) {
+      modalCount.textContent = this._ogfinderTokens.length > 0
+        ? `(${this._ogfinderTokens.length} tokens)`
+        : '';
     }
   },
 
