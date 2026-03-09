@@ -226,6 +226,24 @@
       var installBtn = document.getElementById('install-app-btn');
       if (!installBtn) return;
       if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+
+      // Detect iOS/iPadOS Safari (no beforeinstallprompt support)
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isSafari = /Safari/.test(navigator.userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+
+      if (isIOS) {
+        // Always show the button on iOS — guide user to Add to Home Screen
+        installBtn.style.display = '';
+        installBtn.addEventListener('click', function() {
+          if (typeof toast !== 'undefined') {
+            toast.info('Tap the Share button then "Add to Home Screen" to install');
+          } else {
+            alert('Tap the Share button then "Add to Home Screen" to install');
+          }
+        });
+        return;
+      }
+
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();
         deferredPrompt = e;

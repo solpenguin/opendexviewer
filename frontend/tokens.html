@@ -346,6 +346,21 @@
       var installBtn = document.getElementById('install-app-btn');
       if (!installBtn) return;
       if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+
+      // Detect iOS/iPadOS (no beforeinstallprompt support)
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        installBtn.style.display = '';
+        installBtn.addEventListener('click', function() {
+          if (typeof toast !== 'undefined') {
+            toast.info('Tap the Share button then "Add to Home Screen" to install');
+          } else {
+            alert('Tap the Share button then "Add to Home Screen" to install');
+          }
+        });
+        return;
+      }
+
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();
         deferredPrompt = e;
