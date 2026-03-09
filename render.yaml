@@ -209,4 +209,5 @@ databases:
 #    - Source: /community  -> Destination: /community.html (Rewrite)
 #    - Source: /development -> Destination: /development.html (Rewrite)
 #    - Source: /docs       -> Destination: /docs.html (Rewrite)
+#    - Source: /spikes     -> Destination: /spikes.html (Rewrite)
 # =====================================================

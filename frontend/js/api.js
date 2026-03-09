@@ -605,6 +605,20 @@ const api = {
     }
   },
 
+  // Spike Detector endpoints
+  spikes: {
+    async detect(params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const cacheKey = `tokens:spikes:${query}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/spikes?${query}`),
+        apiCache.TTL.tokenList,
+        true
+      );
+    }
+  },
+
   // OG Finder endpoints
   ogfinder: {
     // Backend fallback search — used by Telegram bot and when direct PumpFun fails

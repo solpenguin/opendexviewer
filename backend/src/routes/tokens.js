@@ -934,6 +934,220 @@ router.get('/leaderboard/calls', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// GET /api/tokens/spikes - Detect established tokens (>1d old) with unusual activity spikes
+// Scans trending pools, filters to tokens older than 1 day, and scores by spike indicators:
+// - Volume/MCap ratio (high ratio = unusual volume relative to size)
+// - Price change magnitude (large moves in either direction)
+// - Transaction count (high trading activity)
+// - Holder count (from Birdeye, fetched for top candidates)
+// Cached for 2 minutes to avoid hammering upstream APIs.
+// IMPORTANT: Must be registered before /:mint to avoid Express treating "spikes" as a mint param.
+router.get('/spikes', searchLimiter, asyncHandler(async (req, res) => {
+  const { minAge = 1, limit = 30 } = req.query;
+  const minAgeDays = Math.max(1, Math.min(30, parseInt(minAge) || 1));
+  const resultLimit = Math.max(1, Math.min(50, parseInt(limit) || 30));
+
+  const cacheKey = `spikes:${minAgeDays}:${resultLimit}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
+  try {
+    // Step 1: Fetch trending pools from GeckoTerminal
+    // First try to reuse token list cache (populated by /api/tokens?filter=trending)
+    // to avoid redundant GeckoTerminal calls that compete for the shared rate limiter.
+    const useHeliusEnrichment = solanaService.isHeliusConfigured();
+    let allTokens = [];
+
+    // Check if the main token list already has cached trending data
+    // Deep-copy to avoid mutating the cached objects (we modify pairCreatedAt, name, etc. below)
+    const cachedList = await cache.getWithMeta(keys.tokenList('trending-volume-desc-50', 0));
+    if (cachedList && cachedList.value && cachedList.value.length > 0) {
+      allTokens = cachedList.value.map(t => ({ ...t }));
+    } else {
+      // No cached trending data — fetch from GeckoTerminal (2 pages, not 3, to reduce load)
+      const pageFetches = [1, 2].map(page =>
+        geckoService.getTrendingTokens({ limit: 20, skipEnrichment: useHeliusEnrichment, page })
+          .catch(() => [])
+      );
+      const pages = await Promise.all(pageFetches);
+      for (const pageTokens of pages) {
+        if (pageTokens) allTokens = allTokens.concat(pageTokens);
+      }
+    }
+
+    // Deduplicate by address
+    const seen = new Set();
+    allTokens = allTokens.filter(t => {
+      const addr = t.address || t.mintAddress;
+      if (!addr || seen.has(addr)) return false;
+      seen.add(addr);
+      return true;
+    });
+
+    if (allTokens.length === 0) {
+      const result = { tokens: [], updatedAt: Date.now() };
+      await cache.set(cacheKey, result, TTL.MEDIUM);
+      return res.json(result);
+    }
+
+    // Step 2: Get pool creation dates for age filtering
+    // GeckoTerminal trending pools don't always include pool_created_at,
+    // so fetch token overviews for tokens missing creation dates
+    const minAgeMs = minAgeDays * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    // For tokens without pairCreatedAt, try to get it from DB or GeckoTerminal overview
+    const needsCreationDate = allTokens.filter(t => !t.pairCreatedAt && !t.createdAt);
+    if (needsCreationDate.length > 0) {
+      const dbTokens = await db.getTokensBatch(needsCreationDate.map(t => t.address || t.mintAddress)).catch(() => []);
+      const dbMap = {};
+      if (dbTokens) {
+        dbTokens.forEach(t => {
+          if (t && t.mint_address && t.pair_created_at) {
+            dbMap[t.mint_address] = t.pair_created_at;
+          }
+        });
+      }
+      for (const token of needsCreationDate) {
+        const addr = token.address || token.mintAddress;
+        if (dbMap[addr]) {
+          token.pairCreatedAt = dbMap[addr];
+        }
+      }
+    }
+
+    // Step 3: Filter to tokens older than minAge
+    const established = allTokens.filter(t => {
+      const createdStr = t.pairCreatedAt || t.createdAt;
+      if (!createdStr) return false; // Skip tokens with unknown age
+      const createdMs = new Date(createdStr).getTime();
+      if (isNaN(createdMs)) return false;
+      return (now - createdMs) >= minAgeMs;
+    });
+
+    if (established.length === 0) {
+      const result = { tokens: [], updatedAt: Date.now() };
+      await cache.set(cacheKey, result, TTL.MEDIUM);
+      return res.json(result);
+    }
+
+    // Step 4: Enrich with Helius metadata (name, symbol, logo)
+    if (useHeliusEnrichment) {
+      const needsEnrichment = established.filter(t => !t.name || !t.symbol || (!t.logoUri && !t.logoURI));
+      if (needsEnrichment.length > 0) {
+        try {
+          const addresses = needsEnrichment.map(t => t.address || t.mintAddress);
+          const metadata = await solanaService.getTokenMetadataBatch(addresses);
+          for (const token of needsEnrichment) {
+            const addr = token.address || token.mintAddress;
+            const meta = metadata[addr];
+            if (meta) {
+              if (!token.name || token.name === token.symbol) token.name = meta.name || token.name;
+              if (!token.symbol || token.symbol === '???') token.symbol = meta.symbol || token.symbol;
+              if (!token.logoUri && !token.logoURI) {
+                token.logoUri = meta.logoUri || null;
+                token.logoURI = meta.logoUri || null;
+              }
+            }
+          }
+        } catch (e) { /* non-critical */ }
+      }
+    }
+
+    // Step 5: Fetch holder counts from Birdeye using batch endpoint
+    // Uses getMultiTokenPrices which accepts up to 100 addresses in a single call,
+    // then falls back to individual getTokenOverview only for the top 5 candidates
+    // that need holder data (getMultiTokenPrices returns mc but not holder count).
+    const prelimScored = established.map(t => {
+      const volMcapRatio = (t.marketCap > 0) ? (t.volume24h || 0) / t.marketCap : 0;
+      const absChange = Math.abs(t.priceChange24h || 0);
+      const txns = t.transactions24h || 0;
+      return { ...t, _prelimScore: volMcapRatio * 30 + absChange + txns * 0.01 };
+    }).sort((a, b) => b._prelimScore - a._prelimScore);
+
+    const holderCounts = {};
+
+    // Only fetch individual overviews for top 5 candidates (5 * 200ms = ~1s through rate limiter)
+    const topCandidates = prelimScored.slice(0, 5);
+    const holderFetches = topCandidates.map(async (token) => {
+      const addr = token.address || token.mintAddress;
+      try {
+        const overview = await birdeyeService.getTokenOverview(addr);
+        if (overview && overview.holder) {
+          holderCounts[addr] = overview.holder;
+        }
+      } catch (e) { /* non-critical */ }
+    });
+    await Promise.all(holderFetches);
+
+    // Step 6: Calculate spike scores
+    const scored = prelimScored.map(token => {
+      const addr = token.address || token.mintAddress;
+      const volume = token.volume24h || 0;
+      const mcap = token.marketCap || 0;
+      const priceChange = token.priceChange24h || 0;
+      const txns = token.transactions24h || 0;
+      const holders = holderCounts[addr] || null;
+
+      // Volume/MCap ratio — a $500K mcap token with $2M volume is spiking hard
+      const volMcapRatio = mcap > 0 ? volume / mcap : 0;
+
+      // Score components (weighted)
+      const volumeScore = Math.min(volMcapRatio * 30, 40);        // 0-40 points
+      const priceScore = Math.min(Math.abs(priceChange) / 2, 30); // 0-30 points
+      const txnScore = Math.min(txns / 100, 20);                  // 0-20 points
+      const holderBonus = holders && holders > 500 ? Math.min(holders / 500, 10) : 0; // 0-10 points
+
+      const spikeScore = Math.round((volumeScore + priceScore + txnScore + holderBonus) * 10) / 10;
+
+      // Determine spike types
+      const spikeTypes = [];
+      if (volMcapRatio > 0.5) spikeTypes.push('volume');
+      if (Math.abs(priceChange) > 15) spikeTypes.push('price');
+      if (txns > 500) spikeTypes.push('transactions');
+      if (holders && holders > 1000) spikeTypes.push('holders');
+
+      // Calculate age in days
+      const createdStr = token.pairCreatedAt || token.createdAt;
+      const ageDays = createdStr ? Math.round((now - new Date(createdStr).getTime()) / 86400000 * 10) / 10 : null;
+
+      return {
+        mintAddress: addr,
+        address: addr,
+        name: token.name || `${addr.slice(0, 4)}...${addr.slice(-4)}`,
+        symbol: token.symbol || '???',
+        logoUri: token.logoUri || token.logoURI || null,
+        price: token.price || 0,
+        priceChange24h: priceChange,
+        volume24h: volume,
+        marketCap: mcap,
+        fdv: token.fdv || 0,
+        liquidity: token.liquidity || 0,
+        holders: holders,
+        transactions24h: txns,
+        volMcapRatio: Math.round(volMcapRatio * 1000) / 1000,
+        ageDays,
+        spikeScore,
+        spikeTypes,
+        poolAddress: token.poolAddress || null
+      };
+    });
+
+    // Sort by spike score descending, return top N
+    scored.sort((a, b) => b.spikeScore - a.spikeScore);
+    const results = scored.slice(0, resultLimit);
+
+    const result = { tokens: results, updatedAt: Date.now(), totalScanned: allTokens.length, totalEstablished: established.length };
+    await cache.set(cacheKey, result, TTL.MEDIUM);
+    res.json(result);
+  } catch (error) {
+    console.error('[Spikes] Error:', error.message);
+    res.status(500).json({ error: 'Failed to detect spike tokens' });
+  }
+}));
+
 // GET /api/tokens/:mint - Get single token details
 // Uses 5-minute cache but requires data < 1 minute old (fresh) for individual token views
 // Optimized: Uses getOrSetWithFreshness for stampede prevention on concurrent requests
