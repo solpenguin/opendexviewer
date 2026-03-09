@@ -555,6 +555,51 @@
           </div>
         </section>
 
+        <!-- Similar Tokens (Anti-Spoofing) - Collapsed by default -->
+        <section class="similar-tokens-section" id="similar-tokens-section" style="display:none;">
+          <div class="similar-tokens-header">
+            <button class="similar-tokens-toggle" id="similar-tokens-toggle" aria-expanded="false">
+              <svg class="similar-tokens-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+              <h2>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                Similar Tokens
+                <span class="similar-tokens-count" id="similar-tokens-count" style="display:none;"></span>
+              </h2>
+            </button>
+            <div class="similar-tokens-header-actions">
+              <button id="similar-tokens-refresh" class="similar-tokens-refresh-btn" title="Refresh similar tokens">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+              <span class="similar-tokens-note" title="Tokens with similar names. Always verify the contract address before trading.">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                Why am I seeing this?
+              </span>
+            </div>
+          </div>
+          <div class="similar-tokens-body" id="similar-tokens-body" style="display:none;">
+            <p class="similar-tokens-disclaimer">
+              These tokens have similar names. Always verify the contract address to avoid spoofed tokens.
+            </p>
+            <div id="similar-tokens-loading" class="similar-tokens-loading" style="display:none;">
+              <div class="loading-spinner-sm"></div>
+              <span>Scanning for similar tokens...</span>
+            </div>
+            <div id="similar-tokens-list" class="similar-tokens-list" style="display:none;"></div>
+          </div>
+        </section>
+
       </div>
 
       <!-- Pools Section -->
@@ -566,51 +611,6 @@
         </div>
         <div id="pools-list" class="pools-list" style="display: none;"></div>
         <p id="pools-empty" class="pools-empty" style="display: none;">No liquidity pools found for this token.</p>
-      </section>
-
-      <!-- Similar Tokens (Anti-Spoofing) - Collapsed by default -->
-      <section class="similar-tokens-section" id="similar-tokens-section" style="display:none;">
-        <div class="similar-tokens-header">
-          <button class="similar-tokens-toggle" id="similar-tokens-toggle" aria-expanded="false">
-            <svg class="similar-tokens-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-            <h2>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              Similar Tokens
-              <span class="similar-tokens-count" id="similar-tokens-count" style="display:none;"></span>
-            </h2>
-          </button>
-          <div class="similar-tokens-header-actions">
-            <button id="similar-tokens-refresh" class="similar-tokens-refresh-btn" title="Refresh similar tokens">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-              </svg>
-            </button>
-            <span class="similar-tokens-note" title="Tokens with similar names. Always verify the contract address before trading.">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="16" x2="12" y2="12"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-              Why am I seeing this?
-            </span>
-          </div>
-        </div>
-        <div class="similar-tokens-body" id="similar-tokens-body" style="display:none;">
-          <p class="similar-tokens-disclaimer">
-            These tokens have similar names. Always verify the contract address to avoid spoofed tokens.
-          </p>
-          <div id="similar-tokens-loading" class="similar-tokens-loading" style="display:none;">
-            <div class="loading-spinner-sm"></div>
-            <span>Scanning for similar tokens...</span>
-          </div>
-          <div id="similar-tokens-list" class="similar-tokens-list" style="display:none;"></div>
-        </div>
       </section>
 
       <!-- All Submissions Section -->

@@ -2061,9 +2061,12 @@ a:hover {
   margin-bottom: 2rem;
 }
 
-/* Similar Tokens Section (Anti-Spoofing) - below pools, outside grid */
+/* Similar Tokens Section (Anti-Spoofing) - right sidebar below sentiment */
 .similar-tokens-section {
-  margin-bottom: 2rem;
+  grid-column: 2;
+  grid-row: 4;
+  align-self: start;
+  margin-bottom: 0;
 }
 
 .similar-tokens-header {
@@ -2343,7 +2346,6 @@ a:hover {
 }
 
 /* Holder Analytics Section */
-.holders-section { grid-column: 1; grid-row: 4; align-self: start; }
 
 .holders-header {
   display: flex;
@@ -7108,6 +7110,71 @@ select {
   }
   .ai-analysis-btn {
     padding: 0.35rem 0.5rem;
+  }
+}
+
+/* Similar tokens & holders: mobile adjustments */
+@media (max-width: 600px) {
+  .similar-tokens-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .similar-tokens-note span {
+    display: none;
+  }
+
+  .similar-token-card {
+    gap: 0.625rem;
+    padding: 0.75rem;
+  }
+
+  .similar-token-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .similar-token-actions {
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .similar-token-meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .similar-token-divider {
+    display: none;
+  }
+
+  .holders-supply-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .holders-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .similar-token-score {
+    font-size: 0.625rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .similar-token-bubble {
+    width: 24px;
+    height: 24px;
+  }
+
+  .similar-tokens-disclaimer {
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
   }
 }
 
