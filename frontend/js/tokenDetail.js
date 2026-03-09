@@ -21,6 +21,7 @@ const tokenDetail = {
   logScale: false,
   _mainSeries: null,
   _modalMainSeries: null,
+  _chartRefreshInterval: null,
 
   // Get refresh interval from config (with fallback)
   get refreshIntervalMs() {
@@ -232,6 +233,14 @@ const tokenDetail = {
       };
       bindHandler(btn, 'click', handler);
     });
+
+    // Chart fit button (reset zoom)
+    const fitBtn = document.getElementById('chart-fit-btn');
+    if (fitBtn) {
+      bindHandler(fitBtn, 'click', () => {
+        if (this.chart) this.chart.timeScale().fitContent();
+      });
+    }
 
     // Chart expand button
     const expandBtn = document.getElementById('chart-expand-btn');
@@ -1888,6 +1897,7 @@ const tokenDetail = {
 
       this.renderChart(this.chartData);
       this.updateChartStats(this.chartData);
+      this._startChartRefresh();
 
       // Derive 24h high/low from the 1H OHLCV data (last 24 candles = last 24 hours).
       // Only update on the initial 1H load so the header values stay anchored to 24h.
@@ -1898,6 +1908,64 @@ const tokenDetail = {
     } finally {
       if (chartLoading) chartLoading.style.display = 'none';
       if (typeof latencyTracker !== 'undefined') latencyTracker.record('tokenDetail.chart', performance.now() - _t0, _ok, 'frontend');
+    }
+  },
+
+  // Start auto-refresh for chart data. Short timeframes refresh every 60s, longer ones less often.
+  _startChartRefresh() {
+    this._stopChartRefresh();
+    const intervalMap = { '5m': 30000, '15m': 45000, '1h': 60000, '4h': 120000, '1d': 300000, '1w': 600000 };
+    const ms = intervalMap[this.currentInterval] || 60000;
+    this._chartRefreshInterval = setInterval(() => {
+      if (document.hidden) return; // Skip if tab not visible
+      this._refreshChartData();
+    }, ms);
+  },
+
+  _stopChartRefresh() {
+    if (this._chartRefreshInterval) {
+      clearInterval(this._chartRefreshInterval);
+      this._chartRefreshInterval = null;
+    }
+  },
+
+  // Silently fetch latest chart data and update the chart without a loading spinner.
+  // Preserves the user's current zoom/scroll position.
+  async _refreshChartData() {
+    try {
+      let newData;
+      try {
+        if (typeof directGecko === 'undefined' || !directGecko._available) throw new Error('skip');
+        newData = await directGecko.getOHLCV(this.mint, this.currentInterval);
+      } catch (_) {
+        newData = await api.tokens.getChart(this.mint, { interval: this.currentInterval });
+      }
+      if (!newData?.data?.length) return;
+
+      // Snapshot visible range before destroying the chart
+      let savedRange = null;
+      let savedModalRange = null;
+      try { if (this.chart) savedRange = this.chart.timeScale().getVisibleLogicalRange(); } catch (_) {}
+      try { if (this.modalChart) savedModalRange = this.modalChart.timeScale().getVisibleLogicalRange(); } catch (_) {}
+
+      this.chartData = newData;
+      this.renderChart(this.chartData);
+      this.updateChartStats(this.chartData);
+
+      // Restore zoom position (fitContent is called by renderChart, so override it)
+      if (savedRange && this.chart) {
+        try { this.chart.timeScale().setVisibleLogicalRange(savedRange); } catch (_) {}
+      }
+
+      if (this._modalOpen) {
+        this._renderModalChart();
+        this._updateModalStats(this.chartData);
+        if (savedModalRange && this.modalChart) {
+          try { this.modalChart.timeScale().setVisibleLogicalRange(savedModalRange); } catch (_) {}
+        }
+      }
+    } catch (_) {
+      // Silent fail — don't disrupt the user
     }
   },
 
@@ -1937,7 +2005,7 @@ const tokenDetail = {
     // Clear stats if no data
     if (!data || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
       // Clear the stats display
-      const statIds = ['chart-open', 'chart-high', 'chart-low', 'chart-close', 'chart-volume'];
+      const statIds = ['chart-open', 'chart-high', 'chart-low', 'chart-close', 'chart-volume', 'chart-change'];
       statIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = '--';
@@ -1981,6 +2049,15 @@ const tokenDetail = {
     if (chartClose) chartClose.textContent = formatFn(close);
     const chartVol = document.getElementById('chart-volume');
     if (chartVol) chartVol.textContent = utils.formatNumber(totalVolume);
+    const chartChange = document.getElementById('chart-change');
+    if (chartChange && open > 0) {
+      const pctChange = ((close - open) / open) * 100;
+      chartChange.textContent = (pctChange >= 0 ? '+' : '') + pctChange.toFixed(2) + '%';
+      chartChange.className = 'value ' + (pctChange >= 0 ? 'chart-change-up' : 'chart-change-down');
+    } else if (chartChange) {
+      chartChange.textContent = '--';
+      chartChange.className = 'value';
+    }
   },
 
   // Update the token header 24h high/low from the last 24 hourly OHLCV candles
@@ -2010,7 +2087,7 @@ const tokenDetail = {
     const parent = container.parentElement;
     void (parent || container).offsetWidth;
     const w = (parent && parent.clientWidth) || container.clientWidth || 600;
-    const h = (parent && parent.clientHeight) || container.clientHeight || 280;
+    const h = (parent && parent.clientHeight) || container.clientHeight || 400;
 
     const chart = LightweightCharts.createChart(container, {
       width: w,
@@ -2042,8 +2119,8 @@ const tokenDetail = {
       localization: {
         priceFormatter: formatValue
       },
-      handleScroll: isModal,
-      handleScale: isModal,
+      handleScroll: { mouseWheel: true, pressedMouseMove: isModal, horzTouchDrag: isModal, vertTouchDrag: false },
+      handleScale: { axisPressedMouseMove: isModal, mouseWheel: true, pinch: true },
     });
 
     // Observe the PARENT container for resize — NOT the chart div itself.
@@ -2247,6 +2324,64 @@ const tokenDetail = {
     }).sort((a, b) => (a.timestamp || a.time) - (b.timestamp || b.time));
   },
 
+  // Subscribe to crosshairMove to live-update the OHLCV stats bar on hover.
+  // When the crosshair leaves, stats revert to the full-period summary.
+  _subscribeCrosshair(chart, rawData, isModal = false) {
+    if (!chart || !rawData || rawData.length === 0) return;
+    const isMcap = this.chartMetric === 'mcap';
+    const supply = this.token?.supply || this.token?.circulatingSupply || 0;
+    const fmt = isMcap ? (v) => utils.formatNumber(v) : (v) => utils.formatPrice(v);
+
+    // Build a time→candle lookup for O(1) access
+    const candleMap = new Map();
+    for (const d of rawData) {
+      const t = Math.floor((d.timestamp || d.time) / 1000);
+      candleMap.set(t, d);
+    }
+
+    // Cache DOM elements once (avoids getElementById on every mouse move)
+    const prefix = isModal ? 'modal-' : '';
+    const elOpen   = document.getElementById(prefix + 'chart-open');
+    const elHigh   = document.getElementById(prefix + 'chart-high');
+    const elLow    = document.getElementById(prefix + 'chart-low');
+    const elClose  = document.getElementById(prefix + 'chart-close');
+    const elVolume = document.getElementById(prefix + 'chart-volume');
+    const elChange = document.getElementById(prefix + 'chart-change');
+    const self = this;
+
+    chart.subscribeCrosshairMove((param) => {
+      if (!param || !param.time || param.point === undefined) {
+        // Crosshair left — restore full-period stats
+        if (isModal) {
+          self._updateModalStats(self.chartData);
+        } else {
+          self.updateChartStats(self.chartData);
+        }
+        return;
+      }
+      const candle = candleMap.get(param.time);
+      if (!candle) return;
+
+      let o = candle.open || candle.price || 0;
+      let h = candle.high || candle.price || 0;
+      let l = candle.low || candle.price || 0;
+      let c = candle.close || candle.price || 0;
+      if (isMcap && supply > 0) { o *= supply; h *= supply; l *= supply; c *= supply; }
+
+      if (elOpen)   elOpen.textContent = fmt(o);
+      if (elHigh)   elHigh.textContent = fmt(h);
+      if (elLow)    elLow.textContent = fmt(l);
+      if (elClose)  elClose.textContent = fmt(c);
+      if (elVolume) elVolume.textContent = utils.formatNumber(candle.volume || 0);
+
+      if (elChange && o > 0) {
+        const pct = ((c - o) / o) * 100;
+        elChange.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+        elChange.className = 'value ' + (pct >= 0 ? 'chart-change-up' : 'chart-change-down');
+      }
+    });
+  },
+
   // Render line chart with TradingView Lightweight Charts
   renderLineChart(container, data) {
     data = this._dedup(data);
@@ -2279,6 +2414,7 @@ const tokenDetail = {
     chart.timeScale().fitContent();
     this.chart = chart;
     this._mainSeries = series;
+    this._subscribeCrosshair(chart, data, false);
   },
 
   // Render candlestick chart with TradingView Lightweight Charts
@@ -2321,6 +2457,7 @@ const tokenDetail = {
     chart.timeScale().fitContent();
     this.chart = chart;
     this._mainSeries = series;
+    this._subscribeCrosshair(chart, data, false);
   },
 
   // Render empty chart placeholder
@@ -2877,6 +3014,9 @@ const tokenDetail = {
     if (this._holdTimesTimer) { clearTimeout(this._holdTimesTimer); this._holdTimesTimer = null; }
     if (this._diamondHandsTimer) { clearTimeout(this._diamondHandsTimer); this._diamondHandsTimer = null; }
 
+    // Stop chart auto-refresh
+    this._stopChartRefresh();
+
     // Destroy chart safely
     if (this.chart) {
       try {
@@ -2928,6 +3068,9 @@ const tokenDetail = {
     if (overlay) overlay.style.display = 'none';
     document.body.style.overflow = '';
 
+    // Close fib settings popover if open
+    const fibPop = document.getElementById('fib-settings-popover');
+    if (fibPop) fibPop.remove();
     if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.destroy();
 
     if (this.modalChart) {
@@ -3105,6 +3248,13 @@ const tokenDetail = {
         if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.setMode('fib');
       });
     }
+    const fibSettingsBtn = document.getElementById('chart-tool-fib-settings');
+    if (fibSettingsBtn && !fibSettingsBtn._mBound) {
+      fibSettingsBtn._mBound = true;
+      fibSettingsBtn.addEventListener('click', () => {
+        if (typeof ChartDrawTools !== 'undefined') ChartDrawTools.toggleFibSettings();
+      });
+    }
     const clearBtn = document.getElementById('chart-tool-clear');
     if (clearBtn && !clearBtn._mBound) {
       clearBtn._mBound = true;
@@ -3211,6 +3361,7 @@ const tokenDetail = {
     chart.timeScale().fitContent();
     this.modalChart = chart;
     this._modalMainSeries = series;
+    this._subscribeCrosshair(chart, data, true);
   },
 
   _renderModalCandlestick(container, data) {
@@ -3251,6 +3402,7 @@ const tokenDetail = {
     chart.timeScale().fitContent();
     this.modalChart = chart;
     this._modalMainSeries = series;
+    this._subscribeCrosshair(chart, data, true);
   },
 
   async _loadModalChart(interval) {
@@ -3290,6 +3442,15 @@ const tokenDetail = {
     if (el('modal-chart-low'))    el('modal-chart-low').textContent = fmt(low);
     if (el('modal-chart-close'))  el('modal-chart-close').textContent = fmt(close);
     if (el('modal-chart-volume')) el('modal-chart-volume').textContent = utils.formatNumber(totalVolume);
+    const changeEl = el('modal-chart-change');
+    if (changeEl && open > 0) {
+      const pctChange = ((close - open) / open) * 100;
+      changeEl.textContent = (pctChange >= 0 ? '+' : '') + pctChange.toFixed(2) + '%';
+      changeEl.className = 'value ' + (pctChange >= 0 ? 'chart-change-up' : 'chart-change-down');
+    } else if (changeEl) {
+      changeEl.textContent = '--';
+      changeEl.className = 'value';
+    }
   }
 };
 

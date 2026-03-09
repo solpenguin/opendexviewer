@@ -525,7 +525,6 @@ const submitPage = {
     try {
       const holderInfo = await api.tokens.getHolderBalance(mint, wallet.address);
       this.holderData = holderInfo;
-      this.holderVerified = holderInfo.holdsToken;
 
       // Update UI
       if (loadingEl) loadingEl.style.display = 'none';
@@ -549,6 +548,19 @@ const submitPage = {
         refreshBtn.onclick = () => this.checkHolderStatus(mint);
         statusDiv?.parentNode?.insertBefore(refreshBtn, statusDiv.nextSibling);
       }
+
+      // Handle verification failure (RPC unavailable) — let user retry
+      if (holderInfo.verified === false || holderInfo.error) {
+        this.holderVerified = false;
+        statusDiv.className = 'holder-status not-holder';
+        statusIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+        statusText.textContent = 'Could not verify — tap refresh to retry';
+        balanceInfo.style.display = 'none';
+        this.updateFormState();
+        return;
+      }
+
+      this.holderVerified = holderInfo.holdsToken;
 
       if (holderInfo.holdsToken) {
         statusDiv.className = 'holder-status verified';
@@ -581,9 +593,34 @@ const submitPage = {
     } catch (error) {
       console.error('Failed to check holder status:', error);
       if (loadingEl) loadingEl.style.display = 'none';
+      if (resultEl) resultEl.style.display = 'block';
       this.holderVerified = false;
       this.holderData = null;
-      this.hideHolderVerification();
+
+      // Show retry state instead of hiding
+      const statusIcon = document.getElementById('holder-status-icon');
+      const statusText = document.getElementById('holder-status-text');
+      const statusDiv = document.getElementById('holder-status');
+      const balanceInfo = document.getElementById('holder-balance-info');
+      if (statusDiv) {
+        statusDiv.className = 'holder-status not-holder';
+        if (statusIcon) statusIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+        if (statusText) statusText.textContent = 'Verification failed — tap refresh to retry';
+        if (balanceInfo) balanceInfo.style.display = 'none';
+
+        // Ensure refresh button exists
+        let refreshBtn = document.getElementById('holder-refresh-btn');
+        if (!refreshBtn) {
+          refreshBtn = document.createElement('button');
+          refreshBtn.id = 'holder-refresh-btn';
+          refreshBtn.className = 'btn btn-icon btn-small';
+          refreshBtn.title = 'Refresh holder status';
+          refreshBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>';
+          refreshBtn.onclick = () => this.checkHolderStatus(mint);
+          statusDiv.parentNode?.insertBefore(refreshBtn, statusDiv.nextSibling);
+        }
+      }
+
       this.updateFormState();
     }
   },

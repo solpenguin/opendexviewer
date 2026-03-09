@@ -90,15 +90,29 @@ class TrendLinePrimitive {
 
 // ── Fibonacci Retracement Primitive ────────────────────
 
-const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
-const FIB_COLORS = [
-  'rgba(239, 68, 68, 0.8)',   // 0%
-  'rgba(245, 158, 11, 0.7)',  // 23.6%
-  'rgba(234, 179, 8, 0.7)',   // 38.2%
-  'rgba(16, 185, 129, 0.8)',  // 50%
-  'rgba(59, 130, 246, 0.7)',  // 61.8%
-  'rgba(139, 92, 246, 0.7)',  // 78.6%
-  'rgba(239, 68, 68, 0.8)',   // 100%
+// Default Fibonacci levels (retracement + extension).
+// Each entry: { level, color, enabled }
+const FIB_DEFAULTS = [
+  { level: 0,     color: 'rgba(239, 68, 68, 0.8)',   enabled: true },
+  { level: 0.236, color: 'rgba(245, 158, 11, 0.7)',  enabled: true },
+  { level: 0.382, color: 'rgba(234, 179, 8, 0.7)',   enabled: true },
+  { level: 0.5,   color: 'rgba(16, 185, 129, 0.8)',  enabled: true },
+  { level: 0.618, color: 'rgba(59, 130, 246, 0.7)',  enabled: true },
+  { level: 0.786, color: 'rgba(139, 92, 246, 0.7)',  enabled: true },
+  { level: 1,     color: 'rgba(239, 68, 68, 0.8)',   enabled: true },
+  { level: 1.272, color: 'rgba(236, 72, 153, 0.7)',  enabled: false },
+  { level: 1.618, color: 'rgba(168, 85, 247, 0.7)',  enabled: false },
+  { level: 2.0,   color: 'rgba(14, 165, 233, 0.7)',  enabled: false },
+  { level: 2.618, color: 'rgba(20, 184, 166, 0.7)',  enabled: false },
+  { level: 3.618, color: 'rgba(132, 204, 22, 0.7)',  enabled: false },
+  { level: 4.236, color: 'rgba(251, 146, 60, 0.7)',  enabled: false },
+];
+
+// Color palette for custom levels
+const FIB_CUSTOM_COLORS = [
+  'rgba(244, 114, 182, 0.7)', 'rgba(129, 140, 248, 0.7)',
+  'rgba(52, 211, 153, 0.7)', 'rgba(251, 191, 36, 0.7)',
+  'rgba(167, 139, 250, 0.7)', 'rgba(56, 189, 248, 0.7)',
 ];
 
 class FibRetracementRenderer {
@@ -148,13 +162,15 @@ class FibRetracementPaneView {
     const lowPrice = Math.min(src._point1.price, src._point2.price);
     const range = highPrice - lowPrice;
 
-    this._levels = FIB_LEVELS.map((fib, i) => {
-      const price = highPrice - range * fib;
+    // Use configurable levels from ChartDrawTools
+    const activeLevels = ChartDrawTools.getActiveFibLevels();
+    this._levels = activeLevels.map(({ level, color }) => {
+      const price = highPrice - range * level;
       const y = src._series.priceToCoordinate(price);
       return {
         y,
-        label: `${fib.toFixed(3)} (${src._formatPrice ? src._formatPrice(price) : price.toFixed(6)})`,
-        color: FIB_COLORS[i],
+        label: `${level.toFixed(3)} (${src._formatPrice ? src._formatPrice(price) : price.toFixed(6)})`,
+        color,
       };
     });
   }
@@ -186,6 +202,10 @@ class FibRetracementPrimitive {
     this._chart = null;
     this._series = null;
     this._requestUpdate = null;
+  }
+
+  triggerUpdate() {
+    if (this._requestUpdate) this._requestUpdate();
   }
 
   updateAllViews() {
@@ -328,6 +348,9 @@ const ChartDrawTools = {
   _touchHandlers: null,   // { start, move, end } for mobile drawing
   _chartContainer: null,  // DOM element for touch events
   _touchHandled: false,   // prevents duplicate point from LWCV click after touch
+  _fibLevels: null,       // Configurable fib levels array (cloned from FIB_DEFAULTS)
+  _fibSettingsOpen: false,
+  _fibOutsideHandler: null, // outside-click/touch handler for fib popover
 
   init(chart, series) {
     this.destroy();
@@ -337,11 +360,202 @@ const ChartDrawTools = {
     this._points = [];
     this._mode = null;
 
+    // Initialize fib levels from saved state or defaults
+    if (!this._fibLevels) {
+      this._fibLevels = this._loadFibLevels();
+    }
+
     // Find the chart's container element for touch events
     // LWCV v5 exposes chartElement(), fall back to the modal-price-chart div
     let chartEl = null;
     try { chartEl = chart.chartElement(); } catch (_) {}
     this._chartContainer = chartEl || document.getElementById('modal-price-chart');
+  },
+
+  // Return only enabled fib levels
+  getActiveFibLevels() {
+    if (!this._fibLevels) this._fibLevels = this._loadFibLevels();
+    return this._fibLevels.filter(l => l.enabled).sort((a, b) => a.level - b.level);
+  },
+
+  // Persist fib levels to localStorage
+  _saveFibLevels() {
+    try {
+      localStorage.setItem('odx_fib_levels', JSON.stringify(this._fibLevels));
+    } catch (_) {}
+  },
+
+  // Load from localStorage or use defaults
+  _loadFibLevels() {
+    try {
+      const saved = localStorage.getItem('odx_fib_levels');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return FIB_DEFAULTS.map(l => ({ ...l }));
+  },
+
+  // Toggle a fib level on/off and refresh existing drawings
+  _toggleFibLevel(index) {
+    if (!this._fibLevels[index]) return;
+    this._fibLevels[index].enabled = !this._fibLevels[index].enabled;
+    this._saveFibLevels();
+    this._refreshFibDrawings();
+  },
+
+  // Add a custom fib level
+  _addCustomLevel(value) {
+    const level = parseFloat(value);
+    if (isNaN(level) || level < -10 || level > 10) return false;
+    // Check for duplicate (within tolerance)
+    if (this._fibLevels.some(l => Math.abs(l.level - level) < 0.001)) return false;
+    const colorIdx = this._fibLevels.filter(l => !FIB_DEFAULTS.some(d => d.level === l.level)).length;
+    const color = FIB_CUSTOM_COLORS[colorIdx % FIB_CUSTOM_COLORS.length];
+    this._fibLevels.push({ level, color, enabled: true });
+    this._fibLevels.sort((a, b) => a.level - b.level);
+    this._saveFibLevels();
+    this._refreshFibDrawings();
+    return true;
+  },
+
+  // Remove a custom level (only non-default levels can be removed)
+  _removeCustomLevel(level) {
+    const isDefault = FIB_DEFAULTS.some(d => Math.abs(d.level - level) < 0.001);
+    if (isDefault) return;
+    this._fibLevels = this._fibLevels.filter(l => Math.abs(l.level - level) >= 0.001);
+    this._saveFibLevels();
+    this._refreshFibDrawings();
+  },
+
+  // Force re-render all fib drawings with current levels
+  _refreshFibDrawings() {
+    this._drawings.forEach(d => {
+      if (d.type === 'fib' && d.primitive.triggerUpdate) {
+        d.primitive.triggerUpdate();
+      }
+    });
+  },
+
+  // Remove outside-click/touch handler for fib popover
+  _removeFibOutsideHandler() {
+    if (this._fibOutsideHandler) {
+      document.removeEventListener('mousedown', this._fibOutsideHandler);
+      document.removeEventListener('touchstart', this._fibOutsideHandler);
+      this._fibOutsideHandler = null;
+    }
+  },
+
+  // Build and show the fib settings popover
+  toggleFibSettings() {
+    const existing = document.getElementById('fib-settings-popover');
+    if (existing) {
+      existing.remove();
+      this._removeFibOutsideHandler();
+      this._fibSettingsOpen = false;
+      return;
+    }
+    this._fibSettingsOpen = true;
+    this._renderFibSettings();
+  },
+
+  _renderFibSettings() {
+    // Remove any existing popover
+    const old = document.getElementById('fib-settings-popover');
+    if (old) old.remove();
+
+    if (!this._fibLevels) this._fibLevels = this._loadFibLevels();
+
+    const popover = document.createElement('div');
+    popover.id = 'fib-settings-popover';
+    popover.className = 'fib-settings-popover';
+
+    let html = '<div class="fib-settings-title">Fibonacci Levels</div>';
+    html += '<div class="fib-settings-list">';
+
+    this._fibLevels.forEach((l, i) => {
+      const isDefault = FIB_DEFAULTS.some(d => Math.abs(d.level - l.level) < 0.001);
+      const isExtension = l.level > 1;
+      const label = l.level.toFixed(3);
+      const pct = (l.level * 100).toFixed(1) + '%';
+      html += `<label class="fib-level-row${isExtension ? ' fib-extension' : ''}">
+        <input type="checkbox" data-fib-index="${i}" ${l.enabled ? 'checked' : ''}>
+        <span class="fib-level-swatch" style="background:${l.color}"></span>
+        <span class="fib-level-label">${label}</span>
+        <span class="fib-level-pct">${pct}</span>
+        ${!isDefault ? `<button class="fib-level-remove" data-fib-level="${l.level}" title="Remove">&times;</button>` : ''}
+      </label>`;
+    });
+    html += '</div>';
+
+    // Add custom level input
+    html += `<div class="fib-add-custom">
+      <input type="text" id="fib-custom-input" placeholder="e.g. 1.414" class="fib-custom-input" inputmode="decimal">
+      <button id="fib-custom-add" class="fib-custom-add-btn">Add</button>
+    </div>`;
+
+    popover.innerHTML = html;
+
+    // Position next to the fib button
+    const fibBtn = document.getElementById('chart-tool-fib');
+    const parent = fibBtn?.closest('.chart-modal-right-controls') || document.querySelector('.chart-modal-header');
+    if (parent) {
+      parent.style.position = 'relative';
+      parent.appendChild(popover);
+    } else {
+      document.body.appendChild(popover);
+    }
+
+    // Wire up checkbox handlers
+    popover.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        this._toggleFibLevel(parseInt(cb.dataset.fibIndex, 10));
+      });
+    });
+
+    // Wire up remove buttons
+    popover.querySelectorAll('.fib-level-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this._removeCustomLevel(parseFloat(btn.dataset.fibLevel));
+        this._renderFibSettings(); // re-render the popover
+      });
+    });
+
+    // Wire up add button
+    const addBtn = document.getElementById('fib-custom-add');
+    const addInput = document.getElementById('fib-custom-input');
+    const doAdd = () => {
+      if (addInput && this._addCustomLevel(addInput.value)) {
+        this._renderFibSettings(); // re-render to show new level
+      }
+    };
+    if (addBtn) addBtn.addEventListener('click', doAdd);
+    if (addInput) addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
+
+    // Close on outside click/touch
+    this._removeFibOutsideHandler();
+    const closeHandler = (e) => {
+      // Check if the popover is still in the DOM (might have been removed by toggle)
+      if (!document.contains(popover)) {
+        this._removeFibOutsideHandler();
+        return;
+      }
+      const settingsBtn = document.getElementById('chart-tool-fib-settings');
+      if (!popover.contains(e.target) && e.target !== settingsBtn && !settingsBtn?.contains(e.target)) {
+        popover.remove();
+        this._fibSettingsOpen = false;
+        this._removeFibOutsideHandler();
+      }
+    };
+    this._fibOutsideHandler = closeHandler;
+    // Delay to avoid immediate close from the triggering click/tap
+    setTimeout(() => {
+      document.addEventListener('mousedown', closeHandler);
+      document.addEventListener('touchstart', closeHandler, { passive: true });
+    }, 0);
   },
 
   _isTouchDevice() {
@@ -501,10 +715,18 @@ const ChartDrawTools = {
   _setChartInteraction(enabled) {
     if (!this._chart) return;
     try {
-      this._chart.applyOptions({
-        handleScroll: enabled,
-        handleScale: enabled,
-      });
+      if (enabled) {
+        // Restore the modal's original scroll/scale options
+        this._chart.applyOptions({
+          handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+          handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+        });
+      } else {
+        this._chart.applyOptions({
+          handleScroll: false,
+          handleScale: false,
+        });
+      }
     } catch (_) {}
     // Toggle CSS class for touch-action: none and crosshair cursor
     const modalContainer = document.getElementById('chart-modal-container');
@@ -611,6 +833,12 @@ const ChartDrawTools = {
 
   destroy() {
     this._cancelDrawing();
+    // Clean up fib settings popover if open
+    this._removeFibOutsideHandler();
+    this._fibSettingsOpen = false;
+    const fibPop = document.getElementById('fib-settings-popover');
+    if (fibPop) fibPop.remove();
+
     if (this._series) {
       this._drawings.forEach(d => {
         try { this._series.detachPrimitive(d.primitive); } catch (_) {}

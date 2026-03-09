@@ -9,6 +9,11 @@ const { cache, TTL, keys } = require('../services/cache');
 const { validateMint, validatePagination, validateSearch, asyncHandler, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { searchLimiter, strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
 const Anthropic = require('@anthropic-ai/sdk');
+const axios = require('axios');
+
+// Helius DAS URL for holder verification fallback
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
+const HELIUS_DAS_URL = HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : null;
 
 // Allowed values for token list query params — prevents cache key pollution
 const VALID_FILTERS = ['trending', 'new', 'gainers', 'losers', 'most_viewed', 'tech', 'meme'];
@@ -1306,20 +1311,64 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
     }
 
     // Get token accounts for this wallet that hold the specific token
-    const tokenAccounts = await solanaService.getTokenAccountsByOwner(wallet, mint);
-
     let balance = 0;
     let decimals = 9;
+    let rpcSuccess = false;
 
-    if (tokenAccounts && tokenAccounts.value && tokenAccounts.value.length > 0) {
-      // Sum all token accounts for this mint (usually just one)
-      for (const account of tokenAccounts.value) {
-        const info = account.account?.data?.parsed?.info;
-        if (info && info.mint === mint) {
-          balance += parseFloat(info.tokenAmount?.uiAmount || 0);
-          decimals = info.tokenAmount?.decimals || 9;
+    // Method 1: Standard RPC getTokenAccountsByOwner
+    try {
+      const tokenAccounts = await solanaService.getTokenAccountsByOwner(wallet, mint);
+      rpcSuccess = true;
+      if (tokenAccounts && tokenAccounts.value && tokenAccounts.value.length > 0) {
+        for (const account of tokenAccounts.value) {
+          const info = account.account?.data?.parsed?.info;
+          if (info && info.mint === mint) {
+            balance += parseFloat(info.tokenAmount?.uiAmount || 0);
+            decimals = info.tokenAmount?.decimals || 9;
+          }
         }
       }
+    } catch (rpcErr) {
+      // RPC failed — try DAS fallback below
+    }
+
+    // Method 2: Helius DAS fallback if RPC failed or returned zero
+    // DAS getTokenAccounts can find Token-2022 accounts that standard RPC may miss
+    if (balance === 0 && HELIUS_DAS_URL) {
+      try {
+        const dasResponse = await axios.post(HELIUS_DAS_URL, {
+          jsonrpc: '2.0', id: 1,
+          method: 'getTokenAccounts',
+          params: { owner: wallet, mint, limit: 10 }
+        }, { timeout: 10000 });
+
+        if (dasResponse.data?.result?.token_accounts?.length > 0) {
+          rpcSuccess = true;
+          for (const ta of dasResponse.data.result.token_accounts) {
+            if (ta.mint === mint) {
+              const rawAmt = parseFloat(ta.amount || 0);
+              // DAS doesn't return decimals per-account; use token info or default
+              if (rawAmt > 0) {
+                // We'll get exact balance from supply calc below; for now mark as holder
+                balance = rawAmt / Math.pow(10, decimals);
+              }
+            }
+          }
+        } else if (dasResponse.data?.result) {
+          // DAS responded but no accounts — confirmed not holding
+          rpcSuccess = true;
+        }
+      } catch (dasErr) {
+        // DAS also failed — if RPC also failed, we have no data
+      }
+    }
+
+    // If both methods failed entirely, signal the error to frontend
+    if (!rpcSuccess) {
+      return res.json({
+        wallet, mint, balance: 0, holdsToken: false,
+        verified: false, error: 'Unable to verify — RPC unavailable, please retry'
+      });
     }
 
     // Get token supply for percentage calculation
@@ -1356,6 +1405,7 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
       balance,
       decimals,
       holdsToken: balance > 0,
+      verified: true,
       totalSupply,
       circulatingSupply,
       percentageHeld: percentageHeld !== null ? parseFloat(percentageHeld.toFixed(6)) : null
@@ -1367,13 +1417,14 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
     res.json(result);
   } catch (error) {
     // Privacy: Don't log error details
-    // Return a valid response even on error - just no balance data
+    // Signal that verification failed (not that user doesn't hold)
     res.json({
       wallet,
       mint,
       balance: 0,
       holdsToken: false,
-      error: 'Unable to verify balance'
+      verified: false,
+      error: 'Unable to verify balance — please retry'
     });
   }
 }));
