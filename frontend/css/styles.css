@@ -12584,20 +12584,21 @@ body.landscape .hero h1 {
     display: none;
   }
 
-  /* Show dropdown when parent is open */
-  .nav-dropdown.open .nav-dropdown-menu,
-  .nav-dropdown:focus-within .nav-dropdown-menu {
+  /* Show dropdown only when explicitly opened via JS toggle */
+  .nav-dropdown.open .nav-dropdown-menu {
     display: flex;
     flex-direction: column;
     transform: none;
   }
 
-  /* On mobile, always require tap to open dropdown (don't use hover) */
-  .nav-dropdown:hover .nav-dropdown-menu {
+  /* On mobile, disable hover and focus-within triggers — require tap */
+  .nav-dropdown:hover .nav-dropdown-menu,
+  .nav-dropdown:focus-within .nav-dropdown-menu {
     display: none;
   }
 
-  .nav-dropdown.open:hover .nav-dropdown-menu {
+  .nav-dropdown.open:hover .nav-dropdown-menu,
+  .nav-dropdown.open:focus-within .nav-dropdown-menu {
     display: flex;
   }
 
