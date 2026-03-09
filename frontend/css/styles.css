@@ -2031,7 +2031,8 @@ a:hover {
 }
 
 .stats-section            { grid-column: 2; grid-row: 1; }
-.similar-tokens-section   { grid-column: 1; grid-row: 2 / 4; align-self: start; }
+.holders-section          { grid-column: 1; grid-row: 2; align-self: start; }
+.similar-tokens-section   { grid-column: 1; grid-row: 3 / 5; align-self: start; }
 .trade-section            { grid-column: 2; grid-row: 2; align-self: start; }
 .sentiment-section        { grid-column: 2; grid-row: 3; align-self: start; }
 
