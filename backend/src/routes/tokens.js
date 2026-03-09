@@ -619,8 +619,11 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
       }
     }
 
-    // Get view counts for all tokens
-    const viewCounts = await db.getTokenViewsBatch(validMints);
+    // Get view counts and community flags for all tokens
+    const [viewCounts, communityMints] = await Promise.all([
+      db.getTokenViewsBatch(validMints),
+      db.hasApprovedSubmissionsBatch(validMints).catch(() => new Set())
+    ]);
 
     // Build final response array in original order
     const response = validMints.map(mint => {
@@ -628,7 +631,8 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
       if (result && result.data) {
         return {
           ...result.data,
-          views: viewCounts[mint] || 0
+          views: viewCounts[mint] || 0,
+          hasCommunityUpdates: communityMints.has(mint)
         };
       }
       return null;
@@ -714,6 +718,14 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
         }
       }
 
+      // Enrich with community flag
+      if (tokenInfo) {
+        try {
+          const communityMints = await db.hasApprovedSubmissionsBatch([query]);
+          tokenInfo.hasCommunityUpdates = communityMints.has(query);
+        } catch { /* non-critical */ }
+      }
+
       const results = tokenInfo ? [tokenInfo] : [];
       // Single-token lookups are pure metadata — cache longer
       await cache.set(cacheKey, results, results.length > 0 ? TTL.METADATA : TTL.MEDIUM);
@@ -775,6 +787,17 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
       } catch (err) {
         // Privacy: Don't log error details
       }
+    }
+
+    // Enrich with community update flags
+    if (results.length > 0) {
+      try {
+        const addrs = results.map(t => t.address);
+        const communityMints = await db.hasApprovedSubmissionsBatch(addrs);
+        for (const token of results) {
+          token.hasCommunityUpdates = communityMints.has(token.address);
+        }
+      } catch { /* non-critical */ }
     }
 
     // Cache results for 1 minute
