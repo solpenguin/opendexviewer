@@ -85,6 +85,7 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 body {
@@ -533,6 +534,7 @@ a:hover {
   margin: 0 auto;
   padding: 2rem;
   min-height: calc(100vh - 64px - 80px);
+  overflow-x: hidden;
 }
 
 /* =============================================
@@ -1675,6 +1677,12 @@ a:hover {
 
 .token-page {
   padding-top: 1rem;
+  overflow-x: hidden;
+}
+
+#token-content {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Token Header */
@@ -1689,12 +1697,14 @@ a:hover {
   background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
+  overflow: hidden;
 }
 
 .token-header-left {
   display: flex;
   align-items: flex-start;
   gap: 1.25rem;
+  min-width: 0;
 }
 
 .token-logo-large {
@@ -1711,6 +1721,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .token-name-row {
@@ -1724,6 +1735,9 @@ a:hover {
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .token-symbol-badge {
@@ -1806,6 +1820,8 @@ a:hover {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .price-change-badge {
@@ -2019,6 +2035,8 @@ a:hover {
   grid-template-columns: 1fr 380px;
   gap: 1.5rem;
   margin-bottom: 2rem;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .token-col-left,
@@ -2026,6 +2044,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .chart-section {
@@ -2042,11 +2061,13 @@ a:hover {
 .pools-section,
 .sentiment-section,
 .similar-tokens-section,
+.ogfinder-inline-section,
 .holders-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: 1.5rem;
+  min-width: 0;
 }
 
 /* Sentiment section sits in the grid sidebar below Trade */
@@ -2364,10 +2385,6 @@ a:hover {
 
 /* OG Finder Inline Section (Token Detail Sidebar) */
 .ogfinder-inline-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
   margin-bottom: 0;
 }
 
@@ -2570,6 +2587,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .holders-updated {
@@ -6875,6 +6893,7 @@ select {
 
   .chart-controls {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .chart-metric-toggle,
@@ -7085,6 +7104,7 @@ select {
   .pools-section,
   .sentiment-section,
   .similar-tokens-section,
+  .ogfinder-inline-section,
   .holders-section {
     padding: 1rem;
   }
