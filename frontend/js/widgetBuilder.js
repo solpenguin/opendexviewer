@@ -4,6 +4,7 @@ const widgetBuilder = {
   sentimentData: null,
   communityData: null,
   holdersData: null,
+  diamondHandsData: null,
   debounceTimer: null,
   currentMint: null,
 
@@ -24,6 +25,7 @@ const widgetBuilder = {
         sentiment: document.getElementById('widget-show-sentiment').checked,
         topHolders: document.getElementById('widget-show-top-holders').checked,
         community: document.getElementById('widget-show-community').checked,
+        diamondHands: document.getElementById('widget-show-diamond-hands').checked,
       },
       theme: document.querySelector('.widget-theme-btn.active')?.dataset.theme || 'dark',
       accentColor: document.getElementById('widget-accent-color').value,
@@ -102,6 +104,7 @@ const widgetBuilder = {
       this.sentimentData = null;
       this.communityData = null;
       this.holdersData = null;
+      this.diamondHandsData = null;
       this.currentMint = null;
       this.updatePreview();
       return;
@@ -117,14 +120,15 @@ const widgetBuilder = {
     this.currentMint = mint;
 
     try {
-      // Fetch token data, sentiment, community, and holders in parallel
-      const [tokenRes, sentimentRes, communityRes, holdersRes] = await Promise.allSettled([
+      // Fetch token data, sentiment, community, holders, and diamond hands in parallel
+      const [tokenRes, sentimentRes, communityRes, holdersRes, diamondRes] = await Promise.allSettled([
         api.tokens.get(mint),
         fetch(config.api.baseUrl + '/api/sentiment/' + mint).then(r => r.json()),
         api.tokens.getSubmissions
           ? api.tokens.getSubmissions(mint).catch(() => null)
           : fetch(config.api.baseUrl + '/api/v1/community/' + mint).then(r => r.json()).catch(() => null),
         api.tokens.getHolders(mint),
+        api.tokens.getDiamondHands(mint),
       ]);
 
       // Check if address changed while loading
@@ -144,6 +148,7 @@ const widgetBuilder = {
       this.sentimentData = sentimentRes.status === 'fulfilled' ? sentimentRes.value : null;
       this.communityData = communityRes.status === 'fulfilled' ? communityRes.value : null;
       this.holdersData = holdersRes.status === 'fulfilled' ? holdersRes.value : null;
+      this.diamondHandsData = diamondRes.status === 'fulfilled' ? diamondRes.value : null;
 
       this.updatePreview();
     } catch (err) {
@@ -417,6 +422,50 @@ const widgetBuilder = {
           const label = type.charAt(0).toUpperCase() + type.slice(1);
           html += `<a href="${this.escapeHtml(data.url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:0.25rem;padding:0.25rem 0.5rem;border-radius:4px;font-size:0.6875rem;font-weight:500;text-decoration:none;background:${accent}22;color:${accent};">${label}</a>`;
         });
+        html += `</div>`;
+      }
+    }
+
+    // Diamond Hands — data comes from /api/tokens/:mint/holders/diamond-hands
+    if (cfg.show.diamondHands) {
+      const dhData = this.diamondHandsData;
+      const dist = (dhData && dhData.distribution) || {};
+      const dhBuckets = [
+        { key: '6h', label: '> 6h' },
+        { key: '24h', label: '> 24h' },
+        { key: '3d', label: '> 3d' },
+        { key: '1w', label: '> 1w' },
+        { key: '1m', label: '> 1m' },
+      ].filter(b => dist[b.key] != null);
+
+      if (dhBuckets.length > 0) {
+        html += `<div style="padding:0.625rem 1rem;">`;
+        html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.5rem;">Holder Conviction</div>`;
+        dhBuckets.forEach(b => {
+          const pct = Number(dist[b.key]);
+          const barColor = pct >= 50 ? '#10b981' : pct >= 20 ? '#f59e0b' : accent;
+          html += `<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;margin-bottom:0.375rem;">`;
+          html += `<span style="min-width:40px;color:${textSub};">${b.label}</span>`;
+          html += `<div style="flex:1;height:6px;border-radius:3px;background:${statBg};overflow:hidden;">`;
+          html += `<div style="width:${Math.min(pct, 100)}%;height:100%;border-radius:3px;background:${barColor};"></div>`;
+          html += `</div>`;
+          html += `<span style="min-width:36px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:500;">${pct.toFixed(1)}%</span>`;
+          html += `</div>`;
+        });
+        const sample = dhData.analyzed || dhData.sampleSize || 0;
+        if (sample > 0) {
+          html += `<div style="font-size:0.5625rem;color:${textSub};opacity:0.6;margin-top:0.25rem;">Based on ${sample} holders sampled</div>`;
+        }
+        html += `</div>`;
+      } else if (dhData && !dhData.computed) {
+        html += `<div style="padding:0.625rem 1rem;">`;
+        html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.375rem;">Holder Conviction</div>`;
+        html += `<div style="font-size:0.75rem;color:${textSub};opacity:0.6;">Computing hold times...</div>`;
+        html += `</div>`;
+      } else {
+        html += `<div style="padding:0.625rem 1rem;">`;
+        html += `<div style="font-size:0.625rem;text-transform:uppercase;letter-spacing:0.5px;color:${textSub};margin-bottom:0.375rem;">Holder Conviction</div>`;
+        html += `<div style="font-size:0.75rem;color:${textSub};opacity:0.6;">No data available</div>`;
         html += `</div>`;
       }
     }
