@@ -694,6 +694,16 @@ async function getApprovedSubmissionsBatch(tokenMints) {
   return grouped;
 }
 
+// Lightweight batch check: returns Set of mints that have at least one approved submission
+async function hasApprovedSubmissionsBatch(tokenMints) {
+  if (!pool || !tokenMints || tokenMints.length === 0) return new Set();
+  const result = await pool.query(
+    `SELECT DISTINCT token_mint FROM submissions WHERE token_mint = ANY($1) AND status = 'approved'`,
+    [tokenMints]
+  );
+  return new Set(result.rows.map(r => r.token_mint));
+}
+
 // Vote operations - Optimized with delta-based tally updates for high concurrency
 async function createVote({ submissionId, voterWallet, voteType, voterBalance = 0, voterPercentage = 0, marketCap = null }) {
   if (!pool) throw new Error('Database not available');
@@ -2853,6 +2863,7 @@ module.exports = {
   getSubmissionsByToken,
   getApprovedSubmissions,
   getApprovedSubmissionsBatch,
+  hasApprovedSubmissionsBatch,
   getSubmissionsByWallet,
   getPendingSubmissions,
   updateSubmissionStatus,

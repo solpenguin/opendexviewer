@@ -206,15 +206,20 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         };
       });
 
-      // Enrich tokens with sentiment scores
+      // Enrich tokens with sentiment scores and community update flags
       try {
         const addrs = tokens.map(t => t.address || t.mintAddress);
-        const sentimentScores = await db.getSentimentBatch(addrs);
+        const [sentimentScores, communityMints] = await Promise.all([
+          db.getSentimentBatch(addrs),
+          db.hasApprovedSubmissionsBatch(addrs)
+        ]);
         for (const token of tokens) {
-          const s = sentimentScores[token.address || token.mintAddress];
+          const addr = token.address || token.mintAddress;
+          const s = sentimentScores[addr];
           token.sentimentScore = s ? s.score : 0;
           token.sentimentBullish = s ? s.bullish : 0;
           token.sentimentBearish = s ? s.bearish : 0;
+          token.hasCommunityUpdates = communityMints.has(addr);
         }
       } catch { /* non-critical */ }
 
@@ -310,11 +315,12 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         };
       });
 
-      // Enrich with view counts and sentiment scores in parallel
+      // Enrich with view counts, sentiment scores, and community flags in parallel
       const addresses = tokens.map(t => t.address);
-      const [viewCounts, sentimentScores] = await Promise.all([
+      const [viewCounts, sentimentScores, communityMints] = await Promise.all([
         db.getTokenViewsBatch(addresses).catch(() => ({})),
-        db.getSentimentBatch(addresses).catch(() => ({}))
+        db.getSentimentBatch(addresses).catch(() => ({})),
+        db.hasApprovedSubmissionsBatch(addresses).catch(() => new Set())
       ]);
       for (const token of tokens) {
         token.views = viewCounts[token.address] || 0;
@@ -322,6 +328,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         token.sentimentScore = s ? s.score : 0;
         token.sentimentBullish = s ? s.bullish : 0;
         token.sentimentBearish = s ? s.bearish : 0;
+        token.hasCommunityUpdates = communityMints.has(token.address);
       }
 
       await cache.setWithTimestamp(cacheKey, tokens, TTL.MEDIUM);
@@ -424,12 +431,13 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       });
     }
 
-    // Enrich tokens with view counts and sentiment scores in parallel
+    // Enrich tokens with view counts, sentiment scores, and community flags in parallel
     if (tokens && tokens.length > 0) {
       const addresses = tokens.map(t => t.address || t.mintAddress);
-      const [viewCounts, sentimentScores] = await Promise.all([
+      const [viewCounts, sentimentScores, communityMints] = await Promise.all([
         db.getTokenViewsBatch(addresses).catch(() => ({})),
-        db.getSentimentBatch(addresses).catch(() => ({}))
+        db.getSentimentBatch(addresses).catch(() => ({})),
+        db.hasApprovedSubmissionsBatch(addresses).catch(() => new Set())
       ]);
 
       for (const token of tokens) {
@@ -439,6 +447,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         token.sentimentScore = s ? s.score : 0;
         token.sentimentBullish = s ? s.bullish : 0;
         token.sentimentBearish = s ? s.bearish : 0;
+        token.hasCommunityUpdates = communityMints.has(address);
       }
     }
 
@@ -633,11 +642,16 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
   }
 }));
 
+// Allowed DEX prefixes for search filtering (covers Pumpfun, Pumpswap, Raydium)
+const SEARCH_DEX_PREFIXES = ['raydium', 'pump'];
+
 // GET /api/tokens/search - Search tokens (hybrid local + external)
 router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, res) => {
   const { q } = req.query;
   const query = q.trim();
-  const cacheKey = keys.tokenSearch(query.toLowerCase());
+  // dex=1 means filter to major DEXes only (Pumpfun, Pumpswap, Raydium)
+  const dexFilter = req.query.dex === '1';
+  const cacheKey = keys.tokenSearch(query.toLowerCase()) + (dexFilter ? ':dex' : '');
 
   // Try cache first
   const cached = await cache.get(cacheKey);
@@ -647,6 +661,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
 
   try {
     // Check if query is an exact contract address
+    // Exact address lookups always bypass DEX filter
     const isExactAddress = SOLANA_ADDRESS_REGEX.test(query);
 
     if (isExactAddress) {
@@ -708,9 +723,10 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
     // For string searches, use hybrid approach
     let results = [];
     const seenAddresses = new Set();
+    const dexPrefixes = dexFilter ? SEARCH_DEX_PREFIXES : null;
 
-    // 1. Search local database first
-    if (db.isReady()) {
+    // 1. Search local database first (skip when DEX filter active — local DB has no DEX info)
+    if (!dexFilter && db.isReady()) {
       try {
         const localResults = await db.searchTokens(query, MIN_SEARCH_RESULTS);
         for (const token of localResults) {
@@ -728,7 +744,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
     if (results.length < MIN_SEARCH_RESULTS) {
       try {
         const [geckoResults, jupiterResults] = await Promise.all([
-          geckoService.searchTokens(query).catch(() => []),
+          geckoService.searchTokens(query, MIN_SEARCH_RESULTS, dexPrefixes).catch(() => []),
           jupiterService.searchTokens(query).catch(() => [])
         ]);
 

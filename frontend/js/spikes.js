@@ -10,7 +10,9 @@ var spikeDetector = (function() {
     sortField: 'spikeScore',
     sortOrder: 'desc',
     refreshInterval: null,
-    loading: false
+    loading: false,
+    minAge: '1',
+    filterType: 'all'
   };
 
   // DOM element cache
@@ -28,9 +30,61 @@ var spikeDetector = (function() {
     els.established = document.getElementById('spikes-established');
     els.spiking = document.getElementById('spikes-spiking');
     els.updated = document.getElementById('spikes-updated');
-    els.minAge = document.getElementById('spikes-min-age');
-    els.filter = document.getElementById('spikes-filter');
+    els.ageDropdown = document.getElementById('spikes-age-dropdown');
+    els.typeDropdown = document.getElementById('spikes-type-dropdown');
     els.refreshBtn = document.getElementById('spikes-refresh-btn');
+  }
+
+  // --- Custom dropdown logic ---
+
+  function initDropdown(dropdownEl, onSelect) {
+    if (!dropdownEl) return;
+    var trigger = dropdownEl.querySelector('.spikes-dropdown-trigger');
+    var menu = dropdownEl.querySelector('.spikes-dropdown-menu');
+    var textEl = trigger.querySelector('.spikes-dropdown-text');
+
+    // Toggle open/close on trigger click
+    trigger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      // Close any other open dropdown first
+      var allDropdowns = document.querySelectorAll('.spikes-dropdown.open');
+      for (var i = 0; i < allDropdowns.length; i++) {
+        if (allDropdowns[i] !== dropdownEl) allDropdowns[i].classList.remove('open');
+      }
+      dropdownEl.classList.toggle('open');
+    });
+
+    // Item selection
+    menu.addEventListener('click', function(e) {
+      var item = e.target.closest('.spikes-dropdown-item');
+      if (!item) return;
+      e.stopPropagation();
+
+      var value = item.dataset.value;
+
+      // Update active state
+      var items = menu.querySelectorAll('.spikes-dropdown-item');
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.remove('active');
+      }
+      item.classList.add('active');
+
+      // Update trigger text
+      textEl.textContent = item.textContent.trim();
+
+      // Close menu
+      dropdownEl.classList.remove('open');
+
+      // Fire callback
+      if (onSelect) onSelect(value);
+    });
+  }
+
+  function closeAllDropdowns() {
+    var open = document.querySelectorAll('.spikes-dropdown.open');
+    for (var i = 0; i < open.length; i++) {
+      open[i].classList.remove('open');
+    }
   }
 
   function showState(which) {
@@ -46,10 +100,8 @@ var spikeDetector = (function() {
     state.loading = true;
     showState('loading');
 
-    var minAge = els.minAge ? els.minAge.value : '1';
-
     try {
-      var data = await api.spikes.detect({ minAge: minAge, limit: 30 });
+      var data = await api.spikes.detect({ minAge: state.minAge, limit: 30 });
 
       if (!data || !data.tokens) {
         throw new Error('Invalid response');
@@ -82,11 +134,22 @@ var spikeDetector = (function() {
   }
 
   function applyFilter(tokens) {
-    var filter = els.filter ? els.filter.value : 'all';
+    var filter = state.filterType;
     if (filter === 'all') return tokens;
     return tokens.filter(function(t) {
       return t.spikeTypes && t.spikeTypes.indexOf(filter) !== -1;
     });
+  }
+
+  function applyFilterAndRender() {
+    var filtered = applyFilter(state.tokens);
+    els.spiking.textContent = filtered.length;
+    if (filtered.length === 0) {
+      showState('empty');
+    } else {
+      renderTable(filtered);
+      showState('results');
+    }
   }
 
   function sortTokens(tokens, field, order) {
@@ -266,6 +329,23 @@ var spikeDetector = (function() {
   function init() {
     cacheElements();
 
+    // Initialize custom dropdowns
+    initDropdown(els.ageDropdown, function(value) {
+      state.minAge = value;
+      load();
+    });
+
+    initDropdown(els.typeDropdown, function(value) {
+      state.filterType = value;
+      if (state.tokens.length > 0) {
+        applyFilterAndRender();
+      }
+    });
+
+    // Close dropdowns on outside click
+    document.addEventListener('click', closeAllDropdowns);
+    document.addEventListener('touchstart', closeAllDropdowns);
+
     // Make table headers sortable
     var headerRow = document.querySelector('.spikes-table thead tr');
     if (headerRow) {
@@ -300,18 +380,7 @@ var spikeDetector = (function() {
     // Table row click navigation
     els.tableBody.addEventListener('click', handleRowClick);
 
-    // Controls
-    if (els.minAge) els.minAge.addEventListener('change', function() { load(); });
-    if (els.filter) els.filter.addEventListener('change', function() {
-      var filtered = applyFilter(state.tokens);
-      els.spiking.textContent = filtered.length;
-      if (filtered.length === 0) {
-        showState('empty');
-      } else {
-        renderTable(filtered);
-        showState('results');
-      }
-    });
+    // Refresh button
     if (els.refreshBtn) els.refreshBtn.addEventListener('click', function() { load(); });
 
     // Initial load

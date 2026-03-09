@@ -389,12 +389,13 @@ const api = {
       );
     },
 
-    async search(query) {
-      const cacheKey = `tokens:search:${query.toLowerCase()}`;
+    async search(query, { dexFilter = false } = {}) {
+      const dexParam = dexFilter ? '&dex=1' : '';
+      const cacheKey = `tokens:search:${query.toLowerCase()}${dexParam}`;
 
       return apiCache.getOrFetch(
         cacheKey,
-        () => api.request(`/api/tokens/search?q=${encodeURIComponent(query)}`),
+        () => api.request(`/api/tokens/search?q=${encodeURIComponent(query)}${dexParam}`),
         apiCache.TTL.search,
         true
       );

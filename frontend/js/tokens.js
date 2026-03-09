@@ -10,6 +10,7 @@ const tokenList = {
   searchQuery: '',
   isSearchMode: false,
   isLoading: false,
+  dexFilterEnabled: true, // Filter to major DEXes (Pumpfun, Pumpswap, Raydium) by default
   autoRefreshInterval: null,
   freshnessInterval: null,
   lastUpdateTime: null,
@@ -192,6 +193,19 @@ const tokenList = {
         searchClear.style.display = 'none';
         this.clearSearch();
         input.focus();
+      });
+    }
+
+    // DEX filter toggle
+    const dexCheckbox = document.getElementById('dex-filter-checkbox');
+    if (dexCheckbox) {
+      dexCheckbox.checked = this.dexFilterEnabled;
+      dexCheckbox.addEventListener('change', () => {
+        this.dexFilterEnabled = dexCheckbox.checked;
+        // Re-run current search if in search mode
+        if (this.isSearchMode && this.searchQuery) {
+          this.search(this.searchQuery);
+        }
       });
     }
 
@@ -580,7 +594,10 @@ const tokenList = {
     utils.setUrlParam('filter', null);
 
     try {
-      this.tokens = await api.tokens.search(trimmed);
+      // Exact contract addresses bypass the DEX filter
+      const isExactAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
+      const useDexFilter = this.dexFilterEnabled && !isExactAddress;
+      this.tokens = await api.tokens.search(trimmed, { dexFilter: useDexFilter });
       this.render();
     } catch (error) {
       _ok = false;
@@ -779,7 +796,7 @@ const tokenList = {
                 data-fallback="${defaultLogo}"
               >
               <div class="token-info">
-                <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}</span>
+                <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}${token.hasCommunityUpdates ? '<span class="community-badge" title="Has community updates"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></path></svg></span>' : ''}</span>
                 <span class="token-symbol-cell ${token.symbol === '???' ? 'symbol-pending' : ''}">${this.escapeHtml(token.symbol || '???')}</span>
               </div>
             </div>

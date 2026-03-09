@@ -92,7 +92,8 @@
       "Bash(grep -l 'About OpenDEX</a>            <a' *.html)",
       "Bash(for f in api.html burn.html development.html docs.html hackathon.html index.html link.html ogfinder.html submit.html tokens.html)",
       "Bash(sed -i 's|<a href=\"\"about.html\"\" class=\"\"nav-dropdown-item\"\">About OpenDEX</a>            <a href=\"\"development.html\"\"|<a href=\"\"about.html\"\" class=\"\"nav-dropdown-item\"\">About OpenDEX</a>\\\\n            <a href=\"\"development.html\"\"|' \"$f\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(grep -n \"hasSubmissions\\\\|communityUpdates\\\\|submissionCount\\\\|hasContent\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
     ]
   }
 }
