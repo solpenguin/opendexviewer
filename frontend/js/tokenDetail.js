@@ -368,6 +368,10 @@ const tokenDetail = {
     };
     bindHandler(holdersRefreshBtn, 'click', holdersRefreshHandler);
 
+    // Share holder analytics screenshot
+    const holdersShareBtn = document.getElementById('holders-share');
+    bindHandler(holdersShareBtn, 'click', () => this._shareHolderAnalytics());
+
     // AI Analysis button
     const aiAnalysisBtn = document.getElementById('ai-analysis-btn');
     if (aiAnalysisBtn) {
@@ -1121,6 +1125,12 @@ const tokenDetail = {
       // Show the section — even on RPC errors we display a message
       if (section) section.style.display = '';
 
+      // Show current ticker in header
+      const tickerEl = document.getElementById('holders-ticker');
+      if (tickerEl && this.token) {
+        tickerEl.textContent = '$' + (this.token.symbol || '').toUpperCase();
+      }
+
       // Handle RPC unavailable — show section with retry message
       if (data.error === 'rpc_unavailable' || !data.holders || data.holders.length === 0) {
         const tbody = document.getElementById('holders-tbody');
@@ -1194,25 +1204,21 @@ const tokenDetail = {
         }
       }
 
-      // Render locked / burnt supply info
+      // Render locked supply info (inside the metrics grid)
       if (data.supply) {
-        const supplyRow = document.getElementById('holders-supply-row');
         const lockedEl = document.getElementById('holders-locked');
-        if (supplyRow) {
-          supplyRow.style.display = '';
+        if (lockedEl) {
           const fmtAmount = (v) => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B'
             : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M'
             : v >= 1e3 ? (v / 1e3).toFixed(2) + 'K'
             : v.toFixed(2);
-          if (lockedEl) {
-            const lk = data.supply.locked;
-            if (lk > 0) {
-              lockedEl.textContent = fmtAmount(lk) + ' (' + data.supply.lockedPct.toFixed(1) + '%)';
-              lockedEl.className = 'holders-supply-value supply-good';
-            } else {
-              lockedEl.textContent = 'None detected';
-              lockedEl.className = 'holders-supply-value';
-            }
+          const lk = data.supply.locked;
+          if (lk > 0) {
+            lockedEl.textContent = fmtAmount(lk) + ' (' + data.supply.lockedPct.toFixed(1) + '%)';
+            lockedEl.className = 'holder-metric-value concentration-low';
+          } else {
+            lockedEl.textContent = 'None';
+            lockedEl.className = 'holder-metric-value';
           }
         }
       }
@@ -1478,6 +1484,69 @@ const tokenDetail = {
     if (count === 0) el.classList.add('concentration-low');       // green = good
     else if (count <= 2) el.classList.add('concentration-medium'); // yellow = some
     else el.classList.add('concentration-high');                   // red = many
+  },
+
+  // Share holder analytics as a screenshot image
+  async _shareHolderAnalytics() {
+    const section = document.getElementById('holders-section');
+    if (!section) return;
+
+    const btn = document.getElementById('holders-share');
+    if (btn) { btn.disabled = true; btn.classList.add('spinning'); }
+
+    try {
+      // Dynamically load html2canvas if not already loaded
+      if (typeof html2canvas === 'undefined') {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      const canvas = await html2canvas(section, {
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim() || '#07080a',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+
+      // Try native share with file if available, otherwise copy to clipboard
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], 'holder-analytics.png', { type: 'image/png' });
+        const shareData = { files: [file] };
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+
+      // Fallback: copy image to clipboard
+      if (navigator.clipboard && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        if (typeof toast !== 'undefined') toast.success('Screenshot copied to clipboard!');
+      } else {
+        // Last fallback: download the image
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'holder-analytics.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (typeof toast !== 'undefined') toast.success('Screenshot downloaded!');
+      }
+    } catch (err) {
+      console.error('Share holder analytics error:', err);
+      if (typeof toast !== 'undefined') toast.error('Failed to capture screenshot');
+    } finally {
+      if (btn) { btn.disabled = false; btn.classList.remove('spinning'); }
+    }
   },
 
   // AI analysis cost in BC (loaded from backend, default 25)

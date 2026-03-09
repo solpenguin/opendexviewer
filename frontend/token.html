@@ -324,6 +324,7 @@
                 <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
               Holder Analytics
+              <span class="holders-ticker" id="holders-ticker"></span>
             </h2>
             <div class="holders-header-actions">
               <span class="holders-updated" id="holders-updated"></span>
@@ -333,6 +334,13 @@
                 </svg>
                 <span class="ai-analysis-btn-label">AI Analysis</span>
                 <span class="ai-analysis-btn-cost">25 BC</span>
+              </button>
+              <button class="holders-share-btn" id="holders-share" title="Share holder analytics">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <polyline points="16 6 12 2 8 6"/>
+                  <line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
               </button>
               <button class="holders-refresh-btn" id="holders-refresh" title="Refresh holder data">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -376,6 +384,10 @@
             <div class="holder-metric">
               <span class="holder-metric-label">Fresh Wallets</span>
               <span class="holder-metric-value" id="holders-fresh-wallets">--</span>
+            </div>
+            <div class="holder-metric">
+              <span class="holder-metric-label">Locked</span>
+              <span class="holder-metric-value" id="holders-locked">--</span>
             </div>
           </div>
           <!-- Diamond Hands Distribution -->
@@ -449,13 +461,6 @@
                 </div>
                 <div class="ai-analysis-error" id="ai-analysis-error" style="display:none;"></div>
               </div>
-            </div>
-          </div>
-          <!-- Supply Info (Locked) -->
-          <div class="holders-supply-row" id="holders-supply-row" style="display:none;">
-            <div class="holders-supply-item">
-              <span class="holders-supply-label">Locked</span>
-              <span class="holders-supply-value" id="holders-locked">--</span>
             </div>
           </div>
           <!-- Top Holders Table -->

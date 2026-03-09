@@ -1993,8 +1993,9 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
     return Math.floor(ms / 3600000) + 'h';
   };
 
-  // Build prompt — ~270 input tokens
+  // Build prompt — ~300 input tokens
   const prompt = `Score this Solana token's holder health 0-100 (100=best). Reply ONLY as: SCORE:<number>\n<2-3 sentences explaining key factors>.
+IMPORTANT: Evaluate conviction buckets relative to token age. A token aged 3d cannot have >1w or >1M holders — missing long-term buckets are expected and should NOT penalize the score. Only judge buckets within the token's lifespan.
 
 Market: mcap=${fmtUsd(m.marketCap)} vol24h=${fmtUsd(m.volume24h)} holders=${bigNum(m.holders) || 'N/A'} age=${fmtAge(m.createdAt)}
 Locked supply: ${safe(m.locked)}
