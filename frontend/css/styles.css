@@ -2025,15 +2025,15 @@ a:hover {
 /* Explicit column placement: chart spans full left column, sidebar items stack right */
 .chart-section {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 1 / 4;
   display: flex;
   flex-direction: column;
 }
 
 .stats-section            { grid-column: 2; grid-row: 1; }
-.holders-section          { grid-column: 1; grid-row: 2; align-self: start; }
 .trade-section            { grid-column: 2; grid-row: 2; align-self: start; }
 .sentiment-section        { grid-column: 2; grid-row: 3; align-self: start; }
+.holders-section          { grid-column: 1; grid-row: 4; align-self: start; }
 
 /* Card Base */
 .chart-section,
