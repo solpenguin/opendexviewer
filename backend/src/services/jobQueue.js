@@ -413,6 +413,19 @@ async function shutdown() {
   console.log('[JobQueue] Shutdown complete');
 }
 
+/**
+ * Get buffered (unflushed) view counts for a list of token mints.
+ * Used by the token list endpoint to include views not yet written to DB.
+ */
+function getBufferedViewCounts(tokenMints) {
+  const result = {};
+  for (const mint of tokenMints) {
+    const count = viewCountBuffer.get(mint);
+    if (count) result[mint] = count;
+  }
+  return result;
+}
+
 module.exports = {
   initialize,
   addMaintenanceJob,
@@ -420,6 +433,7 @@ module.exports = {
   addSearchJob,
   scheduleSessionCleanup,
   incrementViewCount,
+  getBufferedViewCounts,
   flushViewCounts,
   getQueueStats,
   isWorkerActive,

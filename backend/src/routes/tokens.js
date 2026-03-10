@@ -45,6 +45,19 @@ const VALID_SUBMISSION_TYPES = ['banner', 'twitter', 'telegram', 'discord', 'tik
 const VALID_SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'all'];
 const jobQueue = require('../services/jobQueue');
 
+// Merge DB view counts with any buffered (unflushed) counts from the job queue
+// so the token list always reflects the latest views, even before a flush cycle
+function mergeViewCounts(dbCounts, addresses) {
+  const buffered = jobQueue.getBufferedViewCounts(addresses);
+  const merged = { ...dbCounts };
+  for (const mint of addresses) {
+    if (buffered[mint]) {
+      merged[mint] = (merged[mint] || 0) + buffered[mint];
+    }
+  }
+  return merged;
+}
+
 // GET /api/tokens - List tokens (trending, new, gainers, losers)
 // Optimized: Uses Helius batch API for metadata enrichment instead of extra GeckoTerminal calls
 router.get('/', validatePagination, asyncHandler(async (req, res) => {
@@ -69,11 +82,11 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   if (cachedMeta && cachedMeta.value) {
     // Privacy: Don't log cache details
 
-    // Refresh view counts from database (cheap query, keeps views up-to-date)
+    // Refresh view counts from database + buffer (cheap query, keeps views up-to-date)
     let tokens = cachedMeta.value;
     if (tokens && tokens.length > 0) {
       const addresses = tokens.map(t => t.address || t.mintAddress);
-      const viewCounts = await db.getTokenViewsBatch(addresses);
+      const viewCounts = mergeViewCounts(await db.getTokenViewsBatch(addresses), addresses);
       tokens = tokens.map(t => ({
         ...t,
         views: viewCounts[t.address || t.mintAddress] || 0
@@ -322,11 +335,12 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
       // Enrich with view counts, sentiment scores, and community flags in parallel
       const addresses = tokens.map(t => t.address);
-      const [viewCounts, sentimentScores, communityMints] = await Promise.all([
+      const [dbViewCounts, sentimentScores, communityMints] = await Promise.all([
         db.getTokenViewsBatch(addresses).catch(() => ({})),
         db.getSentimentBatch(addresses).catch(() => ({})),
         db.hasApprovedSubmissionsBatch(addresses).catch(() => new Set())
       ]);
+      const viewCounts = mergeViewCounts(dbViewCounts, addresses);
       for (const token of tokens) {
         token.views = viewCounts[token.address] || 0;
         const s = sentimentScores[token.address];
@@ -439,11 +453,12 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
     // Enrich tokens with view counts, sentiment scores, and community flags in parallel
     if (tokens && tokens.length > 0) {
       const addresses = tokens.map(t => t.address || t.mintAddress);
-      const [viewCounts, sentimentScores, communityMints] = await Promise.all([
+      const [dbViewCounts, sentimentScores, communityMints] = await Promise.all([
         db.getTokenViewsBatch(addresses).catch(() => ({})),
         db.getSentimentBatch(addresses).catch(() => ({})),
         db.hasApprovedSubmissionsBatch(addresses).catch(() => new Set())
       ]);
+      const viewCounts = mergeViewCounts(dbViewCounts, addresses);
 
       for (const token of tokens) {
         const address = token.address || token.mintAddress;
@@ -631,11 +646,12 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
     }
 
     // Get view counts, sentiment scores, and community flags for all tokens
-    const [viewCounts, sentimentScores, communityMints] = await Promise.all([
+    const [dbViewCounts, sentimentScores, communityMints] = await Promise.all([
       db.getTokenViewsBatch(validMints),
       db.getSentimentBatch(validMints).catch(() => ({})),
       db.hasApprovedSubmissionsBatch(validMints).catch(() => new Set())
     ]);
+    const viewCounts = mergeViewCounts(dbViewCounts, validMints);
 
     // Build final response array in original order
     const response = validMints.map(mint => {
@@ -1578,8 +1594,9 @@ router.get('/:mint/views', validateMint, asyncHandler(async (req, res) => {
   const { mint } = req.params;
 
   try {
-    const viewCount = await db.getTokenViews(mint);
-    res.json({ views: viewCount });
+    const dbCount = await db.getTokenViews(mint);
+    const buffered = jobQueue.getBufferedViewCounts([mint]);
+    res.json({ views: dbCount + (buffered[mint] || 0) });
   } catch (error) {
     // Privacy: Don't log error details
     res.json({ views: 0 });
