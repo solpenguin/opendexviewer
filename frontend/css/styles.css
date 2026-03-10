@@ -14309,7 +14309,8 @@ body.landscape .hero h1 {
   position: relative;
   text-align: center;
   padding: 3rem 1rem 2rem;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .spikes-hero-glow {

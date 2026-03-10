@@ -41,7 +41,7 @@ router.post('/admin', validateAdminSession, asyncHandler(async (req, res) => {
   if (twitterHandle.length > 50) return res.status(400).json({ error: 'Twitter handle too long' });
 
   const folio = await db.createFolio({ name, description, twitterHandle, twitterAvatar, sortOrder });
-  await cache.del('folios:list');
+  await cache.delete('folios:list');
   res.json({ success: true, data: folio });
 }));
 
@@ -57,8 +57,8 @@ router.patch('/admin/:id', validateAdminSession, asyncHandler(async (req, res) =
   const folio = await db.updateFolio(id, { name, description, twitterHandle, twitterAvatar, isActive, sortOrder });
   if (!folio) return res.status(404).json({ error: 'Folio not found' });
 
-  await cache.del('folios:list');
-  await cache.del(`folios:detail:${id}`);
+  await cache.delete('folios:list');
+  await cache.delete(`folios:detail:${id}`);
   res.json({ success: true, data: folio });
 }));
 
@@ -73,8 +73,8 @@ router.delete('/admin/:id', validateAdminSession, asyncHandler(async (req, res) 
   const deleted = await db.deleteFolio(id);
   if (!deleted) return res.status(404).json({ error: 'Folio not found' });
 
-  await cache.del('folios:list');
-  await cache.del(`folios:detail:${id}`);
+  await cache.delete('folios:list');
+  await cache.delete(`folios:detail:${id}`);
   res.json({ success: true });
 }));
 
@@ -95,8 +95,8 @@ router.post('/admin/:id/tokens', validateAdminSession, asyncHandler(async (req, 
   if (!folio) return res.status(404).json({ error: 'Folio not found' });
 
   const item = await db.addFolioToken(folioId, tokenMint, note);
-  await cache.del(`folios:detail:${folioId}`);
-  await cache.del('folios:list');
+  await cache.delete(`folios:detail:${folioId}`);
+  await cache.delete('folios:list');
   res.json({ success: true, data: item });
 }));
 
@@ -116,8 +116,8 @@ router.delete('/admin/:id/tokens/:mint', validateAdminSession, asyncHandler(asyn
   const removed = await db.removeFolioToken(folioId, mint);
   if (!removed) return res.status(404).json({ error: 'Token not found in folio' });
 
-  await cache.del(`folios:detail:${folioId}`);
-  await cache.del('folios:list');
+  await cache.delete(`folios:detail:${folioId}`);
+  await cache.delete('folios:list');
   res.json({ success: true });
 }));
 
