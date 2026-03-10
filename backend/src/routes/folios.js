@@ -252,10 +252,24 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     });
   }
 
+  // Fetch holder counts for all tokens in parallel (best-effort, non-blocking)
+  const holderCounts = await Promise.all(
+    folio.tokens.map(async (t) => {
+      try {
+        const count = await jupiterService.getTokenHolderCount(t.token_mint);
+        return count;
+      } catch { return null; }
+    })
+  );
+
   // Build compact token summary for Claude
   const fmtUsd = (v) => {
     const n = typeof v === 'number' && v > 0 ? v : null;
     return n ? '$' + (n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toFixed(2)) : 'N/A';
+  };
+  const fmtNum = (v) => {
+    if (v == null || v <= 0) return 'N/A';
+    return v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : String(v);
   };
 
   const tokenLines = folio.tokens.map((t, i) => {
@@ -264,14 +278,15 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     const price = fmtUsd(t.price);
     const mcap = fmtUsd(t.market_cap);
     const vol = fmtUsd(t.volume_24h);
+    const holders = fmtNum(holderCounts[i]);
     const note = t.note ? ` Note: ${t.note.slice(0, 50)}` : '';
-    return `${i + 1}. ${name} (${symbol}) — Price: ${price}, MCap: ${mcap}, Vol24h: ${vol}${note}`;
+    return `${i + 1}. ${name} (${symbol}) — Price: ${price}, MCap: ${mcap}, Vol24h: ${vol}, Holders: ${holders}${note}`;
   }).join('\n');
 
   const prompt = `Analyze this curated Solana token folio (portfolio list) from KOL "${folio.name}" (@${(folio.twitter_handle || '').replace(/^@/, '')}). Provide a concise but insightful analysis covering:
 1. Overall portfolio theme/strategy (what types of tokens, any sector focus)
-2. Risk profile (concentration, market cap distribution, any red flags)
-3. Notable observations (standout tokens, interesting patterns)
+2. Risk profile (concentration, market cap distribution, holder health, any red flags)
+3. Notable observations (standout tokens, interesting patterns, holder distribution)
 4. Brief summary verdict (1 sentence)
 
 Keep the analysis to 4-6 concise paragraphs. Be factual and data-driven. Do not give financial advice.

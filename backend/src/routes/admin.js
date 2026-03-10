@@ -1042,6 +1042,102 @@ router.get('/burn-credits/lookup/:wallet',
   })
 );
 
+// ==========================================
+// AI Cache Management
+// ==========================================
+
+/**
+ * GET /admin/ai-cache
+ * List all cached AI analysis entries grouped by type.
+ */
+router.get('/ai-cache', validateAdminSession, asyncHandler(async (req, res) => {
+  const [holderKeys, advancedKeys, folioKeys] = await Promise.all([
+    cache.scanKeys('ai-analysis:*'),
+    cache.scanKeys('ai-adv:*'),
+    cache.scanKeys('ai-folio:*')
+  ]);
+
+  // Build entries with metadata extracted from cache keys
+  const toEntry = (key, type) => {
+    const parts = key.split(':');
+    let details = {};
+    if (type === 'holder') {
+      details = { mint: parts[1] || '' };
+    } else if (type === 'advanced') {
+      details = { mint: parts[1] || '', promptHash: parts[2] || '' };
+    } else if (type === 'folio') {
+      details = { folioId: parts[1] || '' };
+    }
+    return { key, type, ...details };
+  };
+
+  const entries = [
+    ...holderKeys.map(k => toEntry(k, 'holder')),
+    ...advancedKeys.map(k => toEntry(k, 'advanced')),
+    ...folioKeys.map(k => toEntry(k, 'folio'))
+  ];
+
+  res.json({
+    success: true,
+    data: {
+      entries,
+      counts: {
+        holder: holderKeys.length,
+        advanced: advancedKeys.length,
+        folio: folioKeys.length,
+        total: entries.length
+      }
+    }
+  });
+}));
+
+/**
+ * DELETE /admin/ai-cache
+ * Clear all cached AI analysis entries (or a specific type via ?type=holder|advanced|folio).
+ */
+router.delete('/ai-cache', validateAdminSession, asyncHandler(async (req, res) => {
+  const type = req.query.type;
+
+  const patterns = {
+    holder: 'ai-analysis:*',
+    advanced: 'ai-adv:*',
+    folio: 'ai-folio:*'
+  };
+
+  if (type && patterns[type]) {
+    await cache.clearPattern(patterns[type]);
+  } else {
+    // Clear all AI cache
+    await Promise.all([
+      cache.clearPattern('ai-analysis:*'),
+      cache.clearPattern('ai-adv:*'),
+      cache.clearPattern('ai-folio:*')
+    ]);
+  }
+
+  res.json({ success: true });
+}));
+
+/**
+ * POST /admin/ai-cache/delete-entry
+ * Delete a single cached AI analysis entry by its full cache key.
+ * Uses POST+body instead of DELETE with URL params to avoid encoding issues with colons.
+ */
+router.post('/ai-cache/delete-entry', validateAdminSession, asyncHandler(async (req, res) => {
+  const { key } = req.body;
+  if (!key || typeof key !== 'string') {
+    return res.status(400).json({ success: false, error: 'Cache key is required' });
+  }
+
+  // Only allow deleting AI cache keys
+  if (!key.startsWith('ai-analysis:') && !key.startsWith('ai-adv:') && !key.startsWith('ai-folio:')) {
+    return res.status(400).json({ success: false, error: 'Invalid AI cache key' });
+  }
+
+  await cache.delete(key);
+  res.json({ success: true });
+}));
+
 // Export both the router and adminSettings for use by other routes
 module.exports = router;
 module.exports.adminSettings = adminSettings;

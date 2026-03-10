@@ -265,6 +265,23 @@ const adminApi = {
     return this.request(`/api/folios/admin/${folioId}/tokens/${tokenMint}`, {
       method: 'DELETE'
     });
+  },
+
+  // AI Cache management
+  async getAICache() {
+    return this.request('/admin/ai-cache');
+  },
+
+  async deleteAICacheEntry(key) {
+    return this.request('/admin/ai-cache/delete-entry', {
+      method: 'POST',
+      body: JSON.stringify({ key })
+    });
+  },
+
+  async clearAICache(type) {
+    const url = type ? `/admin/ai-cache?type=${type}` : '/admin/ai-cache';
+    return this.request(url, { method: 'DELETE' });
   }
 };
 
@@ -415,6 +432,18 @@ const adminPanel = {
       }
     });
 
+    // AI Cache management
+    document.getElementById('refresh-ai-cache-btn')?.addEventListener('click', () => this.loadAICache());
+    document.getElementById('clear-all-ai-cache-btn')?.addEventListener('click', () => this.clearAllAICache());
+    document.getElementById('ai-cache-table')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      if (btn.dataset.action === 'delete-cache') {
+        const key = btn.dataset.key;
+        if (key) this.deleteAICacheEntry(key);
+      }
+    });
+
     // Event delegation for dynamically rendered table action buttons
     document.getElementById('submissions-table')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-action]');
@@ -550,6 +579,9 @@ const adminPanel = {
         break;
       case 'folios':
         this.loadFolios();
+        break;
+      case 'ai-cache':
+        this.loadAICache();
         break;
     }
   },
@@ -1982,6 +2014,100 @@ const adminPanel = {
     } catch (error) {
       toast.error(`Failed to remove token: ${error.message}`);
     }
+  },
+
+  // ==========================================
+  // AI Cache Management
+  // ==========================================
+
+  async loadAICache() {
+    const tbody = document.getElementById('ai-cache-table');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="4"><div class="loading-state"><div class="loading-spinner"></div><span>Loading AI cache entries...</span></div></td></tr>';
+
+    try {
+      const result = await adminApi.getAICache();
+      const { entries, counts } = result.data;
+
+      // Update summary cards
+      document.getElementById('ai-cache-holder-count').textContent = counts.holder;
+      document.getElementById('ai-cache-advanced-count').textContent = counts.advanced;
+      document.getElementById('ai-cache-folio-count').textContent = counts.folio;
+      document.getElementById('ai-cache-total-count').textContent = counts.total;
+
+      if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No cached AI responses</td></tr>';
+        return;
+      }
+
+      const typeLabels = {
+        holder: 'Holder Analysis',
+        advanced: 'Advanced Analysis',
+        folio: 'Folio Analysis'
+      };
+
+      const typeBadgeClass = {
+        holder: 'badge-info',
+        advanced: 'badge-warning',
+        folio: 'badge-accent'
+      };
+
+      tbody.innerHTML = entries.map(entry => {
+        const label = typeLabels[entry.type] || entry.type;
+        const badgeClass = typeBadgeClass[entry.type] || '';
+        let details = '';
+        if (entry.mint) {
+          const short = entry.mint.slice(0, 6) + '...' + entry.mint.slice(-4);
+          details = `<span class="mono">${this.escapeHtml(short)}</span>`;
+        }
+        if (entry.folioId) {
+          details = `Folio #${this.escapeHtml(entry.folioId)}`;
+        }
+        if (entry.promptHash) {
+          details += ` <span class="text-muted">(prompt: ${this.escapeHtml(entry.promptHash.slice(0, 8))}...)</span>`;
+        }
+
+        return `
+          <tr>
+            <td><span class="status-badge ${badgeClass}">${label}</span></td>
+            <td><code class="mono" style="font-size: 0.75rem;">${this.escapeHtml(entry.key)}</code></td>
+            <td>${details}</td>
+            <td>
+              <button class="btn btn-danger btn-xs" data-action="delete-cache" data-key="${this.escapeHtml(entry.key)}">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="4" class="error-state">Failed to load AI cache: ${this.escapeHtml(error.message)}</td></tr>`;
+    }
+  },
+
+  async deleteAICacheEntry(key) {
+    try {
+      await adminApi.deleteAICacheEntry(key);
+      toast.success('Cache entry deleted');
+      this.loadAICache();
+    } catch (error) {
+      toast.error(`Failed to delete: ${error.message}`);
+    }
+  },
+
+  async clearAllAICache() {
+    this.showConfirmModal(
+      'Clear All AI Cache',
+      'This will delete all cached AI analysis responses (holder, advanced, and folio). Users will be charged BC again on next analysis. Continue?',
+      async () => {
+        try {
+          await adminApi.clearAICache();
+          toast.success('All AI cache cleared');
+          this.loadAICache();
+        } catch (error) {
+          toast.error(`Failed to clear cache: ${error.message}`);
+        }
+      }
+    );
   },
 
 };

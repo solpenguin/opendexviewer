@@ -767,6 +767,14 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
         for (const token of localResults) {
           if (!seenAddresses.has(token.address)) {
             seenAddresses.add(token.address);
+            // Ensure tokens matched by symbol/mint have display names
+            const addr = token.address || '';
+            if (!token.name || PLACEHOLDER_NAMES.has(token.name.toLowerCase())) {
+              token.name = addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : null;
+            }
+            if (!token.symbol) {
+              token.symbol = addr ? addr.slice(0, 5).toUpperCase() : null;
+            }
             results.push(token);
           }
         }

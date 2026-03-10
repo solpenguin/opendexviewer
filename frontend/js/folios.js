@@ -4,7 +4,7 @@ const foliosPage = {
   folios: [],
   currentFolio: null,
   isLoading: false,
-  aiAnalysisCost: 50,
+  aiAnalysisCost: 75,
 
   init() {
     document.getElementById('folio-back-btn')?.addEventListener('click', () => this.showList());

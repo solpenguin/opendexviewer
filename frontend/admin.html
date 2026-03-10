@@ -155,6 +155,13 @@
           </svg>
           Folios
         </button>
+        <button class="admin-nav-item" data-tab="ai-cache">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/>
+            <path d="M12 2a4 4 0 00-4 4c0 1.95 1.4 3.58 3.25 3.93"/>
+          </svg>
+          AI Cache
+        </button>
       </nav>
 
       <main class="admin-main">
@@ -893,6 +900,67 @@
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- AI Cache Tab -->
+        <div id="tab-ai-cache" class="admin-tab">
+          <div class="tab-header">
+            <h2>AI Cache</h2>
+            <div class="tab-actions">
+              <button id="refresh-ai-cache-btn" class="btn btn-ghost btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                  <path d="M21 3v5h-5"/>
+                </svg>
+                Refresh
+              </button>
+              <button id="clear-all-ai-cache-btn" class="btn btn-danger btn-sm">Clear All AI Cache</button>
+            </div>
+          </div>
+
+          <!-- Summary Cards -->
+          <div id="ai-cache-summary" class="stats-grid" style="margin-bottom: 1.5rem;">
+            <div class="stat-card">
+              <div class="stat-value" id="ai-cache-holder-count">0</div>
+              <div class="stat-label">Holder Analysis</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="ai-cache-advanced-count">0</div>
+              <div class="stat-label">Advanced Analysis</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="ai-cache-folio-count">0</div>
+              <div class="stat-label">Folio Analysis</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="ai-cache-total-count">0</div>
+              <div class="stat-label">Total Cached</div>
+            </div>
+          </div>
+
+          <!-- Cache Entries Table -->
+          <div class="table-container">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Cache Key</th>
+                  <th>Details</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ai-cache-table">
+                <tr class="loading-row">
+                  <td colspan="4">
+                    <div class="loading-state">
+                      <div class="loading-spinner"></div>
+                      <span>Loading AI cache entries...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 

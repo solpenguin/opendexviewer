@@ -579,10 +579,11 @@ async function searchTokens(query, limit = 10) {
   const result = await pool.query(
     `SELECT mint_address, name, symbol, decimals, logo_uri, price, market_cap, volume_24h, created_at
      FROM tokens
-     WHERE (LOWER(name) LIKE $1
-        OR LOWER(symbol) LIKE $1
-        OR mint_address LIKE $2)
-       AND LOWER(COALESCE(name, '')) NOT IN ('unknown token', 'unknown', '')
+     WHERE (
+       (LOWER(name) LIKE $1 AND LOWER(COALESCE(name, '')) NOT IN ('unknown token', 'unknown', ''))
+       OR LOWER(symbol) LIKE $1
+       OR mint_address LIKE $2
+     )
      ORDER BY
        CASE
          WHEN LOWER(symbol) = $3 THEN 1
@@ -2774,14 +2775,14 @@ async function getAdvancedAIAnalysisCost() {
 
 // Get the Folio AI analysis cost in BC
 async function getFolioAIAnalysisCost() {
-  if (!pool) return 50;
+  if (!pool) return 75;
   try {
     const result = await pool.query(
       "SELECT value FROM burn_config WHERE key = 'folio_ai_analysis_cost'"
     );
-    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 50;
+    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 75;
   } catch {
-    return 50;
+    return 75;
   }
 }
 

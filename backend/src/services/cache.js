@@ -420,6 +420,27 @@ class CacheService {
   }
 
   /**
+   * List cache keys matching a glob pattern.
+   * Returns unprefixed keys (what callers use with get/set/delete).
+   */
+  async scanKeys(pattern) {
+    if (this.backendType === 'redis') {
+      const prefixed = await this.backend._scanKeys(this.backend._prefixKey(pattern));
+      // Strip prefix from returned keys
+      const prefix = this.backend._prefixKey('');
+      return prefixed.map(k => k.startsWith(prefix) ? k.slice(prefix.length) : k);
+    }
+    // In-memory: iterate the Map
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    const regex = new RegExp('^' + escaped + '$');
+    const result = [];
+    for (const key of this.backend.cache.keys()) {
+      if (regex.test(key)) result.push(key);
+    }
+    return result;
+  }
+
+  /**
    * Get or set - returns cached value or fetches and caches
    * Includes stampede prevention: if multiple requests come in while fetching,
    * they all wait for the same fetch instead of triggering multiple API calls
