@@ -23,6 +23,7 @@ const hackathonRoutes = require('./routes/hackathon');
 const ogfinderRoutes = require('./routes/ogfinder');
 const burnCreditsRoutes = require('./routes/burnCredits');
 const deviceAuthRoutes = require('./routes/deviceAuth');
+const folioRoutes = require('./routes/folios');
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -297,6 +298,7 @@ app.use('/api/hackathon', hackathonRoutes);
 app.use('/api/ogfinder', ogfinderRoutes);
 app.use('/api/burn-credits', burnCreditsRoutes);
 app.use('/api/auth/device-session', deviceAuthRoutes);
+app.use('/api/folios', folioRoutes);
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);

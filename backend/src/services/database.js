@@ -431,6 +431,32 @@ async function initializeDatabase() {
         ON CONFLICT (key) DO NOTHING;
       INSERT INTO burn_config (key, value) VALUES ('ai_analysis_cost', '25')
         ON CONFLICT (key) DO NOTHING;
+
+      -- Folios: curated token lists linked to KOL twitter accounts
+      CREATE TABLE IF NOT EXISTS folios (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        twitter_handle VARCHAR(50) NOT NULL,
+        twitter_avatar TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS folio_tokens (
+        id SERIAL PRIMARY KEY,
+        folio_id INTEGER NOT NULL REFERENCES folios(id) ON DELETE CASCADE,
+        token_mint VARCHAR(44) NOT NULL,
+        note TEXT,
+        added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(folio_id, token_mint)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_folios_active ON folios(is_active, sort_order);
+      CREATE INDEX IF NOT EXISTS idx_folio_tokens_folio ON folio_tokens(folio_id);
+      CREATE INDEX IF NOT EXISTS idx_folio_tokens_mint ON folio_tokens(token_mint);
     `);
 
     await client.query('COMMIT');
@@ -2981,6 +3007,133 @@ async function deleteTokens(mints) {
   return result.rowCount;
 }
 
+// ==========================================
+// Folio operations
+// ==========================================
+
+async function getAllFolios(activeOnly = true) {
+  if (!pool) return [];
+
+  const whereClause = activeOnly ? 'WHERE f.is_active = TRUE' : '';
+  const result = await pool.query(
+    `SELECT f.*, COUNT(ft.id)::int AS token_count
+     FROM folios f
+     LEFT JOIN folio_tokens ft ON ft.folio_id = f.id
+     ${whereClause}
+     GROUP BY f.id
+     ORDER BY f.sort_order ASC, f.created_at DESC`
+  );
+  return result.rows;
+}
+
+async function getFolio(id) {
+  if (!pool) return null;
+
+  const result = await pool.query('SELECT * FROM folios WHERE id = $1', [id]);
+  return result.rows[0] || null;
+}
+
+async function getFolioWithTokens(id) {
+  if (!pool) return null;
+
+  const folio = await getFolio(id);
+  if (!folio) return null;
+
+  const tokens = await pool.query(
+    `SELECT ft.token_mint, ft.note, ft.added_at,
+            t.name, t.symbol, t.logo_uri, t.price, t.market_cap, t.volume_24h
+     FROM folio_tokens ft
+     LEFT JOIN tokens t ON t.mint_address = ft.token_mint
+     WHERE ft.folio_id = $1
+     ORDER BY ft.added_at ASC`,
+    [id]
+  );
+
+  folio.tokens = tokens.rows;
+  return folio;
+}
+
+async function createFolio({ name, description, twitterHandle, twitterAvatar, sortOrder }) {
+  if (!pool) throw new Error('Database not available');
+
+  const result = await pool.query(
+    `INSERT INTO folios (name, description, twitter_handle, twitter_avatar, sort_order)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [name, description || null, twitterHandle, twitterAvatar || null, sortOrder || 0]
+  );
+  return result.rows[0];
+}
+
+async function updateFolio(id, fields) {
+  if (!pool) throw new Error('Database not available');
+
+  // Build SET clause dynamically so only provided fields are updated
+  // and nullable fields (description, twitterAvatar) can be explicitly cleared
+  const setClauses = [];
+  const values = [id]; // $1 = id
+  let paramIndex = 2;
+
+  const fieldMap = {
+    name: 'name',
+    description: 'description',
+    twitterHandle: 'twitter_handle',
+    twitterAvatar: 'twitter_avatar',
+    isActive: 'is_active',
+    sortOrder: 'sort_order'
+  };
+
+  for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
+    if (fields[jsKey] !== undefined) {
+      setClauses.push(`${dbCol} = $${paramIndex}`);
+      values.push(fields[jsKey]);
+      paramIndex++;
+    }
+  }
+
+  if (setClauses.length === 0) {
+    return await getFolio(id);
+  }
+
+  setClauses.push('updated_at = NOW()');
+
+  const result = await pool.query(
+    `UPDATE folios SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`,
+    values
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteFolio(id) {
+  if (!pool) throw new Error('Database not available');
+
+  const result = await pool.query('DELETE FROM folios WHERE id = $1 RETURNING id', [id]);
+  return result.rowCount > 0;
+}
+
+async function addFolioToken(folioId, tokenMint, note) {
+  if (!pool) throw new Error('Database not available');
+
+  const result = await pool.query(
+    `INSERT INTO folio_tokens (folio_id, token_mint, note)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (folio_id, token_mint) DO UPDATE SET note = COALESCE($3, folio_tokens.note)
+     RETURNING *`,
+    [folioId, tokenMint, note || null]
+  );
+  return result.rows[0];
+}
+
+async function removeFolioToken(folioId, tokenMint) {
+  if (!pool) throw new Error('Database not available');
+
+  const result = await pool.query(
+    'DELETE FROM folio_tokens WHERE folio_id = $1 AND token_mint = $2 RETURNING id',
+    [folioId, tokenMint]
+  );
+  return result.rowCount > 0;
+}
+
 module.exports = {
   get pool() { return pool; },
   initializeDatabase,
@@ -3111,5 +3264,14 @@ module.exports = {
   getUnknownTokenCount,
   getUnknownTokenMints,
   updateTokenMetadata,
-  deleteTokens
+  deleteTokens,
+  // Folio operations
+  getAllFolios,
+  getFolio,
+  getFolioWithTokens,
+  createFolio,
+  updateFolio,
+  deleteFolio,
+  addFolioToken,
+  removeFolioToken
 };

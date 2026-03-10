@@ -902,6 +902,29 @@ const api = {
     }
   },
 
+  // Folios endpoints (curated KOL token lists)
+  folios: {
+    async list() {
+      const cacheKey = 'folios:list';
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request('/api/folios'),
+        apiCache.TTL.tokenList,
+        true
+      );
+    },
+
+    async get(id) {
+      const cacheKey = `folios:detail:${id}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/folios/${id}`),
+        apiCache.TTL.tokenList,
+        true
+      );
+    }
+  },
+
   // Device session endpoints (mobile device linking)
   deviceSession: {
     async verify(token) {

@@ -223,6 +223,48 @@ const adminApi = {
     return this.request(`/api/bug-reports/admin/${id}`, {
       method: 'DELETE'
     });
+  },
+
+  // Folios
+  async getFolios() {
+    return this.request('/api/folios/admin/all');
+  },
+
+  async createFolio(data) {
+    return this.request('/api/folios/admin', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateFolio(id, data) {
+    return this.request(`/api/folios/admin/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async deleteFolio(id) {
+    return this.request(`/api/folios/admin/${id}`, {
+      method: 'DELETE'
+    });
+  },
+
+  async getFolioDetail(id) {
+    return this.request(`/api/folios/${id}`);
+  },
+
+  async addFolioToken(folioId, tokenMint, note) {
+    return this.request(`/api/folios/admin/${folioId}/tokens`, {
+      method: 'POST',
+      body: JSON.stringify({ tokenMint, note })
+    });
+  },
+
+  async removeFolioToken(folioId, tokenMint) {
+    return this.request(`/api/folios/admin/${folioId}/tokens/${tokenMint}`, {
+      method: 'DELETE'
+    });
   }
 };
 
@@ -342,6 +384,36 @@ const adminPanel = {
     document.getElementById('repair-database-btn')?.addEventListener('click', () => this.repairDatabase());
     document.getElementById('check-unknown-tokens-btn')?.addEventListener('click', () => this.checkUnknownTokens());
     document.getElementById('fix-unknown-tokens-btn')?.addEventListener('click', () => this.fixUnknownTokens());
+
+    // Folios management
+    document.getElementById('create-folio-btn')?.addEventListener('click', () => this.showFolioForm());
+    document.getElementById('refresh-folios-btn')?.addEventListener('click', () => this.loadFolios());
+    document.getElementById('folio-form-cancel')?.addEventListener('click', () => this.hideFolioForm());
+    document.getElementById('folio-form-save')?.addEventListener('click', () => this.saveFolio());
+    document.getElementById('folio-tokens-back')?.addEventListener('click', () => this.hideFolioTokens());
+    document.getElementById('folio-add-token-btn')?.addEventListener('click', () => this.addTokenToFolio());
+    document.getElementById('folio-add-mint')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.addTokenToFolio();
+    });
+
+    document.getElementById('folios-table')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const id = parseInt(btn.dataset.id, 10);
+      if (!id) return;
+      if (btn.dataset.action === 'edit-folio') this.editFolio(id);
+      else if (btn.dataset.action === 'delete-folio') this.confirmDeleteFolio(id);
+      else if (btn.dataset.action === 'manage-tokens') this.showFolioTokens(id);
+    });
+
+    document.getElementById('folio-tokens-table')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      if (btn.dataset.action === 'remove-token') {
+        const mint = btn.dataset.mint;
+        if (mint) this.removeTokenFromFolio(mint);
+      }
+    });
 
     // Event delegation for dynamically rendered table action buttons
     document.getElementById('submissions-table')?.addEventListener('click', (e) => {
@@ -475,6 +547,9 @@ const adminPanel = {
         break;
       case 'bug-reports':
         this.loadBugReports();
+        break;
+      case 'folios':
+        this.loadFolios();
         break;
     }
   },
@@ -1695,6 +1770,224 @@ const adminPanel = {
     } catch (error) {
       toast.error(`Failed to load report: ${error.message}`);
     }
+  },
+
+  // ==========================================
+  // Folios Management
+  // ==========================================
+
+  _folios: [],
+  _editingFolioId: null,
+  _managingFolioId: null,
+
+  async loadFolios() {
+    const tbody = document.getElementById('folios-table');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><div class="loading-state"><div class="loading-spinner"></div><span>Loading folios...</span></div></td></tr>';
+
+    try {
+      const result = await adminApi.getFolios();
+      this._folios = result.data || [];
+      this.renderFoliosTable();
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="7" class="error-state">Failed to load folios: ${error.message}</td></tr>`;
+    }
+  },
+
+  renderFoliosTable() {
+    const tbody = document.getElementById('folios-table');
+    if (!tbody) return;
+
+    if (this._folios.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No folios created yet</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = this._folios.map(f => `
+      <tr>
+        <td>${f.id}</td>
+        <td>${this.escapeHtml(f.name)}</td>
+        <td>@${this.escapeHtml(f.twitter_handle)}</td>
+        <td>${parseInt(f.token_count, 10) || 0}</td>
+        <td><span class="status-badge ${f.is_active ? 'approved' : 'rejected'}">${f.is_active ? 'Yes' : 'No'}</span></td>
+        <td>${f.sort_order}</td>
+        <td class="actions-cell">
+          <button class="btn btn-ghost btn-xs" data-action="manage-tokens" data-id="${f.id}" title="Manage tokens">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-xs" data-action="edit-folio" data-id="${f.id}" title="Edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-xs text-danger" data-action="delete-folio" data-id="${f.id}" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  },
+
+  showFolioForm(folio) {
+    this._editingFolioId = folio ? folio.id : null;
+    document.getElementById('folio-form-title').textContent = folio ? 'Edit Folio' : 'Create New Folio';
+    document.getElementById('folio-name').value = folio ? folio.name : '';
+    document.getElementById('folio-twitter-input').value = folio ? folio.twitter_handle : '';
+    document.getElementById('folio-avatar-input').value = folio ? (folio.twitter_avatar || '') : '';
+    document.getElementById('folio-desc').value = folio ? (folio.description || '') : '';
+    document.getElementById('folio-order').value = folio ? folio.sort_order : 0;
+    document.getElementById('folio-active').value = folio ? String(folio.is_active) : 'true';
+
+    document.getElementById('folios-admin-list').style.display = 'none';
+    document.getElementById('folio-tokens-section').style.display = 'none';
+    document.getElementById('folio-form').style.display = '';
+  },
+
+  hideFolioForm() {
+    this._editingFolioId = null;
+    document.getElementById('folio-form').style.display = 'none';
+    document.getElementById('folios-admin-list').style.display = '';
+  },
+
+  async editFolio(id) {
+    const folio = this._folios.find(f => f.id === id);
+    if (folio) this.showFolioForm(folio);
+  },
+
+  async saveFolio() {
+    const name = document.getElementById('folio-name').value.trim();
+    const twitterHandle = document.getElementById('folio-twitter-input').value.trim().replace(/^@/, '');
+    const twitterAvatar = document.getElementById('folio-avatar-input').value.trim() || null;
+    const description = document.getElementById('folio-desc').value.trim() || null;
+    const sortOrder = parseInt(document.getElementById('folio-order').value, 10) || 0;
+    const isActive = document.getElementById('folio-active').value === 'true';
+
+    if (!name) return toast.error('Name is required');
+    if (!twitterHandle) return toast.error('Twitter handle is required');
+
+    const data = { name, twitterHandle, twitterAvatar, description, sortOrder, isActive };
+
+    try {
+      if (this._editingFolioId) {
+        await adminApi.updateFolio(this._editingFolioId, data);
+        toast.success('Folio updated');
+      } else {
+        await adminApi.createFolio(data);
+        toast.success('Folio created');
+      }
+      this.hideFolioForm();
+      this.loadFolios();
+    } catch (error) {
+      toast.error(`Failed to save folio: ${error.message}`);
+    }
+  },
+
+  async confirmDeleteFolio(id) {
+    const folio = this._folios.find(f => f.id === id);
+    if (!folio) return;
+
+    this.showConfirmModal(
+      'Delete Folio',
+      `Are you sure you want to delete "${this.escapeHtml(folio.name)}"? This will also remove all tokens in the folio.`,
+      async () => {
+        try {
+          await adminApi.deleteFolio(id);
+          toast.success('Folio deleted');
+          this.loadFolios();
+        } catch (error) {
+          toast.error(`Failed to delete folio: ${error.message}`);
+        }
+      }
+    );
+  },
+
+  async showFolioTokens(id) {
+    this._managingFolioId = id;
+    const folio = this._folios.find(f => f.id === id);
+    document.getElementById('folio-tokens-title').textContent = `Tokens in: ${folio ? folio.name : `Folio #${id}`}`;
+
+    document.getElementById('folios-admin-list').style.display = 'none';
+    document.getElementById('folio-form').style.display = 'none';
+    document.getElementById('folio-tokens-section').style.display = '';
+
+    await this.loadFolioTokens();
+  },
+
+  hideFolioTokens() {
+    this._managingFolioId = null;
+    document.getElementById('folio-tokens-section').style.display = 'none';
+    document.getElementById('folios-admin-list').style.display = '';
+  },
+
+  async loadFolioTokens() {
+    const tbody = document.getElementById('folio-tokens-table');
+    if (!tbody || !this._managingFolioId) return;
+
+    tbody.innerHTML = '<tr><td colspan="5"><div class="loading-state"><div class="loading-spinner"></div><span>Loading...</span></div></td></tr>';
+
+    try {
+      const result = await adminApi.getFolioDetail(this._managingFolioId);
+      const tokens = result.data?.tokens || [];
+
+      if (tokens.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No tokens added yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = tokens.map((t, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${this.escapeHtml(t.name || 'Unknown')} (${this.escapeHtml(t.symbol || '???')})</td>
+          <td class="mono-text" style="font-size: 0.75rem;">${t.token_mint.slice(0, 8)}...${t.token_mint.slice(-6)}</td>
+          <td>${t.note ? this.escapeHtml(t.note) : '--'}</td>
+          <td>
+            <button class="btn btn-ghost btn-xs text-danger" data-action="remove-token" data-mint="${t.token_mint}" title="Remove">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="5" class="error-state">Failed to load: ${error.message}</td></tr>`;
+    }
+  },
+
+  async addTokenToFolio() {
+    if (!this._managingFolioId) return;
+
+    const mintInput = document.getElementById('folio-add-mint');
+    const noteInput = document.getElementById('folio-add-note');
+    const mint = mintInput.value.trim();
+    const note = noteInput.value.trim() || null;
+
+    if (!mint) return toast.error('Enter a token mint address');
+
+    try {
+      await adminApi.addFolioToken(this._managingFolioId, mint, note);
+      toast.success('Token added');
+      mintInput.value = '';
+      noteInput.value = '';
+      this.loadFolioTokens();
+    } catch (error) {
+      toast.error(`Failed to add token: ${error.message}`);
+    }
+  },
+
+  async removeTokenFromFolio(mint) {
+    if (!this._managingFolioId) return;
+
+    try {
+      await adminApi.removeFolioToken(this._managingFolioId, mint);
+      toast.success('Token removed');
+      this.loadFolioTokens();
+    } catch (error) {
+      toast.error(`Failed to remove token: ${error.message}`);
+    }
+  },
+
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
   }
 };
 

@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>OG Finder - OpenDex</title>
-  <meta name="description" content="Find the oldest PumpFun tokens by name or ticker. Discover the OG mints on Solana.">
+  <title>Folios - OpenDex</title>
+  <meta name="description" content="Curated Solana token lists from top KOLs and crypto influencers. Explore what the best traders are watching.">
   <meta name="theme-color" content="#07080a">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OpenDex">
-  <meta property="og:title" content="OG Finder - OpenDex">
-  <meta property="og:description" content="Find the oldest PumpFun tokens by name or ticker. Discover the OG mints on Solana.">
+  <meta property="og:title" content="Folios - OpenDex">
+  <meta property="og:description" content="Curated Solana token lists from top KOLs and crypto influencers.">
   <meta property="og:image" content="https://opendex.online/OpenDexBanner2.png">
-  <meta property="og:url" content="https://opendex.online/ogfinder">
+  <meta property="og:url" content="https://opendex.online/folios">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="OG Finder - OpenDex">
-  <meta name="twitter:description" content="Find the oldest PumpFun tokens by name or ticker. Discover the OG mints on Solana.">
+  <meta name="twitter:title" content="Folios - OpenDex">
+  <meta name="twitter:description" content="Curated Solana token lists from top KOLs and crypto influencers.">
   <meta name="twitter:image" content="https://opendex.online/OpenDexBanner2.png">
 
   <!-- Favicon -->
@@ -55,10 +55,10 @@
           <div class="nav-dropdown-menu">
             <a href="community.html" class="nav-dropdown-item">Community</a>
             <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
-            <a href="ogfinder.html" class="nav-dropdown-item active">OG Finder</a>
+            <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
             <a href="spikes.html" class="nav-dropdown-item">Spike Detector</a>
             <a href="burn.html" class="nav-dropdown-item">Burn Credits</a>
-            <a href="folios.html" class="nav-dropdown-item">Folios</a>
+            <a href="folios.html" class="nav-dropdown-item active">Folios</a>
           </div>
         </div>
         <div class="nav-dropdown">
@@ -91,70 +91,89 @@
   </header>
   <div id="announcement-banner"></div>
 
-  <main class="main ogfinder-page">
-    <!-- Hero + Search -->
-    <section id="ogfinder-hero" class="ogfinder-hero">
-      <div class="ogfinder-hero-glow"></div>
-      <div class="ogfinder-hero-content">
-        <div class="ogfinder-hero-icon">
+  <main class="main folios-page">
+    <!-- Hero -->
+    <section class="spikes-hero">
+      <div class="spikes-hero-glow"></div>
+      <div class="spikes-hero-content">
+        <div class="spikes-hero-icon">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
           </svg>
         </div>
-        <h1 class="ogfinder-title">OG Finder</h1>
-        <p class="ogfinder-subtitle">Find the oldest PumpFun tokens by name or ticker</p>
+        <h1 class="spikes-title">Folios</h1>
+        <p class="spikes-subtitle">Curated token lists from top KOLs and crypto influencers</p>
+      </div>
+    </section>
 
-        <div class="ogfinder-search">
-          <div class="ogfinder-search-wrapper">
-            <svg class="ogfinder-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-            </svg>
-            <input type="text" id="ogfinder-input" class="ogfinder-search-input" placeholder="Search by token name or ticker..." autocomplete="off" maxlength="50">
-            <button id="ogfinder-clear" class="ogfinder-search-clear" style="display: none;" aria-label="Clear search">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
+    <!-- Folio List (cards) -->
+    <section id="folios-list" style="display: none;">
+      <div id="folios-grid" class="folios-grid"></div>
+    </section>
+
+    <!-- Folio Detail (single folio token table) -->
+    <section id="folio-detail" style="display: none;">
+      <div class="folio-detail-header">
+        <button id="folio-back-btn" class="btn btn-ghost btn-sm">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+          Back to Folios
+        </button>
+        <div class="folio-kol-info">
+          <img id="folio-avatar" class="folio-avatar" src="" alt="" width="52" height="52">
+          <div>
+            <h2 id="folio-name" class="folio-detail-title"></h2>
+            <a id="folio-twitter" class="folio-twitter-link" href="#" target="_blank" rel="noopener">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+              <span id="folio-handle"></span>
+            </a>
           </div>
-          <button id="ogfinder-btn" class="btn btn-accent">Search</button>
         </div>
+        <p id="folio-description" class="folio-detail-desc"></p>
+      </div>
 
-        <div class="ogfinder-hints">
-          <span class="ogfinder-hint">Try searching:</span>
-          <button class="ogfinder-hint-tag" data-query="pepe">pepe</button>
-          <button class="ogfinder-hint-tag" data-query="doge">doge</button>
-          <button class="ogfinder-hint-tag" data-query="trump">trump</button>
-          <button class="ogfinder-hint-tag" data-query="cat">cat</button>
+      <div class="community-section">
+        <div class="community-table-container">
+          <table class="token-table community-table">
+            <thead>
+              <tr>
+                <th class="cell-rank">#</th>
+                <th class="cell-token">Token</th>
+                <th class="cell-price">Price</th>
+                <th class="cell-mcap">MCap</th>
+                <th class="cell-volume">Volume 24h</th>
+                <th class="cell-note">Note</th>
+              </tr>
+            </thead>
+            <tbody id="folio-tokens-body"></tbody>
+          </table>
         </div>
       </div>
     </section>
 
-    <!-- Results -->
-    <section id="ogfinder-results" class="community-section" style="display: none;">
-      <div class="ogfinder-table-header">
-        <div class="ogfinder-table-title-row">
-          <svg class="ogfinder-title-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <h2 class="ogfinder-table-title">Results</h2>
-          <span id="ogfinder-count" class="ogfinder-count"></span>
-        </div>
-        <span id="ogfinder-query-label" class="ogfinder-query-label"></span>
-      </div>
+    <!-- Loading state -->
+    <div id="folios-loading" class="spikes-loading">
+      <div class="spikes-spinner"></div>
+      <p>Loading folios...</p>
+    </div>
 
-      <div class="community-table-container">
-        <table class="token-table community-table ogfinder-table">
-          <thead>
-            <tr>
-              <th class="cell-rank">#</th>
-              <th class="cell-token">Token</th>
-              <th class="cell-mint">Mint Address</th>
-              <th class="cell-date">Mint Date</th>
-              <th class="cell-mcap">Market Cap</th>
-            </tr>
-          </thead>
-          <tbody id="ogfinder-table-body"></tbody>
-        </table>
-      </div>
-    </section>
+    <!-- Empty state -->
+    <div id="folios-empty" class="spikes-empty" style="display: none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
+        <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+      </svg>
+      <p>No folios available yet</p>
+      <p class="spikes-empty-hint">Check back soon for curated KOL token lists</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="folios-error" class="spikes-error" style="display: none;">
+      <p id="folios-error-msg">Failed to load folios</p>
+      <button class="btn btn-ghost btn-sm" onclick="foliosPage.loadList()">Try Again</button>
+    </div>
   </main>
 
   <footer class="footer">
@@ -184,8 +203,7 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="js/wallet.js"></script>
   <script src="js/announcements.js"></script>
-  <script src="js/pumpfun.js"></script>
-  <script src="js/ogfinder.js"></script>
+  <script src="js/folios.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
     (function() {
@@ -194,7 +212,6 @@
       if (!installBtn) return;
       if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
 
-      // Detect iOS/iPadOS (no beforeinstallprompt support)
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       if (isIOS) {
         installBtn.style.display = '';
@@ -212,15 +229,12 @@
         e.preventDefault();
         deferredPrompt = e;
         installBtn.style.display = '';
+        installBtn.addEventListener('click', function() {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
+        });
       });
-      installBtn.addEventListener('click', function() {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
-      });
-      window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
     })();
-    /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
   </script>
 </body>
 </html>

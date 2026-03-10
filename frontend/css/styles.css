@@ -14814,3 +14814,277 @@ body.landscape .hero h1 {
     font-size: 0.5625rem;
   }
 }
+
+/* ==========================================
+   Folios Page
+   ========================================== */
+
+.folios-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+  padding: 0 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.folio-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.375rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+}
+
+.folio-card:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.1);
+}
+
+.folio-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.folio-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid var(--border-subtle);
+}
+
+.folio-card-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-primary), #a855f7);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.125rem;
+  border: none;
+}
+
+.folio-card-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.folio-card-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folio-card-handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.folio-card:hover .folio-card-handle {
+  color: var(--text-secondary);
+}
+
+.folio-card-desc {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin: 0.75rem 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.folio-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Push footer down when no description */
+.folio-card-header + .folio-card-footer {
+  margin-top: 1rem;
+}
+
+.folio-card-count {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.folio-card-arrow {
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+  display: flex;
+}
+
+.folio-card:hover .folio-card-arrow {
+  color: var(--accent-primary);
+  transform: translateX(3px);
+}
+
+/* Folio Detail */
+
+.folio-detail-header {
+  padding: 0 1.5rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.folio-kol-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.25rem 0 0;
+  padding: 1rem 1.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.folio-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-subtle);
+}
+
+.folio-detail-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 0.15rem;
+}
+
+.folio-twitter-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.folio-twitter-link:hover {
+  color: var(--accent-primary);
+}
+
+.folio-detail-desc {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0.75rem 0 0;
+}
+
+/* Constrain detail table to same width as grid */
+.folios-page .community-section {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 1.5rem;
+}
+
+.folios-page .community-table-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+/* Note column styling */
+.cell-note {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Admin form card (used by folios admin) */
+.admin-form-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+
+.admin-form-card h3 {
+  margin: 0 0 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 768px) {
+  .folios-grid {
+    grid-template-columns: 1fr;
+    padding: 0 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .folio-detail-header {
+    padding: 0 0.75rem 1rem;
+  }
+
+  .folios-page .community-section {
+    padding: 0 0.75rem;
+  }
+
+  .folio-kol-info {
+    padding: 0.875rem 1rem;
+  }
+
+  .folio-avatar {
+    width: 44px;
+    height: 44px;
+  }
+
+  .folio-detail-title {
+    font-size: 1.1rem;
+  }
+
+  .cell-note {
+    max-width: 120px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

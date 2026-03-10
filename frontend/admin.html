@@ -148,6 +148,13 @@
           Bug Reports
           <span id="bugreports-badge" class="nav-badge" style="display: none;">0</span>
         </button>
+        <button class="admin-nav-item" data-tab="folios">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+          </svg>
+          Folios
+        </button>
       </nav>
 
       <main class="admin-main">
@@ -763,6 +770,132 @@
             </div>
           </div>
         </div>
+
+        <!-- Folios Tab -->
+        <div id="tab-folios" class="admin-tab">
+          <div class="tab-header">
+            <h2>Folios</h2>
+            <div class="tab-actions">
+              <button id="create-folio-btn" class="btn btn-accent btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New Folio
+              </button>
+              <button id="refresh-folios-btn" class="btn btn-ghost btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                  <path d="M21 3v5h-5"/>
+                </svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <!-- Folio List -->
+          <div id="folios-admin-list">
+            <div class="table-container">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Twitter</th>
+                    <th>Tokens</th>
+                    <th>Active</th>
+                    <th>Order</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="folios-table">
+                  <tr class="loading-row">
+                    <td colspan="7">
+                      <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <span>Loading folios...</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Create / Edit Folio Form -->
+          <div id="folio-form" style="display: none;">
+            <div class="admin-form-card">
+              <h3 id="folio-form-title">Create New Folio</h3>
+              <div class="form-group">
+                <label for="folio-name">Name</label>
+                <input type="text" id="folio-name" class="form-input" placeholder="e.g. Top Picks" maxlength="100">
+              </div>
+              <div class="form-group">
+                <label for="folio-twitter">Twitter Handle</label>
+                <input type="text" id="folio-twitter-input" class="form-input" placeholder="e.g. @CryptoKOL" maxlength="50">
+              </div>
+              <div class="form-group">
+                <label for="folio-avatar">Twitter Avatar URL (optional)</label>
+                <input type="text" id="folio-avatar-input" class="form-input" placeholder="https://pbs.twimg.com/...">
+              </div>
+              <div class="form-group">
+                <label for="folio-desc">Description (optional)</label>
+                <textarea id="folio-desc" class="form-input" rows="2" placeholder="Brief description of this folio"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="folio-order">Sort Order</label>
+                  <input type="number" id="folio-order" class="form-input" value="0" min="0">
+                </div>
+                <div class="form-group">
+                  <label for="folio-active">Active</label>
+                  <select id="folio-active" class="form-input">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button id="folio-form-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+                <button id="folio-form-save" class="btn btn-accent btn-sm">Save Folio</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manage Folio Tokens -->
+          <div id="folio-tokens-section" style="display: none;">
+            <div class="admin-form-card">
+              <div class="tab-header" style="margin-bottom: 1rem;">
+                <h3 id="folio-tokens-title">Tokens in: ...</h3>
+                <button id="folio-tokens-back" class="btn btn-ghost btn-sm">Back to List</button>
+              </div>
+
+              <!-- Add token form -->
+              <div class="form-row" style="margin-bottom: 1rem;">
+                <div class="form-group" style="flex: 2;">
+                  <input type="text" id="folio-add-mint" class="form-input" placeholder="Token mint address">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                  <input type="text" id="folio-add-note" class="form-input" placeholder="Note (optional)">
+                </div>
+                <button id="folio-add-token-btn" class="btn btn-accent btn-sm">Add Token</button>
+              </div>
+
+              <div class="table-container">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Token</th>
+                      <th>Mint Address</th>
+                      <th>Note</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="folio-tokens-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </main>
     </div>
   </div>
