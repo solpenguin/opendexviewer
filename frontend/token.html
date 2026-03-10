@@ -343,6 +343,14 @@
                 <span class="ai-analysis-btn-label">AI Analysis</span>
                 <span class="ai-analysis-btn-cost">25 BC</span>
               </button>
+              <button class="ai-analysis-btn ai-advanced-btn" id="ai-advanced-btn" disabled title="Waiting for holder data...">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                  <line x1="2" y1="2" x2="22" y2="22" stroke="none"/>
+                </svg>
+                <span class="ai-analysis-btn-label">Advanced AI</span>
+                <span class="ai-analysis-btn-cost ai-advanced-cost">75 BC</span>
+              </button>
               <button class="holders-share-btn" id="holders-share" title="Share holder analytics">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
@@ -468,6 +476,52 @@
                   </div>
                 </div>
                 <div class="ai-analysis-error" id="ai-analysis-error" style="display:none;"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Advanced AI Analysis Modal -->
+          <div class="ai-analysis-overlay" id="ai-advanced-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Advanced AI Analysis">
+            <div class="ai-analysis-modal ai-advanced-modal">
+              <div class="ai-analysis-header">
+                <div class="ai-analysis-header-left">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(251,191,36)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                  </svg>
+                  <span class="ai-analysis-title">Advanced AI Analysis</span>
+                </div>
+                <button class="ai-analysis-close" id="ai-advanced-close" aria-label="Close">&times;</button>
+              </div>
+              <div class="ai-analysis-body" id="ai-advanced-body">
+                <!-- Prompt input phase -->
+                <div class="ai-advanced-prompt-phase" id="ai-advanced-prompt-phase">
+                  <p class="ai-advanced-desc">Ask a custom question about this token's on-chain data. Your prompt is sent alongside holder metrics, market data, and concentration stats for AI analysis.</p>
+                  <div class="ai-advanced-input-wrap">
+                    <textarea class="ai-advanced-input" id="ai-advanced-input" maxlength="100" rows="2" placeholder="e.g. Is the holder concentration healthy for a token this age?"></textarea>
+                    <span class="ai-advanced-charcount"><span id="ai-advanced-charcount">0</span>/100</span>
+                  </div>
+                  <div class="ai-advanced-submit-row">
+                    <span class="ai-advanced-cost-label">Cost: <strong id="ai-advanced-cost-display">75 BC</strong></span>
+                    <button class="ai-advanced-submit-btn" id="ai-advanced-submit" disabled>Submit Analysis</button>
+                  </div>
+                </div>
+                <!-- Loading phase -->
+                <div class="ai-analysis-loading" id="ai-advanced-loading" style="display:none;">
+                  <div class="loading-spinner"></div>
+                  <span>Analyzing with your prompt...</span>
+                </div>
+                <!-- Result phase -->
+                <div class="ai-advanced-result" id="ai-advanced-result" style="display:none;">
+                  <div class="ai-advanced-prompt-echo" id="ai-advanced-prompt-echo"></div>
+                  <div class="ai-analysis-text" id="ai-advanced-text"></div>
+                  <div class="ai-advanced-actions">
+                    <button class="ai-advanced-new-btn" id="ai-advanced-new">Ask Another Question</button>
+                  </div>
+                  <div class="ai-analysis-footer">
+                    <span class="ai-analysis-disclaimer">Powered by Claude Haiku. Not financial advice.</span>
+                  </div>
+                </div>
+                <!-- Error phase -->
+                <div class="ai-analysis-error" id="ai-advanced-error" style="display:none;"></div>
               </div>
             </div>
           </div>

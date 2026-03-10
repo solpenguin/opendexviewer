@@ -2703,6 +2703,30 @@ async function setAIAnalysisCost(cost) {
   return cost;
 }
 
+// Get the Advanced AI analysis cost in BC
+async function getAdvancedAIAnalysisCost() {
+  if (!pool) return 75;
+  try {
+    const result = await pool.query(
+      "SELECT value FROM burn_config WHERE key = 'ai_advanced_analysis_cost'"
+    );
+    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 75;
+  } catch {
+    return 75;
+  }
+}
+
+// Set the Advanced AI analysis cost in BC (admin only)
+async function setAdvancedAIAnalysisCost(cost) {
+  if (!pool) throw new Error('Database not available');
+  await pool.query(
+    `INSERT INTO burn_config (key, value, updated_at) VALUES ('ai_advanced_analysis_cost', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+    [String(cost)]
+  );
+  return cost;
+}
+
 // Check if a transaction signature has already been submitted
 async function isBurnTxUsed(txSignature) {
   if (!pool) return false;
@@ -2963,6 +2987,8 @@ module.exports = {
   setBurnConversionRate,
   getAIAnalysisCost,
   setAIAnalysisCost,
+  getAdvancedAIAnalysisCost,
+  setAdvancedAIAnalysisCost,
   isBurnTxUsed,
   recordBurnCredit,
   getBurnCreditBalance,

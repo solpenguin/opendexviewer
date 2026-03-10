@@ -387,6 +387,12 @@ const tokenDetail = {
       bindHandler(aiAnalysisBtn, 'click', () => this._openAIAnalysis());
     }
 
+    // Advanced AI Analysis button
+    const aiAdvancedBtn = document.getElementById('ai-advanced-btn');
+    if (aiAdvancedBtn) {
+      bindHandler(aiAdvancedBtn, 'click', () => this._openAdvancedAIAnalysis());
+    }
+
     // Holders expand/collapse button
     const holdersExpandBtn = document.getElementById('holders-expand');
     const holdersExpandHandler = () => {
@@ -1561,6 +1567,9 @@ const tokenDetail = {
   // AI analysis cost in BC (loaded from backend, default 25)
   _aiAnalysisCost: 25,
 
+  // Advanced AI analysis cost in BC (loaded from backend, default 75)
+  _advancedAIAnalysisCost: 75,
+
   // Enable AI Analysis button once both hold times and diamond hands are loaded
   _checkAIAnalysisReady() {
     if (!this._holdTimesLoaded || !this._diamondHandsLoaded) return;
@@ -1568,6 +1577,13 @@ const tokenDetail = {
     if (!btn) return;
     btn.disabled = false;
     btn.title = `AI-powered holder analysis — costs ${this._aiAnalysisCost} Burn Credits`;
+
+    // Enable advanced AI button too
+    const advBtn = document.getElementById('ai-advanced-btn');
+    if (advBtn) {
+      advBtn.disabled = false;
+      advBtn.title = `Advanced AI analysis with custom prompt — costs ${this._advancedAIAnalysisCost} Burn Credits`;
+    }
 
     // Load actual cost from backend (update button when ready)
     this._loadAIAnalysisCost();
@@ -1582,6 +1598,15 @@ const tokenDetail = {
         if (btn) btn.title = `AI-powered holder analysis — costs ${this._aiAnalysisCost} Burn Credits`;
         const costBadge = btn && btn.querySelector('.ai-analysis-btn-cost');
         if (costBadge) costBadge.textContent = `${this._aiAnalysisCost} BC`;
+      }
+      if (config && typeof config.aiAdvancedAnalysisCost === 'number') {
+        this._advancedAIAnalysisCost = config.aiAdvancedAnalysisCost;
+        const advBtn = document.getElementById('ai-advanced-btn');
+        if (advBtn) advBtn.title = `Advanced AI analysis with custom prompt — costs ${this._advancedAIAnalysisCost} Burn Credits`;
+        const advCostBadge = advBtn && advBtn.querySelector('.ai-advanced-cost');
+        if (advCostBadge) advCostBadge.textContent = `${this._advancedAIAnalysisCost} BC`;
+        const costDisplay = document.getElementById('ai-advanced-cost-display');
+        if (costDisplay) costDisplay.textContent = `${this._advancedAIAnalysisCost} BC`;
       }
     } catch (e) {
       // Use default — not critical
@@ -1773,6 +1798,143 @@ const tokenDetail = {
       if (ratingEl) { ratingEl.textContent = rating; ratingEl.style.color = color; }
     }
 
+    textEl.textContent = data.analysis || '';
+  },
+
+  // --- Advanced AI Analysis ---
+
+  // Open the advanced AI analysis modal
+  async _openAdvancedAIAnalysis() {
+    const overlay = document.getElementById('ai-advanced-overlay');
+    if (!overlay) return;
+
+    // Check wallet connection
+    if (typeof wallet === 'undefined' || !wallet.connected || !wallet.address) {
+      if (typeof toast !== 'undefined') {
+        toast.info(`Connect your wallet to use Advanced AI Analysis (costs ${this._advancedAIAnalysisCost} BC)`);
+      }
+      const connectBtn = document.getElementById('connect-wallet');
+      if (connectBtn) connectBtn.click();
+      return;
+    }
+
+    // Close handler
+    const close = () => {
+      overlay.style.display = 'none';
+      document.removeEventListener('keydown', escHandler);
+    };
+    const escHandler = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', escHandler);
+    document.getElementById('ai-advanced-close').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+    // Reset to prompt phase
+    const promptPhase = document.getElementById('ai-advanced-prompt-phase');
+    const loading = document.getElementById('ai-advanced-loading');
+    const result = document.getElementById('ai-advanced-result');
+    const errorEl = document.getElementById('ai-advanced-error');
+    const input = document.getElementById('ai-advanced-input');
+    const charCount = document.getElementById('ai-advanced-charcount');
+    const submitBtn = document.getElementById('ai-advanced-submit');
+    const newBtn = document.getElementById('ai-advanced-new');
+
+    promptPhase.style.display = 'block';
+    loading.style.display = 'none';
+    result.style.display = 'none';
+    errorEl.style.display = 'none';
+    input.value = '';
+    charCount.textContent = '0';
+    submitBtn.disabled = true;
+    overlay.style.display = 'flex';
+
+    // Character count + enable/disable submit
+    input.oninput = () => {
+      const len = input.value.trim().length;
+      charCount.textContent = input.value.length;
+      submitBtn.disabled = len < 1;
+    };
+
+    // Submit handler
+    submitBtn.onclick = () => this._submitAdvancedAIAnalysis();
+
+    // "Ask Another" resets to prompt phase
+    if (newBtn) {
+      newBtn.onclick = () => {
+        promptPhase.style.display = 'block';
+        result.style.display = 'none';
+        errorEl.style.display = 'none';
+        input.value = '';
+        charCount.textContent = '0';
+        submitBtn.disabled = true;
+        input.focus();
+      };
+    }
+
+    input.focus();
+  },
+
+  // Submit the advanced analysis request
+  async _submitAdvancedAIAnalysis() {
+    const promptPhase = document.getElementById('ai-advanced-prompt-phase');
+    const loading = document.getElementById('ai-advanced-loading');
+    const errorEl = document.getElementById('ai-advanced-error');
+    const input = document.getElementById('ai-advanced-input');
+    const userPrompt = input.value.trim();
+
+    if (!userPrompt || userPrompt.length > 100) return;
+
+    promptPhase.style.display = 'none';
+    loading.style.display = 'flex';
+    errorEl.style.display = 'none';
+
+    try {
+      const metrics = this._gatherAIMetrics();
+      metrics.walletAddress = (typeof wallet !== 'undefined' && wallet.address) ? wallet.address : null;
+      metrics.userPrompt = userPrompt;
+
+      const data = await api.request(`/api/tokens/${this.mint}/ai-advanced-analysis`, {
+        method: 'POST',
+        body: JSON.stringify(metrics),
+        retries: 1
+      });
+
+      if (data.error) throw new Error(data.error);
+      this._renderAdvancedAIResult(data);
+
+      // Refresh header BC badge after spending
+      const badge = document.getElementById('header-bc-badge');
+      if (badge && typeof wallet !== 'undefined' && wallet._loadHeaderBurnCredits) {
+        wallet._loadHeaderBurnCredits(badge);
+      }
+    } catch (err) {
+      loading.style.display = 'none';
+      errorEl.style.display = 'flex';
+
+      if (err.code === 'INSUFFICIENT_BC') {
+        const cost = err.required || this._advancedAIAnalysisCost;
+        const bcLink = '<a href="burn.html" style="color: rgb(251, 191, 36); text-decoration: underline;">Get Burn Credits</a>';
+        errorEl.innerHTML = '<span>Insufficient Burn Credits. Advanced Analysis costs ' + cost + ' BC.</span>' +
+          '<span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Burn $OD tokens to earn BC. ' + bcLink + '</span>';
+      } else if (err.code === 'WALLET_REQUIRED') {
+        errorEl.innerHTML = '<span>Please connect your wallet to use Advanced AI Analysis.</span>';
+      } else {
+        const msg = this.escapeHtml(err.message || 'Analysis unavailable. Try again later.');
+        errorEl.innerHTML = '<span>' + msg + '</span>' +
+          '<button class="ai-retry-btn" onclick="document.getElementById(\'ai-advanced-prompt-phase\').style.display=\'block\';this.parentElement.style.display=\'none\';">Try Again</button>';
+      }
+    }
+  },
+
+  // Render advanced AI analysis result
+  _renderAdvancedAIResult(data) {
+    const loading = document.getElementById('ai-advanced-loading');
+    const result = document.getElementById('ai-advanced-result');
+    const promptEcho = document.getElementById('ai-advanced-prompt-echo');
+    const textEl = document.getElementById('ai-advanced-text');
+    loading.style.display = 'none';
+    result.style.display = 'flex';
+
+    promptEcho.textContent = data.userPrompt || '';
     textEl.textContent = data.analysis || '';
   },
 
