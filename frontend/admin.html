@@ -514,6 +514,17 @@
               </div>
             </div>
 
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-label">Advanced AI Analysis Cost</span>
+                <span class="setting-hint">Burn Credits charged per advanced AI analysis (custom prompt)</span>
+              </div>
+              <div class="setting-input-group">
+                <input type="number" id="ai-advanced-analysis-cost" class="setting-input" min="0" step="1" placeholder="75">
+                <span class="setting-input-suffix">BC</span>
+              </div>
+            </div>
+
             <div class="setting-actions">
               <button id="save-burn-config-btn" class="btn btn-primary">Save Burn Config</button>
             </div>
@@ -603,6 +614,26 @@
                   <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
                 </svg>
                 Repair Database
+              </button>
+            </div>
+
+            <h3 style="margin-top: 1.5rem;">Fix Unknown Tokens</h3>
+            <p class="settings-description">Remove tokens stored with placeholder names ("Unknown Token") that have no submissions, watchlist entries, or views. Tokens with associated data are kept and will self-heal when visited.</p>
+            <div id="unknown-token-status" class="grant-bc-result" style="display: none;"></div>
+            <div class="setting-actions">
+              <button id="check-unknown-tokens-btn" class="btn btn-ghost">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                Check Count
+              </button>
+              <button id="fix-unknown-tokens-btn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+                Fix Unknown Tokens
               </button>
             </div>
           </div>

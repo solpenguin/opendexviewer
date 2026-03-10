@@ -574,6 +574,57 @@
           </div>
         </div>
 
+        <h3>Spike Detector</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/spikes</code>
+          </div>
+          <p class="api-endpoint-desc">Get trending tokens filtered by minimum age (surfaces established tokens with unusual volume)</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>minAge   number   Minimum token age in days (1-30, default 1)
+limit    number   Max results (1-50, default 30)</code></pre>
+          </div>
+        </div>
+
+        <h3>Burn Credits</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/burn-credits/config</code>
+          </div>
+          <p class="api-endpoint-desc">Get current burn config (conversion rate, AI analysis costs)</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/burn-credits/balance/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Get a wallet's Burn Credit balance</p>
+        </div>
+
+        <h3>AI Analysis</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/tokens/:mint/holders/ai-analysis</code>
+          </div>
+          <p class="api-endpoint-desc">AI holder analysis (costs Burn Credits, cached 3h). Requires connected wallet and holder metrics.</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/tokens/:mint/ai-advanced-analysis</code>
+          </div>
+          <p class="api-endpoint-desc">Advanced AI analysis with custom prompt (costs 75 BC, cached 3h). Requires wallet, holder metrics, and <code>userPrompt</code> (1-100 chars).</p>
+        </div>
+
         <h3>Rate Limits</h3>
         <p>API requests are rate limited to prevent abuse:</p>
         <ul class="api-rate-limits">

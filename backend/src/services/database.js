@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const crypto = require('crypto');
 
 // Database state
 let pool = null;
@@ -462,20 +463,48 @@ async function initializeDatabase() {
 }
 
 // Token operations
+// Placeholder names that should never overwrite real token metadata
+const PLACEHOLDER_NAMES = new Set(['unknown token', 'unknown']);
+
 async function upsertToken(token) {
   if (!pool) {
     console.warn('Database not available - skipping token upsert');
     return null;
   }
   const { mintAddress, name, symbol, decimals, logoUri, pairCreatedAt, price, marketCap, volume24h } = token;
+
+  // Never persist placeholder names — they poison search results
+  const isPlaceholder = !name || PLACEHOLDER_NAMES.has(name.toLowerCase());
+  const isPlaceholderSymbol = !symbol || symbol === 'UNKNOWN' || symbol === '???';
+
+  // If both name and symbol are placeholders, only update price/market data
+  if (isPlaceholder && isPlaceholderSymbol) {
+    // Still update price/market data if we have any
+    if (price || marketCap || volume24h) {
+      const result = await pool.query(
+        `UPDATE tokens SET
+           price = COALESCE($2, tokens.price),
+           market_cap = COALESCE($3, tokens.market_cap),
+           volume_24h = COALESCE($4, tokens.volume_24h),
+           updated_at = NOW()
+         WHERE mint_address = $1
+         RETURNING *`,
+        [mintAddress, price || null, marketCap || null, volume24h || null]
+      );
+      return result.rows[0] || null;
+    }
+    return null;
+  }
+
+  // Use COALESCE for name/symbol so placeholders never overwrite real data
   const result = await pool.query(
     `INSERT INTO tokens (mint_address, name, symbol, decimals, logo_uri, pair_created_at, price, market_cap, volume_24h)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (mint_address) DO UPDATE SET
-       name = EXCLUDED.name,
-       symbol = EXCLUDED.symbol,
+       name = CASE WHEN LOWER(EXCLUDED.name) IN ('unknown token', 'unknown') THEN tokens.name ELSE COALESCE(EXCLUDED.name, tokens.name) END,
+       symbol = CASE WHEN EXCLUDED.symbol IN ('UNKNOWN', '???') THEN tokens.symbol ELSE COALESCE(EXCLUDED.symbol, tokens.symbol) END,
        decimals = EXCLUDED.decimals,
-       logo_uri = EXCLUDED.logo_uri,
+       logo_uri = COALESCE(EXCLUDED.logo_uri, tokens.logo_uri),
        pair_created_at = COALESCE(EXCLUDED.pair_created_at, tokens.pair_created_at),
        price = COALESCE(EXCLUDED.price, tokens.price),
        market_cap = COALESCE(EXCLUDED.market_cap, tokens.market_cap),
@@ -2755,7 +2784,6 @@ async function adminGrantBurnCredits(walletAddress, amount, reason = '') {
   if (!pool) throw new Error('Database not available');
   if (!amount || amount <= 0 || !Number.isInteger(amount)) throw new Error('Amount must be a positive integer');
 
-  const crypto = require('crypto');
   const syntheticTx = `admin-grant-${crypto.randomBytes(16).toString('hex')}`;
 
   const result = await pool.query(
@@ -2891,6 +2919,78 @@ async function getBurnCreditSpendHistory(walletAddress, limit = 20) {
   return result.rows;
 }
 
+// ==========================================
+// Token Data Repair
+// ==========================================
+
+/**
+ * Count tokens with placeholder names ('Unknown Token', 'Unknown', etc.)
+ */
+async function getUnknownTokenCount() {
+  if (!pool) return 0;
+  const result = await pool.query(
+    `SELECT COUNT(*) as count FROM tokens
+     WHERE LOWER(name) IN ('unknown token', 'unknown')
+        OR symbol IN ('UNKNOWN', '???')
+        OR name IS NULL`
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
+/**
+ * Delete tokens with placeholder names that have no associated data.
+ * Tokens with submissions, votes, watchlist entries, or view counts are kept
+ * (only the name is bad, and it will self-heal when someone visits the detail page).
+ * Returns { deleted, kept, total }
+ */
+async function fixUnknownTokens() {
+  if (!pool) throw new Error('Database not available');
+
+  // Find all unknown tokens
+  const unknowns = await pool.query(
+    `SELECT mint_address FROM tokens
+     WHERE LOWER(name) IN ('unknown token', 'unknown')
+        OR symbol IN ('UNKNOWN', '???')
+        OR name IS NULL`
+  );
+
+  if (unknowns.rows.length === 0) {
+    return { deleted: 0, kept: 0, total: 0 };
+  }
+
+  const mints = unknowns.rows.map(r => r.mint_address);
+
+  // Find which ones have associated data we should keep
+  const hasData = await pool.query(
+    `SELECT DISTINCT mint_address FROM (
+       SELECT token_mint AS mint_address FROM submissions WHERE token_mint = ANY($1)
+       UNION
+       SELECT token_mint AS mint_address FROM watchlist WHERE token_mint = ANY($1)
+       UNION
+       SELECT mint_address FROM token_views WHERE mint_address = ANY($1) AND view_count > 0
+     ) AS used`,
+    [mints]
+  );
+
+  const keepSet = new Set(hasData.rows.map(r => r.mint_address));
+  const toDelete = mints.filter(m => !keepSet.has(m));
+
+  let deleted = 0;
+  if (toDelete.length > 0) {
+    const result = await pool.query(
+      'DELETE FROM tokens WHERE mint_address = ANY($1)',
+      [toDelete]
+    );
+    deleted = result.rowCount;
+  }
+
+  return {
+    deleted,
+    kept: keepSet.size,
+    total: mints.length
+  };
+}
+
 module.exports = {
   get pool() { return pool; },
   initializeDatabase,
@@ -3016,5 +3116,8 @@ module.exports = {
   getPlatformBurnStats,
   getBurnCreditHistory,
   getBurnCreditSpendHistory,
-  spendBurnCredits
+  spendBurnCredits,
+  // Token data repair
+  getUnknownTokenCount,
+  fixUnknownTokens
 };

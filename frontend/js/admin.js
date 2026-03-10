@@ -167,6 +167,16 @@ const adminApi = {
     });
   },
 
+  async getUnknownTokenCount() {
+    return this.request('/admin/database/unknown-tokens');
+  },
+
+  async fixUnknownTokens() {
+    return this.request('/admin/database/fix-unknown-tokens', {
+      method: 'POST'
+    });
+  },
+
   // Announcements
   async getAnnouncements() {
     return this.request('/admin/announcements');
@@ -330,6 +340,8 @@ const adminPanel = {
     // Database management buttons
     document.getElementById('check-database-btn')?.addEventListener('click', () => this.checkDatabaseStatus());
     document.getElementById('repair-database-btn')?.addEventListener('click', () => this.repairDatabase());
+    document.getElementById('check-unknown-tokens-btn')?.addEventListener('click', () => this.checkUnknownTokens());
+    document.getElementById('fix-unknown-tokens-btn')?.addEventListener('click', () => this.fixUnknownTokens());
 
     // Event delegation for dynamically rendered table action buttons
     document.getElementById('submissions-table')?.addEventListener('click', (e) => {
@@ -1016,8 +1028,10 @@ const adminPanel = {
       if (burnConfig) {
         const rateInput = document.getElementById('burn-conversion-rate');
         const costInput = document.getElementById('ai-analysis-cost');
+        const advCostInput = document.getElementById('ai-advanced-analysis-cost');
         if (rateInput) rateInput.value = burnConfig.conversionRate;
         if (costInput) costInput.value = burnConfig.aiAnalysisCost;
+        if (advCostInput) advCostInput.value = burnConfig.aiAdvancedAnalysisCost;
       }
 
       // Also load database status when settings tab is opened
@@ -1054,8 +1068,10 @@ const adminPanel = {
   async saveBurnConfig() {
     const rateInput = document.getElementById('burn-conversion-rate');
     const costInput = document.getElementById('ai-analysis-cost');
+    const advancedCostInput = document.getElementById('ai-advanced-analysis-cost');
     const conversionRate = rateInput ? parseFloat(rateInput.value) : null;
     const aiAnalysisCost = costInput ? parseFloat(costInput.value) : null;
+    const aiAdvancedAnalysisCost = advancedCostInput ? parseFloat(advancedCostInput.value) : null;
 
     if (conversionRate !== null && (isNaN(conversionRate) || conversionRate < 1)) {
       toast.error('Conversion rate must be at least 1');
@@ -1065,17 +1081,23 @@ const adminPanel = {
       toast.error('AI analysis cost cannot be negative');
       return;
     }
+    if (aiAdvancedAnalysisCost !== null && (isNaN(aiAdvancedAnalysisCost) || aiAdvancedAnalysisCost < 0)) {
+      toast.error('Advanced AI analysis cost cannot be negative');
+      return;
+    }
 
     try {
       const burnConfig = {};
       if (conversionRate !== null) burnConfig.conversionRate = conversionRate;
       if (aiAnalysisCost !== null) burnConfig.aiAnalysisCost = aiAnalysisCost;
+      if (aiAdvancedAnalysisCost !== null) burnConfig.aiAdvancedAnalysisCost = aiAdvancedAnalysisCost;
 
       const result = await adminApi.updateSettings({ burnConfig });
       const updated = result.data.burnConfig;
 
       if (rateInput && updated) rateInput.value = updated.conversionRate;
       if (costInput && updated) costInput.value = updated.aiAnalysisCost;
+      if (advancedCostInput && updated) advancedCostInput.value = updated.aiAdvancedAnalysisCost;
 
       toast.success('Burn config saved');
     } catch (error) {
@@ -1299,6 +1321,77 @@ const adminPanel = {
     } catch (error) {
       console.error('Failed to repair database:', error);
       toast.error(`Repair failed: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  },
+
+  // ── Unknown Token Repair ─────────────────────────────────────────────────
+
+  async checkUnknownTokens() {
+    const statusEl = document.getElementById('unknown-token-status');
+    if (!statusEl) return;
+    statusEl.style.display = 'block';
+    statusEl.className = 'grant-bc-result';
+    statusEl.textContent = 'Checking...';
+
+    try {
+      const result = await adminApi.getUnknownTokenCount();
+      const count = result.data.count;
+      if (count === 0) {
+        statusEl.textContent = 'No unknown tokens found in the database.';
+      } else {
+        statusEl.textContent = `Found ${count} token${count !== 1 ? 's' : ''} with placeholder names.`;
+      }
+    } catch (error) {
+      statusEl.className = 'grant-bc-result error';
+      statusEl.textContent = `Error: ${error.message}`;
+    }
+  },
+
+  async fixUnknownTokens() {
+    const statusEl = document.getElementById('unknown-token-status');
+    const btn = document.getElementById('fix-unknown-tokens-btn');
+    if (!btn) return;
+
+    // Check count first
+    try {
+      const countResult = await adminApi.getUnknownTokenCount();
+      const count = countResult.data.count;
+      if (count === 0) {
+        toast.info('No unknown tokens to fix');
+        if (statusEl) {
+          statusEl.style.display = 'block';
+          statusEl.className = 'grant-bc-result';
+          statusEl.textContent = 'No unknown tokens found.';
+        }
+        return;
+      }
+    } catch (e) { /* proceed anyway */ }
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loading-spinner small"></div><span>Fixing...</span>';
+
+    try {
+      const result = await adminApi.fixUnknownTokens();
+      const data = result.data;
+      const msg = `Deleted ${data.deleted} orphaned token${data.deleted !== 1 ? 's' : ''}. Kept ${data.kept} with associated data (will self-heal).`;
+      toast.success(msg);
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.className = 'grant-bc-result';
+        statusEl.textContent = msg;
+      }
+    } catch (error) {
+      console.error('Failed to fix unknown tokens:', error);
+      toast.error(`Fix failed: ${error.message}`);
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.className = 'grant-bc-result error';
+        statusEl.textContent = `Error: ${error.message}`;
+      }
     } finally {
       btn.disabled = false;
       btn.innerHTML = originalHtml;

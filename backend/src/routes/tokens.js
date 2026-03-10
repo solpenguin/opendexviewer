@@ -619,9 +619,10 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
       }
     }
 
-    // Get view counts and community flags for all tokens
-    const [viewCounts, communityMints] = await Promise.all([
+    // Get view counts, sentiment scores, and community flags for all tokens
+    const [viewCounts, sentimentScores, communityMints] = await Promise.all([
       db.getTokenViewsBatch(validMints),
+      db.getSentimentBatch(validMints).catch(() => ({})),
       db.hasApprovedSubmissionsBatch(validMints).catch(() => new Set())
     ]);
 
@@ -629,9 +630,13 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
     const response = validMints.map(mint => {
       const result = results.find(r => r.mint === mint);
       if (result && result.data) {
+        const s = sentimentScores[mint];
         return {
           ...result.data,
           views: viewCounts[mint] || 0,
+          sentimentScore: s ? s.score : 0,
+          sentimentBullish: s ? s.bullish : 0,
+          sentimentBearish: s ? s.bearish : 0,
           hasCommunityUpdates: communityMints.has(mint)
         };
       }
@@ -692,7 +697,9 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
       if (!tokenInfo) {
         try {
           const externalInfo = await jupiterService.getTokenInfo(query);
-          if (externalInfo && externalInfo.name) {
+          const hasRealName = externalInfo && externalInfo.name &&
+            externalInfo.name.toLowerCase() !== 'unknown token' && externalInfo.name !== 'Unknown';
+          if (hasRealName) {
             tokenInfo = {
               address: query,
               name: externalInfo.name,

@@ -132,6 +132,8 @@
         <a href="#watchlist" class="docs-toc-link">Watchlist</a>
         <a href="#wallets" class="docs-toc-link">Supported Wallets</a>
         <a href="#ogfinder" class="docs-toc-link">OG Finder</a>
+        <a href="#spike-detector" class="docs-toc-link">Spike Detector</a>
+        <a href="#burn-credits" class="docs-toc-link">Burn Credits</a>
         <a href="#bug-reports" class="docs-toc-link">Bug Reports</a>
         <a href="#telegram-bot" class="docs-toc-link">Telegram Bot</a>
         <a href="#api-reference" class="docs-toc-link">API Reference</a>
@@ -175,7 +177,7 @@
             </svg>
           </div>
           <h3>Key Features</h3>
-          <p>Real-time prices and charts &bull; Community-submitted banners and social links &bull; Holder-weighted voting system &bull; Watchlist with cross-device sync &bull; Bullish/Bearish sentiment voting &bull; Developer API with free keys &bull; Telegram bot for instant lookups &bull; Fully open source on GitHub</p>
+          <p>Real-time prices and charts &bull; Community-submitted banners and social links &bull; Holder-weighted voting system &bull; Watchlist with cross-device sync &bull; Bullish/Bearish sentiment voting &bull; Burn Credits with AI analysis &bull; Spike Detector for established tokens &bull; OG Finder for PumpFun tokens &bull; Developer API with free keys &bull; Embeddable widget builder &bull; Telegram bot for instant lookups &bull; Fully open source on GitHub</p>
         </div>
       </div>
     </section>
@@ -268,6 +270,12 @@
 
         <h3>Community Submissions</h3>
         <p>Two tabs &mdash; Banners and Social Links &mdash; listing all approved submissions sorted by votes. Each submission has up/down vote buttons with weighted scores. Auto-refreshes every 30 seconds.</p>
+
+        <h3>AI Holder Analysis</h3>
+        <p>Costs <strong>Burn Credits</strong> (configurable, default 25 BC). Sends pre-aggregated holder metrics (top holder concentrations, distribution, diamond hands ratio, risk flags) to Claude AI for a plain-language analysis of the token's holder health and risk profile. Results are cached for 3 hours per token so subsequent views are free.</p>
+
+        <h3>Advanced AI Analysis</h3>
+        <p>Costs <strong>75 Burn Credits</strong> (configurable). Submit a custom prompt (up to 100 characters) alongside token data for a targeted AI analysis. Prompts are sanitized with a character allowlist and checked against injection patterns. Results are cached for 3 hours per token+prompt combination.</p>
       </div>
     </section>
 
@@ -625,6 +633,75 @@
       <div class="docs-content-block">
         <p>The OG Finder tool at <code>ogfinder.html</code> searches PumpFun tokens by name or symbol and sorts results by creation date (oldest first). This helps you find the original token when there are many tokens with similar or identical names.</p>
         <p>Results show the token logo, name, symbol, contract address, and creation timestamp. Token logos are enriched from Helius metadata and the OpenDex database.</p>
+      </div>
+    </section>
+
+    <!-- Spike Detector -->
+    <section class="about-section" id="spike-detector">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <h2>Spike Detector</h2>
+        <p>Find established tokens with unusual volume activity</p>
+      </div>
+
+      <div class="docs-content-block">
+        <p>The Spike Detector at <code>spikes.html</code> scans trending tokens and filters for those that are at least a configurable number of days old (default 1 day, up to 30) but experiencing high recent volume. This surfaces established tokens that may be seeing renewed interest, rather than brand-new launches.</p>
+        <p>Results show token name, price, 24h change, volume, market cap, and token age. Data is sourced from GeckoTerminal trending pools and enriched with Helius metadata when available.</p>
+      </div>
+    </section>
+
+    <!-- Burn Credits -->
+    <section class="about-section" id="burn-credits">
+      <div class="about-header">
+        <div class="about-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2c1 3 3.5 5 3.5 8.5a5.5 5.5 0 0 1-11 0C4.5 7 7 5 8 2"/>
+            <path d="M12 18a3 3 0 0 0 0-6c-2 0-3 1.5-3 3s1 3 3 3z"/>
+          </svg>
+        </div>
+        <h2>Burn Credits</h2>
+        <p>Burn $OD tokens to unlock premium features</p>
+      </div>
+
+      <div class="docs-content-block">
+        <p>Burn Credits (BC) are earned by burning $OD tokens on-chain. The conversion rate is configurable by admins (default 1,000 BC per $OD burned). Credits are stored server-side and tied to your wallet address.</p>
+
+        <h3>How It Works</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>1. Connect Wallet</strong>
+            <span>Visit <code>burn.html</code> and connect your Solana wallet</span>
+          </div>
+          <div class="docs-feature">
+            <strong>2. Enter Amount</strong>
+            <span>Choose how many $OD tokens to burn. The UI shows the BC you'll receive based on the current conversion rate.</span>
+          </div>
+          <div class="docs-feature">
+            <strong>3. Approve Transaction</strong>
+            <span>Sign the on-chain burn transaction. Tokens are sent to a burn address and permanently removed from circulation.</span>
+          </div>
+          <div class="docs-feature">
+            <strong>4. Credits Awarded</strong>
+            <span>Once the transaction confirms, your BC balance is updated automatically. View your balance and spend history on the Burn Credits page.</span>
+          </div>
+        </div>
+
+        <h3>What You Can Spend BC On</h3>
+        <div class="docs-feature-list">
+          <div class="docs-feature">
+            <strong>AI Holder Analysis</strong>
+            <span>Default cost: 25 BC. AI-powered analysis of a token's holder distribution and risk profile.</span>
+          </div>
+          <div class="docs-feature">
+            <strong>Advanced AI Analysis</strong>
+            <span>Default cost: 75 BC. Submit a custom prompt for targeted AI analysis of any token.</span>
+          </div>
+        </div>
+        <p>Costs are configurable by admins and may change. The current costs are displayed on each feature's button before you spend.</p>
       </div>
     </section>
 
@@ -1147,6 +1224,88 @@ status   string   pending | approved | rejected | all</code></pre>
           <div class="api-example">
             <div class="api-example-label">Query Parameters</div>
             <pre><code>mints   string   Comma-separated token addresses (max 20)</code></pre>
+          </div>
+        </div>
+
+        <!-- Burn Credits Endpoints -->
+        <h3>Burn Credits Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/burn-credits/config</code>
+          </div>
+          <p class="api-endpoint-desc">Get current burn config (conversion rate, AI analysis costs)</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/burn-credits/balance/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Get a wallet's Burn Credit balance</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/burn-credits/history/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Get burn transaction history for a wallet</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/burn-credits/spend-history/:wallet</code>
+          </div>
+          <p class="api-endpoint-desc">Get spend history showing what BC was used for</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/burn-credits/submit</code>
+          </div>
+          <p class="api-endpoint-desc">Submit a burn transaction for credit processing</p>
+          <div class="api-example">
+            <div class="api-example-label">Request Body</div>
+            <pre><code>{ "walletAddress": "...", "txSignature": "...", "tokenAmount": 100 }</code></pre>
+          </div>
+        </div>
+
+        <!-- AI Analysis Endpoints -->
+        <h3>AI Analysis Endpoints</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/tokens/:mint/holders/ai-analysis</code>
+          </div>
+          <p class="api-endpoint-desc">AI holder analysis (costs BC, cached 3h). Requires wallet address and pre-aggregated holder metrics in body.</p>
+        </div>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method post">POST</span>
+            <code class="api-path">/api/tokens/:mint/ai-advanced-analysis</code>
+          </div>
+          <p class="api-endpoint-desc">Advanced AI analysis with custom prompt (costs 75 BC, cached 3h). Requires wallet address, holder metrics, and <code>userPrompt</code> (1-100 chars) in body.</p>
+        </div>
+
+        <!-- Spike Detector -->
+        <h3>Spike Detector Endpoint</h3>
+
+        <div class="api-endpoint">
+          <div class="api-endpoint-header">
+            <span class="api-method get">GET</span>
+            <code class="api-path">/api/tokens/spikes</code>
+          </div>
+          <p class="api-endpoint-desc">Get trending tokens filtered by minimum age</p>
+          <div class="api-example">
+            <div class="api-example-label">Query Parameters</div>
+            <pre><code>minAge   number   Minimum token age in days (1-30, default 1)
+limit    number   Max results (1-50, default 30)</code></pre>
           </div>
         </div>
 

@@ -669,13 +669,18 @@ router.patch('/settings',
         await db.setAIAnalysisCost(burnConfig.aiAnalysisCost);
         console.log(`[Admin] AI analysis cost updated to ${burnConfig.aiAnalysisCost}`);
       }
+      if (typeof burnConfig.aiAdvancedAnalysisCost === 'number' && burnConfig.aiAdvancedAnalysisCost >= 0) {
+        await db.setAdvancedAIAnalysisCost(burnConfig.aiAdvancedAnalysisCost);
+        console.log(`[Admin] Advanced AI analysis cost updated to ${burnConfig.aiAdvancedAnalysisCost}`);
+      }
     }
 
     // Reload current values
-    let currentBurnConfig = { conversionRate: 1000, aiAnalysisCost: 25 };
+    let currentBurnConfig = { conversionRate: 1000, aiAnalysisCost: 25, aiAdvancedAnalysisCost: 75 };
     try {
       currentBurnConfig.conversionRate = await db.getBurnConversionRate();
       currentBurnConfig.aiAnalysisCost = await db.getAIAnalysisCost();
+      currentBurnConfig.aiAdvancedAnalysisCost = await db.getAdvancedAIAnalysisCost();
     } catch (e) { /* use defaults */ }
 
     res.json({
@@ -742,6 +747,33 @@ router.post('/database/repair',
       success: true,
       data: result
     });
+  })
+);
+
+/**
+ * GET /admin/database/unknown-tokens
+ * Count tokens with placeholder names
+ */
+router.get('/database/unknown-tokens',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const count = await db.getUnknownTokenCount();
+    res.json({ success: true, data: { count } });
+  })
+);
+
+/**
+ * POST /admin/database/fix-unknown-tokens
+ * Delete unknown tokens that have no associated data (submissions, watchlist, views)
+ */
+router.post('/database/fix-unknown-tokens',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const result = await db.fixUnknownTokens();
+    console.log(`[Admin] Fixed unknown tokens: ${result.deleted} deleted, ${result.kept} kept (have data), ${result.total} total`);
+    res.json({ success: true, data: result });
   })
 );
 

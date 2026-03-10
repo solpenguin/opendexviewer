@@ -81,11 +81,19 @@ router.get('/community/batch',
 
       for (const sub of submissions) {
         if (sub.submission_type === 'banner' && !community.banner) {
-          community.banner = sub.content_url;
+          community.banner = {
+            url: sub.content_url,
+            score: sub.score || 0,
+            submittedAt: sub.created_at
+          };
         } else if (sub.submission_type !== 'banner') {
           const linkType = sub.submission_type;
           if (community.links[linkType] === null) {
-            community.links[linkType] = sub.content_url;
+            community.links[linkType] = {
+              url: sub.content_url,
+              score: sub.score || 0,
+              submittedAt: sub.created_at
+            };
           }
         }
       }
