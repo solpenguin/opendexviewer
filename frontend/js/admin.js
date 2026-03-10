@@ -1377,7 +1377,7 @@ const adminPanel = {
     try {
       const result = await adminApi.fixUnknownTokens();
       const data = result.data;
-      const msg = `Deleted ${data.deleted} orphaned token${data.deleted !== 1 ? 's' : ''}. Kept ${data.kept} with associated data (will self-heal).`;
+      const msg = `Resolved ${data.resolved} token name${data.resolved !== 1 ? 's' : ''} via API. Deleted ${data.deleted} unresolvable. Total: ${data.total}.`;
       toast.success(msg);
       if (statusEl) {
         statusEl.style.display = 'block';

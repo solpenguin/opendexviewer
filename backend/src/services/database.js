@@ -2938,15 +2938,12 @@ async function getUnknownTokenCount() {
 }
 
 /**
- * Delete tokens with placeholder names that have no associated data.
- * Tokens with submissions, votes, watchlist entries, or view counts are kept
- * (only the name is bad, and it will self-heal when someone visits the detail page).
- * Returns { deleted, kept, total }
+ * Get all tokens with placeholder names.
+ * Returns array of mint addresses.
  */
-async function fixUnknownTokens() {
+async function getUnknownTokenMints() {
   if (!pool) throw new Error('Database not available');
 
-  // Find all unknown tokens
   const unknowns = await pool.query(
     `SELECT mint_address FROM tokens
      WHERE LOWER(name) IN ('unknown token', 'unknown')
@@ -2954,41 +2951,34 @@ async function fixUnknownTokens() {
         OR name IS NULL`
   );
 
-  if (unknowns.rows.length === 0) {
-    return { deleted: 0, kept: 0, total: 0 };
-  }
+  return unknowns.rows.map(r => r.mint_address);
+}
 
-  const mints = unknowns.rows.map(r => r.mint_address);
+/**
+ * Update a token's name/symbol/logo in the database.
+ */
+async function updateTokenMetadata(mintAddress, name, symbol, logoUri) {
+  if (!pool) return;
 
-  // Find which ones have associated data we should keep
-  const hasData = await pool.query(
-    `SELECT DISTINCT mint_address FROM (
-       SELECT token_mint AS mint_address FROM submissions WHERE token_mint = ANY($1)
-       UNION
-       SELECT token_mint AS mint_address FROM watchlist WHERE token_mint = ANY($1)
-       UNION
-       SELECT token_mint AS mint_address FROM token_views WHERE token_mint = ANY($1) AND view_count > 0
-     ) AS used`,
+  await pool.query(
+    `UPDATE tokens SET name = $2, symbol = $3, logo_uri = COALESCE($4, logo_uri), updated_at = NOW()
+     WHERE mint_address = $1`,
+    [mintAddress, name, symbol, logoUri || null]
+  );
+}
+
+/**
+ * Delete tokens by mint addresses.
+ * Returns number of deleted rows.
+ */
+async function deleteTokens(mints) {
+  if (!pool || mints.length === 0) return 0;
+
+  const result = await pool.query(
+    'DELETE FROM tokens WHERE mint_address = ANY($1)',
     [mints]
   );
-
-  const keepSet = new Set(hasData.rows.map(r => r.mint_address));
-  const toDelete = mints.filter(m => !keepSet.has(m));
-
-  let deleted = 0;
-  if (toDelete.length > 0) {
-    const result = await pool.query(
-      'DELETE FROM tokens WHERE mint_address = ANY($1)',
-      [toDelete]
-    );
-    deleted = result.rowCount;
-  }
-
-  return {
-    deleted,
-    kept: keepSet.size,
-    total: mints.length
-  };
+  return result.rowCount;
 }
 
 module.exports = {
@@ -3119,5 +3109,7 @@ module.exports = {
   spendBurnCredits,
   // Token data repair
   getUnknownTokenCount,
-  fixUnknownTokens
+  getUnknownTokenMints,
+  updateTokenMetadata,
+  deleteTokens
 };

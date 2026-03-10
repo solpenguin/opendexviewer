@@ -693,8 +693,14 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
         };
       }
 
-      // If not in local DB, fetch from external API
-      if (!tokenInfo) {
+      // Check if local result has a placeholder name
+      const PLACEHOLDER_NAMES = new Set(['unknown token', 'unknown']);
+      const localIsPlaceholder = tokenInfo && (
+        !tokenInfo.name || PLACEHOLDER_NAMES.has(tokenInfo.name.toLowerCase())
+      );
+
+      // If not in local DB or local has placeholder name, fetch from external API
+      if (!tokenInfo || localIsPlaceholder) {
         try {
           const externalInfo = await jupiterService.getTokenInfo(query);
           const hasRealName = externalInfo && externalInfo.name &&

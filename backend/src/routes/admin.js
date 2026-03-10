@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
+const jupiterService = require('../services/jupiter');
 const {
   asyncHandler,
   requireDatabase,
@@ -765,15 +766,62 @@ router.get('/database/unknown-tokens',
 
 /**
  * POST /admin/database/fix-unknown-tokens
- * Delete unknown tokens that have no associated data (submissions, watchlist, views)
+ * Resolve real names for unknown tokens via Jupiter API.
+ * Tokens that resolve get updated; tokens that don't resolve get deleted.
  */
 router.post('/database/fix-unknown-tokens',
   validateAdminSession,
   requireDatabase,
   asyncHandler(async (req, res) => {
-    const result = await db.fixUnknownTokens();
-    console.log(`[Admin] Fixed unknown tokens: ${result.deleted} deleted, ${result.kept} kept (have data), ${result.total} total`);
-    res.json({ success: true, data: result });
+    const PLACEHOLDER_NAMES = new Set(['unknown token', 'unknown']);
+
+    const mints = await db.getUnknownTokenMints();
+    if (mints.length === 0) {
+      return res.json({ success: true, data: { resolved: 0, deleted: 0, failed: 0, total: 0 } });
+    }
+
+    let resolved = 0;
+    let deleted = 0;
+    let failed = 0;
+    const toDelete = [];
+
+    // Process in batches of 5 to avoid rate limits
+    for (let i = 0; i < mints.length; i += 5) {
+      const batch = mints.slice(i, i + 5);
+      const results = await Promise.allSettled(
+        batch.map(async (mint) => {
+          try {
+            const info = await jupiterService.getTokenInfo(mint);
+            const hasRealName = info && info.name &&
+              !PLACEHOLDER_NAMES.has(info.name.toLowerCase()) &&
+              info.name !== 'Unknown';
+            if (hasRealName) {
+              await db.updateTokenMetadata(mint, info.name, info.symbol, info.logoUri);
+              return 'resolved';
+            }
+            return 'unresolved';
+          } catch {
+            return 'unresolved';
+          }
+        })
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const val = results[j].status === 'fulfilled' ? results[j].value : 'unresolved';
+        if (val === 'resolved') {
+          resolved++;
+        } else {
+          toDelete.push(batch[j]);
+        }
+      }
+    }
+
+    // Delete tokens that couldn't be resolved
+    deleted = await db.deleteTokens(toDelete);
+    failed = toDelete.length - deleted;
+
+    console.log(`[Admin] Fixed unknown tokens: ${resolved} resolved, ${deleted} deleted, ${failed} failed, ${mints.length} total`);
+    res.json({ success: true, data: { resolved, deleted, failed, total: mints.length } });
   })
 );
 
