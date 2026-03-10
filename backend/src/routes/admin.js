@@ -883,6 +883,85 @@ router.delete('/announcements/:id',
   })
 );
 
+// ==========================================
+// Burn Credit Management
+// ==========================================
+
+/**
+ * POST /admin/burn-credits/grant
+ * Grant burn credits to a wallet address (admin only).
+ * Body: { walletAddress: string, amount: number, reason?: string }
+ */
+router.post('/burn-credits/grant',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const { walletAddress, amount, reason } = req.body;
+
+    // Validate wallet address
+    if (!walletAddress || typeof walletAddress !== 'string' || !SOLANA_ADDRESS_REGEX.test(walletAddress)) {
+      return res.status(400).json({ success: false, error: 'Valid Solana wallet address required' });
+    }
+
+    // Validate amount
+    const parsedAmount = parseInt(amount, 10);
+    if (!parsedAmount || parsedAmount < 1 || parsedAmount > 100000) {
+      return res.status(400).json({ success: false, error: 'Amount must be an integer between 1 and 100,000' });
+    }
+
+    // Sanitize reason (optional, max 200 chars, strip control chars)
+    const safeReason = typeof reason === 'string'
+      ? reason.replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 200)
+      : '';
+
+    try {
+      const record = await db.adminGrantBurnCredits(walletAddress, parsedAmount, safeReason);
+      const balance = await db.getBurnCreditBalance(walletAddress);
+
+      res.json({
+        success: true,
+        data: {
+          credited: parsedAmount,
+          walletAddress,
+          reason: safeReason,
+          newBalance: balance.balance,
+          txSignature: record.tx_signature
+        }
+      });
+    } catch (error) {
+      console.error('[Admin] Failed to grant burn credits:', error.message);
+      res.status(500).json({ success: false, error: 'Failed to grant burn credits' });
+    }
+  })
+);
+
+/**
+ * GET /admin/burn-credits/lookup/:wallet
+ * Look up a wallet's burn credit balance (admin only).
+ */
+router.get('/burn-credits/lookup/:wallet',
+  validateAdminSession,
+  requireDatabase,
+  asyncHandler(async (req, res) => {
+    const { wallet } = req.params;
+    if (!wallet || !SOLANA_ADDRESS_REGEX.test(wallet)) {
+      return res.status(400).json({ success: false, error: 'Valid Solana wallet address required' });
+    }
+
+    const balance = await db.getBurnCreditBalance(wallet);
+    const history = await db.getBurnCreditSpendHistory(wallet, 10);
+
+    res.json({
+      success: true,
+      data: {
+        walletAddress: wallet,
+        ...balance,
+        recentSpends: history
+      }
+    });
+  })
+);
+
 // Export both the router and adminSettings for use by other routes
 module.exports = router;
 module.exports.adminSettings = adminSettings;

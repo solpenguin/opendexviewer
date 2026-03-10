@@ -2749,6 +2749,26 @@ async function recordBurnCredit({ walletAddress, txSignature, tokenAmount, credi
   return result.rows[0];
 }
 
+// Admin-only: Grant burn credits to a wallet without requiring a burn transaction.
+// Uses a synthetic tx_signature (admin-grant-<random>) to satisfy the UNIQUE constraint.
+async function adminGrantBurnCredits(walletAddress, amount, reason = '') {
+  if (!pool) throw new Error('Database not available');
+  if (!amount || amount <= 0 || !Number.isInteger(amount)) throw new Error('Amount must be a positive integer');
+
+  const crypto = require('crypto');
+  const syntheticTx = `admin-grant-${crypto.randomBytes(16).toString('hex')}`;
+
+  const result = await pool.query(
+    `INSERT INTO burn_credits (wallet_address, tx_signature, token_amount, credits_awarded, conversion_rate, status)
+     VALUES ($1, $2, 0, $3, 0, 'confirmed')
+     RETURNING *`,
+    [walletAddress, syntheticTx, amount]
+  );
+
+  console.log(`[Admin] Granted ${amount} BC to ${walletAddress.slice(0, 8)}... | reason: ${reason || 'none'} | tx: ${syntheticTx}`);
+  return result.rows[0];
+}
+
 // Get total burn credits balance for a wallet (earned minus spent)
 async function getBurnCreditBalance(walletAddress) {
   if (!pool) return { balance: 0, totalBurned: 0, submissions: 0 };
@@ -2991,6 +3011,7 @@ module.exports = {
   setAdvancedAIAnalysisCost,
   isBurnTxUsed,
   recordBurnCredit,
+  adminGrantBurnCredits,
   getBurnCreditBalance,
   getPlatformBurnStats,
   getBurnCreditHistory,

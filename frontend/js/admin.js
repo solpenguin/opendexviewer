@@ -144,6 +144,18 @@ const adminApi = {
     });
   },
 
+  // Burn credit management
+  async grantBurnCredits(walletAddress, amount, reason) {
+    return this.request('/admin/burn-credits/grant', {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress, amount, reason })
+    });
+  },
+
+  async lookupBurnCredits(wallet) {
+    return this.request(`/admin/burn-credits/lookup/${encodeURIComponent(wallet)}`);
+  },
+
   // Database management
   async getDatabaseStatus() {
     return this.request('/admin/database/status');
@@ -310,6 +322,10 @@ const adminPanel = {
 
     // Burn config save button
     document.getElementById('save-burn-config-btn')?.addEventListener('click', () => this.saveBurnConfig());
+
+    // Burn credit grant buttons
+    document.getElementById('grant-bc-btn')?.addEventListener('click', () => this.grantBurnCredits());
+    document.getElementById('grant-bc-lookup-btn')?.addEventListener('click', () => this.lookupBurnCredits());
 
     // Database management buttons
     document.getElementById('check-database-btn')?.addEventListener('click', () => this.checkDatabaseStatus());
@@ -936,7 +952,7 @@ const adminPanel = {
   // Modal
   showConfirmModal(title, message, onConfirm) {
     document.getElementById('confirm-title').textContent = title;
-    document.getElementById('confirm-message').textContent = message;
+    document.getElementById('confirm-message').innerHTML = message;
     document.getElementById('confirm-modal').style.display = 'flex';
 
     // Set up confirm button
@@ -1066,6 +1082,100 @@ const adminPanel = {
       console.error('Failed to save burn config:', error);
       toast.error('Failed to save burn config');
     }
+  },
+
+  // Lookup burn credit balance for a wallet
+  async lookupBurnCredits() {
+    const walletInput = document.getElementById('grant-bc-wallet');
+    const lookupEl = document.getElementById('grant-bc-lookup');
+    const wallet = walletInput?.value?.trim();
+
+    if (!wallet || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+      toast.error('Enter a valid Solana wallet address');
+      return;
+    }
+
+    lookupEl.style.display = 'block';
+    lookupEl.innerHTML = '<div class="loading-spinner small"></div>';
+
+    try {
+      const result = await adminApi.lookupBurnCredits(wallet);
+      const d = result.data;
+      const spendRows = (d.recentSpends || []).map(s =>
+        `<div style="font-size:0.75rem;color:var(--text-muted);">&minus;${s.amount} BC &mdash; ${this.escapeHtml(s.feature)} (${this.formatDate(s.created_at)})</div>`
+      ).join('') || '<div style="font-size:0.75rem;color:var(--text-muted);">No recent spends</div>';
+
+      lookupEl.innerHTML = `
+        <div><strong>Balance:</strong> ${d.balance} BC</div>
+        <div><strong>Total Burned:</strong> ${parseFloat(d.totalBurned).toLocaleString()} $OD across ${d.submissions} burn(s)</div>
+        <div style="margin-top:0.5rem;"><strong>Recent Spends:</strong></div>
+        ${spendRows}
+      `;
+    } catch (error) {
+      lookupEl.innerHTML = `<span style="color:#fca5a5;">${this.escapeHtml(error.message)}</span>`;
+    }
+  },
+
+  // Grant burn credits to a wallet
+  async grantBurnCredits() {
+    const walletInput = document.getElementById('grant-bc-wallet');
+    const amountInput = document.getElementById('grant-bc-amount');
+    const reasonInput = document.getElementById('grant-bc-reason');
+    const resultEl = document.getElementById('grant-bc-result');
+
+    const wallet = walletInput?.value?.trim();
+    const amount = parseInt(amountInput?.value, 10);
+    const reason = reasonInput?.value?.trim() || '';
+
+    // Validate wallet
+    if (!wallet || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+      toast.error('Enter a valid Solana wallet address');
+      return;
+    }
+
+    // Validate amount
+    if (!amount || amount < 1 || amount > 100000) {
+      toast.error('Amount must be between 1 and 100,000 BC');
+      return;
+    }
+
+    // Confirmation prompt
+    const truncated = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+    this.showConfirmModal(
+      'Confirm Credit Grant',
+      `Grant <strong>${amount.toLocaleString()} BC</strong> to <strong>${truncated}</strong>${reason ? ` (reason: ${this.escapeHtml(reason)})` : ''}?`,
+      async () => {
+        try {
+          const result = await adminApi.grantBurnCredits(wallet, amount, reason);
+          const d = result.data;
+
+          resultEl.className = 'grant-bc-result';
+          resultEl.style.display = 'block';
+          resultEl.innerHTML = `
+            <div><strong>${d.credited.toLocaleString()} BC</strong> granted to <strong>${d.walletAddress.slice(0, 6)}...${d.walletAddress.slice(-4)}</strong></div>
+            <div>New balance: <strong>${d.newBalance.toLocaleString()} BC</strong></div>
+            ${d.reason ? `<div>Reason: ${this.escapeHtml(d.reason)}</div>` : ''}
+          `;
+
+          // Clear inputs after success
+          amountInput.value = '';
+          reasonInput.value = '';
+
+          // Refresh lookup if visible
+          const lookupEl = document.getElementById('grant-bc-lookup');
+          if (lookupEl && lookupEl.style.display !== 'none') {
+            this.lookupBurnCredits();
+          }
+
+          toast.success(`Granted ${d.credited} BC`);
+        } catch (error) {
+          resultEl.className = 'grant-bc-result error';
+          resultEl.style.display = 'block';
+          resultEl.innerHTML = `<span>${this.escapeHtml(error.message)}</span>`;
+          toast.error('Failed to grant credits');
+        }
+      }
+    );
   },
 
   // Update development mode warning display

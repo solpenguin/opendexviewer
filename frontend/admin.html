@@ -520,6 +520,61 @@
           </div>
 
           <div class="settings-section">
+            <h3>Credit Burn Credits</h3>
+            <p class="settings-description">Manually grant Burn Credits to a user wallet. Use for refunds, promotions, or testing.</p>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-label">Wallet Address</span>
+                <span class="setting-hint">Solana wallet to credit</span>
+              </div>
+              <div class="setting-input-group" style="flex: 1;">
+                <input type="text" id="grant-bc-wallet" class="setting-input" placeholder="Enter Solana wallet address" maxlength="44" autocomplete="off" spellcheck="false" style="font-family: var(--font-mono, monospace); font-size: 0.75rem;">
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-label">Amount</span>
+                <span class="setting-hint">Number of Burn Credits to grant (1 - 100,000)</span>
+              </div>
+              <div class="setting-input-group">
+                <input type="number" id="grant-bc-amount" class="setting-input" min="1" max="100000" step="1" placeholder="100">
+                <span class="setting-input-suffix">BC</span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-label">Reason</span>
+                <span class="setting-hint">Optional note for audit trail (max 200 chars)</span>
+              </div>
+              <div class="setting-input-group" style="flex: 1;">
+                <input type="text" id="grant-bc-reason" class="setting-input" placeholder="e.g. Refund for failed analysis" maxlength="200">
+              </div>
+            </div>
+
+            <div id="grant-bc-lookup" class="grant-bc-lookup" style="display:none;"></div>
+
+            <div class="setting-actions">
+              <button id="grant-bc-lookup-btn" class="btn btn-ghost">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                Lookup Balance
+              </button>
+              <button id="grant-bc-btn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Grant Credits
+              </button>
+            </div>
+
+            <div id="grant-bc-result" class="grant-bc-result" style="display:none;"></div>
+          </div>
+
+          <div class="settings-section">
             <h3>Manual Approval</h3>
             <p class="settings-description">As an admin, you can manually approve any pending submission regardless of vote counts or verification status. Use the Submissions tab to approve/reject submissions.</p>
           </div>
