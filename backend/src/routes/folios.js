@@ -9,6 +9,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../services/database');
 const jupiterService = require('../services/jupiter');
 const geckoService = require('../services/geckoTerminal');
+const solanaService = require('../services/solana');
 const { asyncHandler, requireDatabase, validateAdminSession, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { searchLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
 const { cache, keys, TTL } = require('../services/cache');
@@ -195,21 +196,53 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
   if (folio.tokens?.length > 0) {
     await enrichUnknownTokens(folio.tokens);
 
-    // Fetch live market data from GeckoTerminal (reliable 24h change) + Jupiter (prices)
+    // Fetch live market data from multiple sources in parallel
     const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
     if (mints.length > 0) {
       try {
-        const [geckoData, batchPrices] = await Promise.all([
+        const [geckoData, batchPrices, jupiterMetrics] = await Promise.all([
           geckoService.getMultiTokenInfo(mints).catch(() => ({})),
-          jupiterService.getTokenPrices(mints).catch(() => ({}))
+          jupiterService.getTokenPrices(mints).catch(() => ({})),
+          Promise.all(folio.tokens.map(async t => {
+            try { return await jupiterService.getTokenMetrics(t.token_mint); }
+            catch { return null; }
+          }))
         ]);
-        folio.tokens.forEach(t => {
+
+        // Backfill missing holder counts from Helius
+        if (solanaService.isHeliusConfigured()) {
+          const missing = folio.tokens
+            .map((t, i) => (!jupiterMetrics[i]?.holderCount && t.token_mint) ? { mint: t.token_mint, idx: i } : null)
+            .filter(Boolean);
+          if (missing.length > 0) {
+            await Promise.all(missing.map(async ({ mint, idx }) => {
+              try {
+                const count = await solanaService.getTokenHolderCount(mint);
+                if (count != null && count > 0) {
+                  if (!jupiterMetrics[idx]) jupiterMetrics[idx] = {};
+                  jupiterMetrics[idx].holderCount = count;
+                }
+              } catch { /* non-critical */ }
+            }));
+          }
+        }
+
+        folio.tokens.forEach((t, i) => {
           const g = geckoData[t.token_mint] || {};
           const bp = batchPrices[t.token_mint] || {};
-          if (g.price || bp.price) t.price = g.price || bp.price;
-          if (g.marketCap) t.market_cap = g.marketCap;
-          if (g.volume24h) t.volume_24h = g.volume24h;
+          const jup = jupiterMetrics[i] || {};
+          // Price: GeckoTerminal > Jupiter batch > Jupiter V2
+          const price = g.price ?? bp.price ?? jup.price ?? null;
+          if (price != null) t.price = price;
+          // Market cap & volume: GeckoTerminal > Jupiter V2
+          const mcap = g.marketCap ?? jup.marketCap ?? null;
+          if (mcap != null) t.market_cap = mcap;
+          const vol = g.volume24h ?? jup.volume24h ?? null;
+          if (vol != null) t.volume_24h = vol;
+          // 24h change: GeckoTerminal is the reliable source
           if (g.priceChange24h != null) t.price_change_24h = g.priceChange24h;
+          // Holders: Jupiter V2 > Helius backfill
+          if (jup.holderCount != null) t.holders = jup.holderCount;
         });
       } catch { /* non-critical */ }
     }
@@ -281,6 +314,24 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
       catch { return null; }
     }))
   ]);
+
+  // Backfill missing holder counts from Helius (only for tokens Jupiter V2 missed)
+  if (solanaService.isHeliusConfigured()) {
+    const missingHolderMints = folio.tokens
+      .map((t, i) => (!tokenMetrics[i]?.holderCount && t.token_mint) ? { mint: t.token_mint, idx: i } : null)
+      .filter(Boolean);
+    if (missingHolderMints.length > 0) {
+      await Promise.all(missingHolderMints.map(async ({ mint, idx }) => {
+        try {
+          const count = await solanaService.getTokenHolderCount(mint);
+          if (count != null && count > 0) {
+            if (!tokenMetrics[idx]) tokenMetrics[idx] = {};
+            tokenMetrics[idx].holderCount = count;
+          }
+        } catch { /* non-critical */ }
+      }));
+    }
+  }
 
   // Formatting helpers
   const fmtUsd = (v) => {

@@ -271,12 +271,13 @@ async function getMultiTokenInfo(addresses) {
       const attrs = token.attributes || {};
       const address = attrs.address;
       if (address) {
+        const safeFloat = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
         result[address] = {
-          price: parseFloat(attrs.price_usd) || null,
-          volume24h: parseFloat(attrs.volume_usd?.h24) || null,
-          priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || null,
-          marketCap: parseFloat(attrs.market_cap_usd) || null,
-          fdv: parseFloat(attrs.fdv_usd) || null,
+          price: attrs.price_usd != null ? safeFloat(attrs.price_usd) : null,
+          volume24h: attrs.volume_usd?.h24 != null ? safeFloat(attrs.volume_usd.h24) : null,
+          priceChange24h: attrs.price_change_percentage?.h24 != null ? safeFloat(attrs.price_change_percentage.h24) : null,
+          marketCap: attrs.market_cap_usd != null ? safeFloat(attrs.market_cap_usd) : null,
+          fdv: attrs.fdv_usd != null ? safeFloat(attrs.fdv_usd) : null,
           name: attrs.name,
           symbol: attrs.symbol,
           decimals: attrs.decimals,

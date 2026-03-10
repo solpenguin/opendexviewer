@@ -203,7 +203,7 @@ const foliosPage = {
     if (!tbody) return;
 
     if (!folio.tokens || folio.tokens.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No tokens in this folio yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No tokens in this folio yet</td></tr>';
       return;
     }
 
@@ -220,6 +220,7 @@ const foliosPage = {
       const changeClass = change24h != null ? (change24h >= 0 ? 'positive' : 'negative') : '';
       const mcap = t.market_cap ? utils.formatNumber(t.market_cap) : '--';
       const vol = t.volume_24h ? utils.formatNumber(t.volume_24h) : '--';
+      const holders = t.holders ? utils.formatNumber(t.holders) : '--';
 
       return `
         <tr class="token-row clickable" data-mint="${t.token_mint}" onclick="window.location.href='token.html?mint=${t.token_mint}'">
@@ -237,6 +238,7 @@ const foliosPage = {
           <td class="cell-change ${changeClass}">${changeStr}</td>
           <td class="cell-mcap">${mcap}</td>
           <td class="cell-volume">${vol}</td>
+          <td class="cell-holders">${holders}</td>
           <td class="cell-note">${t.note ? this.esc(t.note) : ''}</td>
         </tr>
       `;

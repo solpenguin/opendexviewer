@@ -1901,11 +1901,11 @@ async function getMostWatchlistedTokens(limit = 25, offset = 0) {
     pool.query(
       `SELECT w.token_mint, COUNT(*) AS watchlist_count,
               t.name, t.symbol, t.logo_uri,
-              t.price, t.market_cap, t.volume_24h
+              t.price, t.market_cap, t.volume_24h, t.price_change_24h
        FROM watchlist w
        LEFT JOIN tokens t ON w.token_mint = t.mint_address
        GROUP BY w.token_mint, t.name, t.symbol, t.logo_uri,
-                t.price, t.market_cap, t.volume_24h
+                t.price, t.market_cap, t.volume_24h, t.price_change_24h
        ORDER BY watchlist_count DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
@@ -1929,7 +1929,7 @@ async function getTopSentimentTokens(limit = 25, offset = 0) {
     pool.query(
       `SELECT st.token_mint, st.bullish, st.bearish, st.score,
               t.name, t.symbol, t.logo_uri,
-              t.price, t.market_cap, t.volume_24h
+              t.price, t.market_cap, t.volume_24h, t.price_change_24h
        FROM sentiment_tallies st
        LEFT JOIN tokens t ON st.token_mint = t.mint_address
        WHERE (st.bullish + st.bearish) > 0
@@ -2045,12 +2045,12 @@ async function getMostCalledTokens(limit = 25, offset = 0) {
     pool.query(
       `SELECT tc.token_mint, COUNT(*) AS call_count,
               t.name, t.symbol, t.logo_uri,
-              t.price, t.market_cap, t.volume_24h
+              t.price, t.market_cap, t.volume_24h, t.price_change_24h
        FROM token_calls tc
        LEFT JOIN tokens t ON tc.token_mint = t.mint_address
        WHERE tc.created_at > NOW() - INTERVAL '24 hours'
        GROUP BY tc.token_mint, t.name, t.symbol, t.logo_uri,
-                t.price, t.market_cap, t.volume_24h
+                t.price, t.market_cap, t.volume_24h, t.price_change_24h
        ORDER BY call_count DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
