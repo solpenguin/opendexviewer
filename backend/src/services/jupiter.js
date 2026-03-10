@@ -559,6 +559,47 @@ async function getTokenHolderCount(mintAddress) {
 }
 
 /**
+ * Get full token metrics from Jupiter V2 search API.
+ * Returns holder count, market cap, volume, liquidity, etc. in a single call.
+ * @param {string} mintAddress - Token mint address
+ * @returns {Promise<object|null>} - Token metrics or null if unavailable
+ */
+async function getTokenMetrics(mintAddress) {
+  if (!isConfigured()) return null;
+
+  const client = createClient();
+
+  try {
+    const response = await jupiterRequest(() =>
+      client.get(`/tokens/v2/search`, {
+        params: { query: mintAddress }
+      })
+    );
+
+    const tokens = response.data || [];
+    const token = tokens.find(t =>
+      t.address === mintAddress ||
+      t.mint === mintAddress ||
+      t.id === mintAddress
+    );
+
+    if (!token) return null;
+
+    return {
+      holderCount: typeof token.holderCount === 'number' ? token.holderCount : null,
+      marketCap: token.marketCap || token.mc || null,
+      volume24h: token.volume24h || token.v24hUSD || null,
+      liquidity: token.liquidity || null,
+      priceChange24h: token.priceChange24h ?? null,
+      price: token.price || null
+    };
+  } catch (error) {
+    console.error('[Jupiter] getTokenMetrics error:', error.message);
+    return null;
+  }
+}
+
+/**
  * Format token for consistent API response
  */
 function formatToken(token) {
@@ -630,6 +671,7 @@ module.exports = {
   getTokenPrice,
   getTokenPrices,
   getTokenHolderCount,
+  getTokenMetrics,
   getPriceHistory,
   isConfigured,
   checkHealth

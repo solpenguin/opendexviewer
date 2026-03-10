@@ -252,16 +252,16 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     });
   }
 
-  // Fetch fresh market data + holder counts in parallel
+  // Fetch live metrics in parallel:
+  // - Per-token V2 search gives holder count, mcap, volume, liquidity (one call each)
+  // - Batch price API gives fresh price + 24h change (single call for all tokens)
   const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
-  const [freshPrices, holderCounts] = await Promise.all([
-    // Batch price fetch (single API call for up to 50 tokens)
-    jupiterService.getTokenPrices(mints).catch(() => ({})),
-    // Individual holder count calls in parallel
+  const [tokenMetrics, batchPrices] = await Promise.all([
     Promise.all(folio.tokens.map(async (t) => {
-      try { return await jupiterService.getTokenHolderCount(t.token_mint); }
+      try { return await jupiterService.getTokenMetrics(t.token_mint); }
       catch { return null; }
-    }))
+    })),
+    jupiterService.getTokenPrices(mints).catch(() => ({}))
   ]);
 
   // Formatting helpers
@@ -290,29 +290,37 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
 
   const tokenLines = folio.tokens.map((t, i) => {
     const mint = t.token_mint || '';
-    const fresh = freshPrices[mint] || {};
+    const m = tokenMetrics[i] || {};
+    const bp = batchPrices[mint] || {};
     const name = t.name || mint.slice(0, 8) || 'Unknown';
     const symbol = t.symbol || '???';
-    // Prefer fresh Jupiter data, fall back to DB values
-    const price = fmtUsd(fresh.price || t.price);
-    const mcap = fmtUsd(fresh.marketCap || t.market_cap);
-    const vol = fmtUsd(fresh.volume24h || t.volume_24h);
-    const change24h = fmtPct(fresh.priceChange24h);
-    const liq = fmtUsd(fresh.liquidity);
-    const holders = fmtNum(holderCounts[i]);
+    // Prefer live Jupiter V2 metrics, then batch price, then DB values
+    const price = fmtUsd(m.price || bp.price || (t.price ? parseFloat(t.price) : null));
+    const mcap = fmtUsd(m.marketCap || (t.market_cap ? parseFloat(t.market_cap) : null));
+    const vol = fmtUsd(m.volume24h || (t.volume_24h ? parseFloat(t.volume_24h) : null));
+    const change24h = fmtPct(m.priceChange24h ?? bp.priceChange24h ?? null);
+    const liq = fmtUsd(m.liquidity);
+    const holders = fmtNum(m.holderCount);
     const age = fmtAge(t.pair_created_at);
     const note = t.note ? ` | Note: ${t.note.slice(0, 50)}` : '';
-    return `${i + 1}. ${name} (${symbol}) — Price: ${price} (${change24h}), MCap: ${mcap}, Vol24h: ${vol}, Liq: ${liq}, Holders: ${holders}, Age: ${age}${note}`;
+    return `${i + 1}. ${name} (${symbol}) — Price: ${price} (24h: ${change24h}), MCap: ${mcap}, Vol24h: ${vol}, Liq: ${liq}, Holders: ${holders}, Age: ${age}${note}`;
   }).join('\n');
 
-  const prompt = `Analyze this curated Solana token folio (portfolio list) from KOL "${folio.name}" (@${(folio.twitter_handle || '').replace(/^@/, '')}). Provide a concise but insightful analysis covering:
-1. Overall portfolio theme/strategy (what types of tokens, any sector focus)
-2. Risk assessment (market cap distribution, liquidity depth, 24h price action, red flags)
-3. Holder conviction insights: evaluate holder health by analyzing holder count relative to token age and market cap. High holders-to-mcap ratio suggests broad distribution; low ratio may indicate whale concentration. Volume-to-mcap ratio signals trading activity vs holding conviction. Young tokens with rapidly growing holder counts suggest strong adoption momentum.
-4. Notable observations (standout tokens, interesting patterns, risk/reward outliers)
-5. Brief summary verdict (1 sentence)
+  const prompt = `You are analyzing a curated Solana token folio from KOL "${folio.name}" (@${(folio.twitter_handle || '').replace(/^@/, '')}).
 
-Keep the analysis to 4-6 concise paragraphs. Be factual and data-driven. Do not give financial advice.
+Provide a balanced, insightful analysis covering:
+1. Portfolio theme/strategy — what types of tokens are included, any sector focus or diversification approach
+2. Market snapshot — summarize the price action, market cap range, volume levels, and liquidity across the portfolio
+3. Holder conviction — for Solana memecoins and micro/small-caps, holder counts in the thousands are normal and healthy. Evaluate holder counts relative to each token's age and market cap. Growing holder bases relative to token age indicate strong community adoption. Do NOT treat typical Solana holder counts as concerning.
+4. Standout picks — highlight the most interesting tokens and why they stand out
+5. One-sentence summary verdict
+
+IMPORTANT GUIDELINES:
+- Be balanced and objective. Highlight both strengths and areas to watch.
+- Solana tokens naturally have different metrics than Ethereum tokens. Do not apply Ethereum-scale expectations.
+- "N/A" for a metric means data is unavailable — do not treat missing data as a red flag or negative signal. Simply note it is unavailable if relevant.
+- Keep the tone informative and constructive, not alarmist.
+- 4-6 concise paragraphs. No financial advice.
 
 Folio: "${folio.name}"${folio.description ? ` — ${folio.description}` : ''}
 Token count: ${folio.tokens.length}
