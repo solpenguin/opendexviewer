@@ -14997,6 +14997,107 @@ body.landscape .hero h1 {
   margin: 0.75rem 0 0;
 }
 
+/* AI Analysis Section */
+.folio-ai-section {
+  margin-top: 1rem;
+}
+
+.folio-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.15));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.folio-ai-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(59, 130, 246, 0.25));
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.folio-ai-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.folio-ai-cost {
+  background: rgba(139, 92, 246, 0.2);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  color: #a78bfa;
+}
+
+.folio-ai-spinner {
+  animation: spin 1s linear infinite;
+}
+
+.folio-ai-analysis {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.folio-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #a78bfa;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.folio-ai-cached {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.folio-ai-text {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.folio-ai-text p {
+  margin: 0 0 0.5rem;
+}
+
+.folio-ai-text p:last-child {
+  margin-bottom: 0;
+}
+
+.folio-ai-text strong {
+  color: var(--text-primary);
+}
+
+.folio-ai-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: #fca5a5;
+}
+
+.folio-ai-burn-link {
+  color: #a78bfa;
+  text-decoration: underline;
+}
+
 /* Constrain detail table to same width as grid */
 .folios-page .community-section {
   max-width: 1200px;

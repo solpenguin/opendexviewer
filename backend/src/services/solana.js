@@ -379,8 +379,8 @@ async function getTokenMetadata(mintAddress) {
     const result = {
       mintAddress: mintAddress,
       address: mintAddress,
-      name: metadata.name || content.json_uri || 'Unknown',
-      symbol: tokenInfo.symbol || metadata.symbol || '???',
+      name: metadata.name || content.json_uri || null,
+      symbol: tokenInfo.symbol || metadata.symbol || null,
       decimals: tokenInfo.decimals || 9,
       supply: tokenInfo.supply ? parseFloat(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals || 9) : null,
       // Price only available for top 10k tokens by volume
@@ -472,8 +472,8 @@ async function getTokenMetadataBatch(mintAddresses) {
       result[asset.id] = {
         mintAddress: asset.id,
         address: asset.id,
-        name: metadata.name || content.json_uri || 'Unknown',
-        symbol: tokenInfo.symbol || metadata.symbol || '???',
+        name: metadata.name || content.json_uri || null,
+        symbol: tokenInfo.symbol || metadata.symbol || null,
         decimals: tokenInfo.decimals || 9,
         supply: tokenInfo.supply ? parseFloat(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals || 9) : null,
         price: priceInfo.price_per_token || null,

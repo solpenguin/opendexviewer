@@ -692,7 +692,7 @@ const adminPanel = {
           <td>
             <div class="token-info">
               <div>
-                <div class="token-name">${this.escapeHtml(sub.token_name || 'Unknown')}</div>
+                <div class="token-name">${this.escapeHtml(sub.token_name || `${sub.token_mint.slice(0, 4)}...${sub.token_mint.slice(-4)}`)}</div>
                 <div class="token-symbol">${this.escapeHtml(sub.token_symbol || sub.token_mint.slice(0, 8) + '...')}</div>
               </div>
             </div>
@@ -836,17 +836,17 @@ const adminPanel = {
           <td>
             <div class="token-info">
               ${token.logo_uri ? `<img src="${this.escapeHtml(token.logo_uri)}" class="token-logo-small" alt="">` : ''}
-              <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}</span>
+              <span class="token-name">${this.escapeHtml(token.name || `${token.mint_address.slice(0, 4)}...${token.mint_address.slice(-4)}`)}</span>
             </div>
           </td>
-          <td>${this.escapeHtml(token.symbol || '-')}</td>
+          <td>${this.escapeHtml(token.symbol || token.mint_address.slice(0, 5).toUpperCase())}</td>
           <td class="wallet-address" title="${this.escapeHtml(token.mint_address)}">${this.truncateAddress(token.mint_address)}</td>
           <td>${token.submission_count}</td>
           <td>${token.pending_count > 0 ? `<span class="status-badge pending">${token.pending_count}</span>` : '0'}</td>
           <td>${this.formatDate(token.created_at)}</td>
           <td>
             <div class="table-actions">
-              <button class="action-btn view token-edit-btn" data-mint="${this.escapeHtml(token.mint_address)}" data-name="${this.escapeHtml(token.name || 'Unknown')}">Edit</button>
+              <button class="action-btn view token-edit-btn" data-mint="${this.escapeHtml(token.mint_address)}" data-name="${this.escapeHtml(token.name || `${token.mint_address.slice(0, 4)}...${token.mint_address.slice(-4)}`)}">Edit</button>
             </div>
           </td>
         </tr>
@@ -1936,7 +1936,7 @@ const adminPanel = {
       tbody.innerHTML = tokens.map((t, i) => `
         <tr>
           <td>${i + 1}</td>
-          <td>${this.escapeHtml(t.name || 'Unknown')} (${this.escapeHtml(t.symbol || '???')})</td>
+          <td>${this.escapeHtml(t.name || `${t.token_mint.slice(0, 4)}...${t.token_mint.slice(-4)}`)} (${this.escapeHtml(t.symbol || t.token_mint.slice(0, 5).toUpperCase())})</td>
           <td class="mono-text" style="font-size: 0.75rem;">${t.token_mint.slice(0, 8)}...${t.token_mint.slice(-6)}</td>
           <td>${t.note ? this.escapeHtml(t.note) : '--'}</td>
           <td>
@@ -1984,11 +1984,6 @@ const adminPanel = {
     }
   },
 
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
-  }
 };
 
 // Initialize on page load

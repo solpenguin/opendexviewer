@@ -148,12 +148,14 @@ router.get('/config', defaultLimiter, asyncHandler(async (req, res) => {
     const conversionRate = await db.getBurnConversionRate();
     const aiAnalysisCost = await db.getAIAnalysisCost();
     const aiAdvancedAnalysisCost = await db.getAdvancedAIAnalysisCost();
+    const folioAIAnalysisCost = await db.getFolioAIAnalysisCost();
     res.json({
       tokenMint: OD_TOKEN_MINT,
       tokenSymbol: '$OD',
       conversionRate,
       aiAnalysisCost,
       aiAdvancedAnalysisCost,
+      folioAIAnalysisCost,
       description: `${conversionRate.toLocaleString()} $OD = 1 Burn Credit`
     });
   } catch (error) {

@@ -6,6 +6,16 @@ const { rateLimitedRequest } = require('./rateLimiter');
 // Birdeye API - Free tier available at https://birdeye.so
 const BIRDEYE_API = 'https://public-api.birdeye.so';
 
+/** Ensure no token leaves with null name/symbol */
+function ensureTokenFields(tokens) {
+  for (const t of tokens) {
+    const addr = t.address || t.mintAddress || '';
+    if (!t.name) t.name = addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : null;
+    if (!t.symbol) t.symbol = addr ? addr.slice(0, 5).toUpperCase() : null;
+  }
+  return tokens;
+}
+
 // Cache for price history
 const historyCache = new Map();
 const CACHE_DURATION = 60000; // 1 minute
@@ -396,8 +406,8 @@ async function getTrendingTokens(options = {}) {
       return {
         mintAddress: token.address,
         address: token.address,
-        name: token.name || 'Unknown',
-        symbol: token.symbol || '???',
+        name: token.name || null,
+        symbol: token.symbol || null,
         decimals: token.decimals || 9,
         logoUri: token.logoURI || token.logo_uri || null,
         logoURI: token.logoURI || token.logo_uri || null,
@@ -415,7 +425,7 @@ async function getTrendingTokens(options = {}) {
       console.log('[Birdeye] Sample mapped token:', JSON.stringify(mapped[0], null, 2));
     }
 
-    return mapped;
+    return ensureTokenFields(mapped);
   } catch (error) {
     console.error('[Birdeye] Trending error:', error.message);
     if (error.response) {
@@ -465,13 +475,13 @@ async function getNewTokens(limit = 20) {
     const addresses = tokens.map(t => t.address).filter(Boolean);
     const prices = await getMultiTokenPrices(addresses);
 
-    return tokens.map(token => {
+    return ensureTokenFields(tokens.map(token => {
       const priceData = prices[token.address] || {};
       return {
         mintAddress: token.address,
         address: token.address,
-        name: token.name || 'Unknown',
-        symbol: token.symbol || '???',
+        name: token.name || null,
+        symbol: token.symbol || null,
         decimals: token.decimals || 9,
         logoUri: token.logoURI || token.logo_uri || null,
         logoURI: token.logoURI || token.logo_uri || null,
@@ -482,7 +492,7 @@ async function getNewTokens(limit = 20) {
         marketCap: priceData.mc || token.mc || token.market_cap || 0,
         createdAt: token.listing_time || token.createdAt || null
       };
-    });
+    }));
   } catch (error) {
     console.error('[Birdeye] New tokens error:', error.message);
     if (error.response) {
@@ -525,13 +535,13 @@ async function searchTokens(query, limit = 20) {
     const addresses = tokens.map(t => t.address).filter(Boolean);
     const prices = await getMultiTokenPrices(addresses);
 
-    return tokens.map(token => {
+    return ensureTokenFields(tokens.map(token => {
       const priceData = prices[token.address] || {};
       return {
         mintAddress: token.address,
         address: token.address,
-        name: token.name || 'Unknown',
-        symbol: token.symbol || '???',
+        name: token.name || null,
+        symbol: token.symbol || null,
         decimals: token.decimals || 9,
         logoUri: token.logoURI || token.logo_uri || null,
         logoURI: token.logoURI || token.logo_uri || null,
@@ -541,7 +551,7 @@ async function searchTokens(query, limit = 20) {
         liquidity: priceData.liquidity || token.liquidity || 0,
         marketCap: priceData.mc || 0
       };
-    });
+    }));
   } catch (error) {
     console.error('[Birdeye] Search error:', error.message);
     if (error.response) {

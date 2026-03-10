@@ -922,6 +922,14 @@ const api = {
         apiCache.TTL.tokenList,
         true
       );
+    },
+
+    async aiAnalysis(id, walletAddress) {
+      return api.request(`/api/folios/${id}/ai-analysis`, {
+        method: 'POST',
+        body: JSON.stringify({ walletAddress }),
+        timeout: 30000
+      });
     }
   },
 

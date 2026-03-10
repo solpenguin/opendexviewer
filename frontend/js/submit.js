@@ -454,8 +454,9 @@ const submitPage = {
       logo.src = this.tokenData.logoUri || this.tokenData.logoURI || this.tokenData.logo || utils.getDefaultLogo();
       logo.onerror = function() { this.src = utils.getDefaultLogo(); };
     }
-    if (name) name.textContent = this.tokenData.name || 'Unknown Token';
-    if (symbol) symbol.textContent = this.tokenData.symbol || '???';
+    const addr = this.tokenData.address || this.tokenData.mintAddress || this.mint || '';
+    if (name) name.textContent = this.tokenData.name || (addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : '...');
+    if (symbol) symbol.textContent = this.tokenData.symbol || (addr ? addr.slice(0, 5).toUpperCase() : '...');
 
     // Update banner preview
     const bannerImg = document.getElementById('preview-banner-img');
@@ -682,8 +683,9 @@ const submitPage = {
       logoEl.src = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
       logoEl.onerror = function() { this.src = utils.getDefaultLogo(); };
 
-      document.getElementById('preview-name').textContent = token.name || 'Unknown Token';
-      document.getElementById('preview-symbol').textContent = token.symbol || '???';
+      const tAddr = token.address || token.mintAddress || mintInput.value || '';
+      document.getElementById('preview-name').textContent = token.name || (tAddr ? `${tAddr.slice(0, 4)}...${tAddr.slice(-4)}` : '...');
+      document.getElementById('preview-symbol').textContent = token.symbol || (tAddr ? tAddr.slice(0, 5).toUpperCase() : '...');
 
       preview.style.display = 'flex';
       status.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -985,7 +987,8 @@ const submitPage = {
 
   // Show success modal
   showSuccessModal(results, errors) {
-    const safeTokenSymbol = utils.escapeHtml(this.tokenData?.symbol || 'Unknown');
+    const mintVal = document.getElementById('token-mint')?.value || '';
+    const safeTokenSymbol = utils.escapeHtml(this.tokenData?.symbol || (mintVal ? mintVal.slice(0, 5).toUpperCase() : '...'));
     const safeTokenMint = encodeURIComponent(document.getElementById('token-mint')?.value || '');
 
     const successItems = results.map(r => `<li>${utils.escapeHtml(r.type)}</li>`).join('');

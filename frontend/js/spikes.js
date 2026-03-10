@@ -185,8 +185,8 @@ var spikeDetector = (function() {
         html += '<div class="token-logo-placeholder"></div>';
       }
       html += '<div class="token-names">';
-      html += '<span class="token-name">' + escapeHtml(t.name || '???') + '</span>';
-      html += '<span class="token-symbol">' + escapeHtml(t.symbol || '???') + '</span>';
+      html += '<span class="token-name">' + escapeHtml(t.name || (addr.slice(0, 4) + '...' + addr.slice(-4))) + '</span>';
+      html += '<span class="token-symbol">' + escapeHtml(t.symbol || addr.slice(0, 5).toUpperCase()) + '</span>';
       html += '</div></div></td>';
 
       // Age

@@ -113,8 +113,8 @@ const communityPage = {
 
     const defaultLogo = utils.getDefaultLogo();
     const logo = this.escapeHtml(token.logoUri || token.logoURI || defaultLogo);
-    const name = this.escapeHtml(token.name || 'Unknown');
-    const symbol = this.escapeHtml(token.symbol || '???');
+    const name = this.escapeHtml(token.name || `${address.slice(0, 4)}...${address.slice(-4)}`);
+    const symbol = this.escapeHtml(token.symbol || address.slice(0, 5).toUpperCase());
 
     let metricValue, metricLabel;
     if (metric === 'calls') {
@@ -257,8 +257,8 @@ const communityPage = {
 
       const safeAddress = this.escapeHtml(address);
       const safeLogo = this.escapeHtml(token.logoUri || token.logoURI || defaultLogo);
-      const safeName = this.escapeHtml(token.name || 'Unknown');
-      const safeSymbol = this.escapeHtml(token.symbol || '???');
+      const safeName = this.escapeHtml(token.name || `${address.slice(0, 4)}...${address.slice(-4)}`);
+      const safeSymbol = this.escapeHtml(token.symbol || address.slice(0, 5).toUpperCase());
 
       let metricHtml;
       if (this.currentTab === 'watchlist') {
@@ -528,11 +528,12 @@ const communityPage = {
 
         const name = document.createElement('span');
         name.className = 'call-modal-result-name';
-        name.textContent = token.name || 'Unknown';
+        const addr = token.mintAddress || token.address || '';
+        name.textContent = token.name || (addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : '...');
 
         const symbol = document.createElement('span');
         symbol.className = 'call-modal-result-symbol';
-        symbol.textContent = token.symbol || '???';
+        symbol.textContent = token.symbol || (addr ? addr.slice(0, 5).toUpperCase() : '...');
 
         info.appendChild(name);
         info.appendChild(symbol);
@@ -797,8 +798,9 @@ const communityPage = {
     ctx.stroke();
 
     // Token name & symbol
-    const name = callData.name || 'Unknown';
-    const symbol = callData.symbol || '???';
+    const callAddr = callData.mintAddress || callData.address || '';
+    const name = callData.name || (callAddr ? `${callAddr.slice(0, 4)}...${callAddr.slice(-4)}` : '...');
+    const symbol = callData.symbol || (callAddr ? callAddr.slice(0, 5).toUpperCase() : '...');
 
     ctx.font = '700 64px Inter, sans-serif';
     ctx.fillStyle = TEXT_PRIMARY;
@@ -1052,9 +1054,9 @@ const communityPage = {
 
     const defaultLogo = utils.getDefaultLogo();
     const logoSrc = token.logoURI || token.logoUri || defaultLogo;
-    const name = this.escapeHtml(token.name || 'Unknown');
-    const symbol = this.escapeHtml(token.symbol || '???');
     const address = token.address || token.mintAddress || '';
+    const name = this.escapeHtml(token.name || (address ? `${address.slice(0, 4)}...${address.slice(-4)}` : '...'));
+    const symbol = this.escapeHtml(token.symbol || (address ? address.slice(0, 5).toUpperCase() : '...'));
 
     if (!address) {
       modal.remove();

@@ -163,7 +163,8 @@ const widgetBuilder = {
   // Show enriched token info card below the address input
   renderTokenEnrichment(token) {
     const statusEl = document.getElementById('widget-token-status');
-    const name = token.name || 'Unknown Token';
+    const tAddr = token.address || token.mintAddress || '';
+    const name = token.name || (tAddr ? `${tAddr.slice(0, 4)}...${tAddr.slice(-4)}` : '...');
     const symbol = token.symbol || '';
     const logo = token.logoUri || token.logoURI || token.logo || '';
     const price = this.formatPrice(token.price);
@@ -282,7 +283,8 @@ const widgetBuilder = {
     if (logoUrl) {
       html += `<img src="${this.escapeHtml(logoUrl)}" width="28" height="28" style="border-radius:50%;object-fit:cover;background:${statBg};" alt="">`;
     }
-    html += `<span style="font-weight:600;font-size:0.9375rem;">${this.escapeHtml(t.name || 'Unknown')}</span>`;
+    const wAddr = t.address || t.mintAddress || '';
+    html += `<span style="font-weight:600;font-size:0.9375rem;">${this.escapeHtml(t.name || (wAddr ? `${wAddr.slice(0, 4)}...${wAddr.slice(-4)}` : '...'))}</span>`;
     html += `<span style="font-size:0.75rem;opacity:0.5;">${this.escapeHtml(t.symbol || '')}</span>`;
     html += `</div>`;
 

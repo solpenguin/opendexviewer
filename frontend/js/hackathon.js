@@ -108,8 +108,8 @@ const hackathonPage = {
 
       const safeAddress = utils.escapeHtml(address);
       const safeLogo = utils.escapeHtml(token.logoUri || token.logoURI || defaultLogo);
-      const safeName = utils.escapeHtml(token.name || 'Unknown');
-      const safeSymbol = utils.escapeHtml(token.symbol || '???');
+      const safeName = utils.escapeHtml(token.name || `${address.slice(0, 4)}...${address.slice(-4)}`);
+      const safeSymbol = utils.escapeHtml(token.symbol || address.slice(0, 5).toUpperCase());
 
       return `
         <tr class="token-row" data-mint="${safeAddress}">

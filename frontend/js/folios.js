@@ -1,9 +1,10 @@
-/* global api, utils */
+/* global api, utils, wallet */
 
 const foliosPage = {
   folios: [],
   currentFolio: null,
   isLoading: false,
+  aiAnalysisCost: 50,
 
   init() {
     document.getElementById('folio-back-btn')?.addEventListener('click', () => this.showList());
@@ -16,6 +17,11 @@ const foliosPage = {
         if (!isNaN(id)) this.loadDetail(id);
       }
     });
+
+    // Load AI analysis cost from config
+    api.burnCredits.getConfig().then(config => {
+      if (config?.folioAIAnalysisCost) this.aiAnalysisCost = config.folioAIAnalysisCost;
+    }).catch(() => {});
 
     // Check URL for folio ID
     const params = new URLSearchParams(window.location.search);
@@ -179,6 +185,19 @@ const foliosPage = {
       descEl.style.display = folio.description ? '' : 'none';
     }
 
+    // AI Analysis button
+    const aiBtn = document.getElementById('folio-ai-btn');
+    const aiResult = document.getElementById('folio-ai-result');
+    if (aiBtn) {
+      aiBtn.querySelector('.folio-ai-cost').textContent = `${this.aiAnalysisCost} BC`;
+      aiBtn.disabled = false;
+      aiBtn.onclick = () => this.runAIAnalysis();
+    }
+    if (aiResult) {
+      aiResult.style.display = 'none';
+      aiResult.innerHTML = '';
+    }
+
     // Token table
     const tbody = document.getElementById('folio-tokens-body');
     if (!tbody) return;
@@ -189,8 +208,9 @@ const foliosPage = {
     }
 
     tbody.innerHTML = folio.tokens.map((t, i) => {
-      const name = t.name || 'Unknown';
-      const symbol = t.symbol || '???';
+      const mint = t.token_mint || '';
+      const name = t.name || (mint ? `${mint.slice(0, 4)}...${mint.slice(-4)}` : 'Loading...');
+      const symbol = t.symbol || (mint ? mint.slice(0, 5).toUpperCase() : '...');
       const logo = t.logo_uri
         ? `<img src="${this.esc(t.logo_uri)}" alt="${this.esc(symbol)}" class="token-logo" width="24" height="24" loading="lazy" onerror="this.style.display='none'">`
         : '';
@@ -216,6 +236,98 @@ const foliosPage = {
           <td class="cell-note">${t.note ? this.esc(t.note) : ''}</td>
         </tr>
       `;
+    }).join('');
+  },
+
+  async runAIAnalysis() {
+    const folio = this.currentFolio;
+    if (!folio) return;
+
+    // Check wallet connection
+    if (typeof wallet === 'undefined' || !wallet.connected || !wallet.address) {
+      if (typeof wallet !== 'undefined') wallet.connect();
+      return;
+    }
+
+    const aiBtn = document.getElementById('folio-ai-btn');
+    const aiResult = document.getElementById('folio-ai-result');
+    if (!aiBtn || !aiResult) return;
+
+    // Show loading state
+    aiBtn.disabled = true;
+    aiBtn.innerHTML = `
+      <svg class="folio-ai-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2v4m0 12v4m-7.07-3.93l2.83-2.83m8.48-8.48l2.83-2.83M2 12h4m12 0h4m-3.93 7.07l-2.83-2.83M7.76 7.76L4.93 4.93"/>
+      </svg>
+      Analyzing...
+    `;
+    aiResult.style.display = 'none';
+
+    try {
+      const result = await api.folios.aiAnalysis(folio.id, wallet.address);
+
+      aiResult.style.display = '';
+      aiResult.innerHTML = `
+        <div class="folio-ai-analysis">
+          <div class="folio-ai-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/>
+              <path d="M12 2a4 4 0 00-4 4c0 1.95 1.4 3.58 3.25 3.93"/>
+            </svg>
+            AI Folio Analysis${result.cached ? ' <span class="folio-ai-cached">(cached)</span>' : ''}
+          </div>
+          <div class="folio-ai-text">${this.formatAnalysis(result.analysis)}</div>
+        </div>
+      `;
+
+      // Reset button
+      aiBtn.disabled = false;
+      aiBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/>
+          <path d="M12 2a4 4 0 00-4 4c0 1.95 1.4 3.58 3.25 3.93"/>
+        </svg>
+        AI Analysis <span class="folio-ai-cost">${this.aiAnalysisCost} BC</span>
+      `;
+
+      // Refresh BC badge if exists
+      if (typeof wallet !== 'undefined' && wallet.address) {
+        document.dispatchEvent(new CustomEvent('bc-balance-changed'));
+      }
+    } catch (err) {
+      let errorMsg = 'AI analysis temporarily unavailable. Please try again.';
+
+      if (err?.code === 'INSUFFICIENT_BC') {
+        errorMsg = `${err.message} <a href="burn.html" class="folio-ai-burn-link">Get more BC</a>`;
+      } else if (err?.code === 'WALLET_REQUIRED') {
+        errorMsg = 'Please connect your wallet to use AI analysis.';
+      } else if (err?.message) {
+        errorMsg = this.esc(err.message);
+      }
+
+      aiResult.style.display = '';
+      aiResult.innerHTML = `<div class="folio-ai-error">${errorMsg}</div>`;
+
+      // Reset button
+      aiBtn.disabled = false;
+      aiBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22"/>
+          <path d="M12 2a4 4 0 00-4 4c0 1.95 1.4 3.58 3.25 3.93"/>
+        </svg>
+        AI Analysis <span class="folio-ai-cost">${this.aiAnalysisCost} BC</span>
+      `;
+    }
+  },
+
+  formatAnalysis(text) {
+    if (!text) return '';
+    // Convert line breaks to paragraphs, escape HTML
+    return text.split(/\n\n+/).map(p => {
+      const escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      // Bold **text**
+      const bolded = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      return `<p>${bolded}</p>`;
     }).join('');
   },
 

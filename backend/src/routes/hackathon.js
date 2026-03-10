@@ -87,7 +87,7 @@ router.get('/tokens', asyncHandler(async (req, res) => {
           const h = heliusData[mint];
           metadataMap.set(mint, {
             name: h.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-            symbol: h.symbol || '???',
+            symbol: h.symbol || mint.slice(0, 5).toUpperCase(),
             decimals: h.decimals || 9,
             logoUri: h.logoUri || null,
             supply: h.supply || null
@@ -96,7 +96,7 @@ router.get('/tokens', asyncHandler(async (req, res) => {
           const d = dbMap.get(mint);
           metadataMap.set(mint, {
             name: d.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-            symbol: d.symbol || '???',
+            symbol: d.symbol || mint.slice(0, 5).toUpperCase(),
             decimals: d.decimals || 9,
             logoUri: d.logo_uri || null,
             supply: null
@@ -104,7 +104,7 @@ router.get('/tokens', asyncHandler(async (req, res) => {
         } else {
           metadataMap.set(mint, {
             name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-            symbol: '???',
+            symbol: mint.slice(0, 5).toUpperCase(),
             decimals: 9,
             logoUri: null,
             supply: null

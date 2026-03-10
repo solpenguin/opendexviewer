@@ -215,8 +215,8 @@ const ogFinderPage = {
 
       var safeMint = utils.escapeHtml(mint);
       var safeLogo = utils.escapeHtml(token.imageUri || defaultLogo);
-      var safeName = utils.escapeHtml(token.name || 'Unknown');
-      var safeSymbol = utils.escapeHtml(token.symbol || '???');
+      var safeName = utils.escapeHtml(token.name || (mint.slice(0, 4) + '...' + mint.slice(-4)));
+      var safeSymbol = utils.escapeHtml(token.symbol || mint.slice(0, 5).toUpperCase());
 
       // Format mint date — show full date + relative age
       var dateStr = '--';

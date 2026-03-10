@@ -11,6 +11,16 @@ const GECKO_API = COINGECKO_API_KEY
   : 'https://api.geckoterminal.com/api/v2';
 const NETWORK = 'solana';
 
+/** Ensure no token leaves with null name/symbol — use truncated address as fallback */
+function ensureTokenMetadata(tokens) {
+  for (const t of tokens) {
+    const addr = t.address || t.mintAddress || '';
+    if (!t.name) t.name = addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : null;
+    if (!t.symbol) t.symbol = addr ? addr.slice(0, 5).toUpperCase() : null;
+  }
+  return tokens;
+}
+
 if (COINGECKO_API_KEY) {
   console.log('[GeckoTerminal] Using CoinGecko Pro API (paid tier)');
 } else {
@@ -210,8 +220,8 @@ async function getTokenInfo(mintAddress) {
     return {
       mintAddress: attrs.address,
       address: attrs.address,
-      name: attrs.name || 'Unknown',
-      symbol: attrs.symbol || '???',
+      name: attrs.name || null,
+      symbol: attrs.symbol || null,
       decimals: attrs.decimals || 9,
       logoUri: attrs.image_url || null,
       logoURI: attrs.image_url || null,
@@ -336,7 +346,7 @@ async function getTokenOverview(mintAddress) {
 
     // Parse pool name for symbol (format: "TOKEN / SOL")
     const poolName = topPool.name || '';
-    const symbol = poolName.split(' / ')[0] || '???';
+    const symbol = poolName.split(' / ')[0] || null;
 
     // Collect DEX IDs from all pools for filtering
     const dexIds = [...new Set(pools.map(p =>
@@ -454,7 +464,7 @@ async function getTrendingTokens(options = {}) {
 
       // Parse pool name to get token info (format: "TOKEN / SOL")
       const poolName = attrs.name || '';
-      const tokenSymbol = poolName.split(' / ')[0] || '???';
+      const tokenSymbol = poolName.split(' / ')[0] || null;
 
       tokens.push({
         mintAddress: baseAddress,
@@ -502,7 +512,7 @@ async function getTrendingTokens(options = {}) {
       console.log('[GeckoTerminal] Sample trending token:', JSON.stringify(tokens[0], null, 2));
     }
 
-    return tokens;
+    return ensureTokenMetadata(tokens);
   } catch (error) {
     console.error('[GeckoTerminal] getTrendingTokens error:', error.message);
     if (error.response) {
@@ -557,7 +567,7 @@ async function getNewTokens(limit = 20, skipEnrichment = false, page = 1) {
       seenAddresses.add(baseAddress);
 
       const poolName = attrs.name || '';
-      const tokenSymbol = poolName.split(' / ')[0] || '???';
+      const tokenSymbol = poolName.split(' / ')[0] || null;
 
       tokens.push({
         mintAddress: baseAddress,
@@ -598,7 +608,7 @@ async function getNewTokens(limit = 20, skipEnrichment = false, page = 1) {
     }
 
     console.log(`[GeckoTerminal] Returning ${tokens.length} new tokens`);
-    return tokens;
+    return ensureTokenMetadata(tokens);
   } catch (error) {
     console.error('[GeckoTerminal] getNewTokens error:', error.message);
     return [];
@@ -654,7 +664,7 @@ async function searchTokens(query, limit = 20, allowedDexPrefixes = null) {
       seenAddresses.add(baseAddress);
 
       const poolName = attrs.name || '';
-      const tokenSymbol = poolName.split(' / ')[0] || '???';
+      const tokenSymbol = poolName.split(' / ')[0] || null;
 
       tokens.push({
         mintAddress: baseAddress,
@@ -697,7 +707,7 @@ async function searchTokens(query, limit = 20, allowedDexPrefixes = null) {
       }
     }
 
-    return tokens;
+    return ensureTokenMetadata(tokens);
   } catch (error) {
     console.error('[GeckoTerminal] searchTokens error:', error.message);
     return [];

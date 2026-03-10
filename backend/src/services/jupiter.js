@@ -204,23 +204,24 @@ async function getTokenInfo(mintAddress) {
       return {
         mintAddress,
         address: mintAddress,
-        name: priceData.symbol || 'Unknown Token',
-        symbol: priceData.symbol || 'UNKNOWN',
+        name: null, // Price API doesn't have name, only symbol
+        symbol: priceData.symbol || null,
         decimals: priceData.decimals || 9,
         logoUri: null,
-        logoURI: null
+        logoURI: null,
+        price: priceData.price ? parseFloat(priceData.price) : 0
       };
     }
   } catch (priceError) {
     console.warn('Jupiter price API lookup failed:', priceError.message);
   }
 
-  // Return basic info if all else fails
+  // Return basic info if all else fails — null name/symbol so callers know data is missing
   return {
     mintAddress,
     address: mintAddress,
-    name: 'Unknown Token',
-    symbol: 'UNKNOWN',
+    name: null,
+    symbol: null,
     decimals: 9,
     logoUri: null,
     logoURI: null
@@ -565,8 +566,8 @@ function formatToken(token) {
   return {
     mintAddress: address,
     address: address,
-    name: token.name || 'Unknown',
-    symbol: token.symbol || 'UNKNOWN',
+    name: token.name || null,
+    symbol: token.symbol || null,
     decimals: token.decimals || 9,
     logoUri: token.logoURI || token.logoUri || token.logo || null,
     logoURI: token.logoURI || token.logoUri || token.logo || null,

@@ -62,7 +62,7 @@ router.get('/wallet/:wallet', defaultLimiter, asyncHandler(async (req, res) => {
     id: r.id,
     tokenMint: r.token_mint,
     name: r.name || `${r.token_mint.slice(0, 4)}...${r.token_mint.slice(-4)}`,
-    symbol: r.symbol || '???',
+    symbol: r.symbol || r.token_mint.slice(0, 5).toUpperCase(),
     logoUri: r.logo_uri || null,
     mcapAtCall: r.mcap_at_call ? parseFloat(r.mcap_at_call) : null,
     currentMcap: r.market_cap ? parseFloat(r.market_cap) : null,

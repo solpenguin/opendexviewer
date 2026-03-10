@@ -603,10 +603,10 @@ const tokenDetail = {
     this.updateWatchlistButton();
 
     const nameEl = document.getElementById('token-name');
-    if (nameEl) nameEl.textContent = token.name || 'Unknown Token';
+    if (nameEl) nameEl.textContent = token.name || `${this.mint.slice(0, 4)}...${this.mint.slice(-4)}`;
 
     const symbolEl = document.getElementById('token-symbol');
-    if (symbolEl) symbolEl.textContent = token.symbol || '???';
+    if (symbolEl) symbolEl.textContent = token.symbol || this.mint.slice(0, 5).toUpperCase();
 
     const addressEl = document.getElementById('token-address');
     if (addressEl) addressEl.textContent = this.mint;
@@ -843,8 +843,8 @@ const tokenDetail = {
           }
         } catch { logoUrl = defaultLogo; }
         const logoSrc = this.escapeHtml(logoUrl);
-        const name = this.escapeHtml(token.name || 'Unknown');
-        const symbol = this.escapeHtml(token.symbol || '???');
+        const name = this.escapeHtml(token.name || `${token.address.slice(0, 4)}...${token.address.slice(-4)}`);
+        const symbol = this.escapeHtml(token.symbol || token.address.slice(0, 5).toUpperCase());
         const address = this.escapeHtml(token.address);
         const truncAddr = utils.truncateAddress(token.address, 6, 4);
         const scoreHtml = token.similarityScore !== null
@@ -999,9 +999,9 @@ const tokenDetail = {
       const mint = token.mint || '';
       if (!mint) return '';
       const logoUrl = this.escapeHtml(token.imageUri || defaultLogo);
-      const name = this.escapeHtml(token.name || 'Unknown');
-      const symbol = this.escapeHtml(token.symbol || '???');
       const shortMint = mint.length > 12 ? mint.slice(0, 4) + '...' + mint.slice(-4) : mint;
+      const name = this.escapeHtml(token.name || shortMint);
+      const symbol = this.escapeHtml(token.symbol || mint.slice(0, 5).toUpperCase());
       const age = this._formatOGAge(token.createdTimestamp);
       const mcap = token.marketCap ? utils.formatNumber(token.marketCap, '$') : '--';
       const graduatedBadge = token.complete

@@ -333,8 +333,8 @@ const jobProcessors = {
           const overview = result.value;
           const t = needsOverview[i];
           if (!t.pairCreatedAt && overview.pairCreatedAt) t.pairCreatedAt = overview.pairCreatedAt;
-          if (!t.name && overview.name && overview.name !== '???') t.name = overview.name;
-          if (!t.symbol && overview.symbol && overview.symbol !== '???') t.symbol = overview.symbol;
+          if (!t.name && overview.name && overview.name !== '???' && overview.name.toLowerCase() !== 'unknown token' && overview.name.toLowerCase() !== 'unknown') t.name = overview.name;
+          if (!t.symbol && overview.symbol && overview.symbol !== '???' && overview.symbol !== 'UNKNOWN') t.symbol = overview.symbol;
           if (!t.price && overview.price) t.price = overview.price;
           if (!t.marketCap && overview.marketCap) t.marketCap = overview.marketCap;
           if (!t.volume24h && overview.volume24h) t.volume24h = overview.volume24h;

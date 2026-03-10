@@ -11,6 +11,9 @@ const { searchLimiter, strictLimiter, veryStrictLimiter } = require('../middlewa
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 
+// Names that indicate missing/placeholder metadata
+const PLACEHOLDER_NAMES = new Set(['unknown token', 'unknown', '']);
+
 // Helius DAS URL for holder verification fallback
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const HELIUS_DAS_URL = HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : null;
@@ -141,13 +144,14 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         const helius = heliusMetadata[mint];
         const cached = cacheResults[mint];
 
-        // Use best available data source
-        if (local?.name) {
+        // Use best available data source (skip local if it has a placeholder name)
+        const localHasRealName = local?.name && !PLACEHOLDER_NAMES.has(local.name.toLowerCase());
+        if (localHasRealName) {
           return {
             mintAddress: mint,
             address: mint,
             name: local.name,
-            symbol: local.symbol || '???',
+            symbol: local.symbol || mint.slice(0, 5).toUpperCase(),
             price: local.price || 0,
             priceChange24h: local.price_change_24h || 0,
             volume24h: local.volume_24h || 0,
@@ -158,12 +162,12 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
           };
         }
 
-        if (helius?.name) {
+        if (helius?.name && !PLACEHOLDER_NAMES.has(helius.name.toLowerCase())) {
           return {
             mintAddress: mint,
             address: mint,
             name: helius.name,
-            symbol: helius.symbol || '???',
+            symbol: helius.symbol || mint.slice(0, 5).toUpperCase(),
             price: 0,
             priceChange24h: 0,
             volume24h: 0,
@@ -174,12 +178,13 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
           };
         }
 
-        if (cached?.name) {
+        const cachedHasRealName = cached?.name && !PLACEHOLDER_NAMES.has(cached.name.toLowerCase());
+        if (cachedHasRealName) {
           return {
             mintAddress: mint,
             address: mint,
             name: cached.name,
-            symbol: cached.symbol || '???',
+            symbol: cached.symbol || mint.slice(0, 5).toUpperCase(),
             price: cached.price || 0,
             priceChange24h: cached.priceChange24h || 0,
             volume24h: cached.volume24h || 0,
@@ -195,7 +200,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
           mintAddress: mint,
           address: mint,
           name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-          symbol: '???',
+          symbol: mint.slice(0, 5).toUpperCase(),
           price: 0,
           priceChange24h: 0,
           volume24h: 0,
@@ -278,29 +283,29 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         const helius = heliusMetadata[mint];
         const cached = cacheResults[mint];
 
-        if (local?.name) {
+        if (local?.name && !PLACEHOLDER_NAMES.has(local.name.toLowerCase())) {
           return {
             mintAddress: mint, address: mint,
-            name: local.name, symbol: local.symbol || '???',
+            name: local.name, symbol: local.symbol || mint.slice(0, 5).toUpperCase(),
             price: local.price || 0, priceChange24h: local.price_change_24h || 0,
             volume24h: local.volume_24h || 0, marketCap: local.market_cap || 0,
             logoUri: local.logo_uri || null, logoURI: local.logo_uri || null,
             views: 0
           };
         }
-        if (helius?.name) {
+        if (helius?.name && !PLACEHOLDER_NAMES.has(helius.name.toLowerCase())) {
           return {
             mintAddress: mint, address: mint,
-            name: helius.name, symbol: helius.symbol || '???',
+            name: helius.name, symbol: helius.symbol || mint.slice(0, 5).toUpperCase(),
             price: 0, priceChange24h: 0, volume24h: 0, marketCap: 0,
             logoUri: helius.logoUri || null, logoURI: helius.logoUri || null,
             views: 0
           };
         }
-        if (cached?.name) {
+        if (cached?.name && !PLACEHOLDER_NAMES.has(cached.name.toLowerCase())) {
           return {
             mintAddress: mint, address: mint,
-            name: cached.name, symbol: cached.symbol || '???',
+            name: cached.name, symbol: cached.symbol || mint.slice(0, 5).toUpperCase(),
             price: cached.price || 0, priceChange24h: cached.priceChange24h || 0,
             volume24h: cached.volume24h || 0, marketCap: cached.marketCap || 0,
             logoUri: cached.logoUri || null, logoURI: cached.logoURI || null,
@@ -309,7 +314,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
         }
         return {
           mintAddress: mint, address: mint,
-          name: `${mint.slice(0, 4)}...${mint.slice(-4)}`, symbol: '???',
+          name: `${mint.slice(0, 4)}...${mint.slice(-4)}`, symbol: mint.slice(0, 5).toUpperCase(),
           price: 0, priceChange24h: 0, volume24h: 0, marketCap: 0,
           logoUri: null, logoURI: null, views: 0
         };
@@ -461,7 +466,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
   }
 }));
 
-const MIN_SEARCH_RESULTS = 5;
+const MIN_SEARCH_RESULTS = 15;
 const MAX_BATCH_SIZE = 50; // Limit batch requests to prevent abuse
 
 // POST /api/tokens/batch - Get multiple tokens in one request (optimized for watchlist)
@@ -560,14 +565,20 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
       // Combine all sources and cache results
       for (const mint of uncachedMints) {
         let tokenData = null;
+        const mintShort = `${mint.slice(0, 4)}...${mint.slice(-4)}`;
+        const mintSymbol = mint.slice(0, 5).toUpperCase();
 
-        if (heliusData[mint]) {
+        const heliusHasName = heliusData[mint]?.name && !PLACEHOLDER_NAMES.has(heliusData[mint].name.toLowerCase());
+        const localHasName = localTokens[mint]?.name && !PLACEHOLDER_NAMES.has(localTokens[mint].name.toLowerCase());
+        const geckoHasName = geckoData[mint]?.name && !PLACEHOLDER_NAMES.has(geckoData[mint].name.toLowerCase());
+
+        if (heliusHasName) {
           const h = heliusData[mint];
           tokenData = {
             mintAddress: mint,
             address: mint,
-            name: h.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-            symbol: h.symbol || '???',
+            name: h.name,
+            symbol: h.symbol || mintSymbol,
             decimals: h.decimals || 9,
             logoUri: h.logoUri || null,
             logoURI: h.logoUri || null,
@@ -576,15 +587,15 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
             volume24h: 0,
             marketCap: 0
           };
-        } else if (localTokens[mint]) {
+        } else if (localHasName) {
           tokenData = localTokens[mint];
-        } else if (geckoData[mint]) {
+        } else if (geckoHasName) {
           const g = geckoData[mint];
           tokenData = {
             mintAddress: mint,
             address: mint,
-            name: g.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-            symbol: g.symbol || '???',
+            name: g.name,
+            symbol: g.symbol || mintSymbol,
             decimals: g.decimals || 9,
             logoUri: g.logoUri || null,
             logoURI: g.logoUri || null,
@@ -594,12 +605,12 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
             marketCap: g.marketCap || 0
           };
         } else {
-          // Fallback: minimal data
+          // Fallback: minimal data with truncated mint as name
           tokenData = {
             mintAddress: mint,
             address: mint,
-            name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
-            symbol: '???',
+            name: mintShort,
+            symbol: mintSymbol,
             decimals: 9,
             logoUri: null,
             logoURI: null,
@@ -694,7 +705,6 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
       }
 
       // Check if local result has a placeholder name
-      const PLACEHOLDER_NAMES = new Set(['unknown token', 'unknown']);
       const localIsPlaceholder = tokenInfo && (
         !tokenInfo.name || PLACEHOLDER_NAMES.has(tokenInfo.name.toLowerCase())
       );
@@ -765,41 +775,39 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
       }
     }
 
-    // 2. If we have fewer than MIN_SEARCH_RESULTS, fetch from external APIs in parallel
-    if (results.length < MIN_SEARCH_RESULTS) {
-      try {
-        const [geckoResults, jupiterResults] = await Promise.all([
-          geckoService.searchTokens(query, MIN_SEARCH_RESULTS, dexPrefixes).catch(() => []),
-          jupiterService.searchTokens(query).catch(() => [])
-        ]);
+    // 2. If local results are insufficient, fetch from external APIs in parallel
+    if (results.length < MIN_SEARCH_RESULTS) try {
+      const [geckoResults, jupiterResults] = await Promise.all([
+        geckoService.searchTokens(query, MIN_SEARCH_RESULTS, dexPrefixes).catch(() => []),
+        jupiterService.searchTokens(query).catch(() => [])
+      ]);
 
-        // Merge results: GeckoTerminal first (free, no API key), then Jupiter
-        const allExternal = [...(geckoResults || []), ...(jupiterResults || [])];
+      // Merge results: GeckoTerminal first (free, no API key), then Jupiter
+      const allExternal = [...(geckoResults || []), ...(jupiterResults || [])];
 
-        for (const token of allExternal) {
-          const address = token.address || token.mint;
-          if (!address || !SOLANA_ADDRESS_REGEX.test(address)) continue;
-          if (!seenAddresses.has(address)) {
-            seenAddresses.add(address);
-            results.push({
-              address,
-              name: token.name,
-              symbol: token.symbol,
-              decimals: token.decimals,
-              logoURI: token.logoURI || token.logoUri || token.logo,
-              price: token.price || 0,
-              priceChange24h: token.priceChange24h ?? null,
-              volume24h: token.volume24h ?? null,
-              marketCap: token.marketCap ?? null,
-              source: 'external'
-            });
+      for (const token of allExternal) {
+        const address = token.address || token.mint;
+        if (!address || !SOLANA_ADDRESS_REGEX.test(address)) continue;
+        if (!seenAddresses.has(address)) {
+          seenAddresses.add(address);
+          results.push({
+            address,
+            name: token.name || `${address.slice(0, 4)}...${address.slice(-4)}`,
+            symbol: token.symbol || address.slice(0, 5).toUpperCase(),
+            decimals: token.decimals,
+            logoURI: token.logoURI || token.logoUri || token.logo,
+            price: token.price || 0,
+            priceChange24h: token.priceChange24h ?? null,
+            volume24h: token.volume24h ?? null,
+            marketCap: token.marketCap ?? null,
+            source: 'external'
+          });
 
-            if (results.length >= MIN_SEARCH_RESULTS) break;
-          }
+          if (results.length >= MIN_SEARCH_RESULTS) break;
         }
-      } catch (err) {
-        // Privacy: Don't log error details
       }
+    } catch (err) {
+      // Privacy: Don't log error details
     }
 
     // Enrich with community update flags
@@ -860,7 +868,7 @@ router.get('/leaderboard/watchlist', asyncHandler(async (req, res) => {
       mintAddress: r.token_mint,
       address: r.token_mint,
       name: r.name || helius?.name || `${r.token_mint.slice(0, 4)}...${r.token_mint.slice(-4)}`,
-      symbol: r.symbol || helius?.symbol || '???',
+      symbol: r.symbol || helius?.symbol || r.token_mint.slice(0, 5).toUpperCase(),
       price: parseFloat(r.price) || 0,
       priceChange24h: 0,
       volume24h: parseFloat(r.volume_24h) || 0,
@@ -921,7 +929,7 @@ router.get('/leaderboard/sentiment', asyncHandler(async (req, res) => {
       mintAddress: r.token_mint,
       address: r.token_mint,
       name: r.name || helius?.name || `${r.token_mint.slice(0, 4)}...${r.token_mint.slice(-4)}`,
-      symbol: r.symbol || helius?.symbol || '???',
+      symbol: r.symbol || helius?.symbol || r.token_mint.slice(0, 5).toUpperCase(),
       price: parseFloat(r.price) || 0,
       priceChange24h: 0,
       volume24h: parseFloat(r.volume_24h) || 0,
@@ -970,7 +978,7 @@ router.get('/leaderboard/calls', asyncHandler(async (req, res) => {
       mintAddress: r.token_mint,
       address: r.token_mint,
       name: r.name || helius?.name || `${r.token_mint.slice(0, 4)}...${r.token_mint.slice(-4)}`,
-      symbol: r.symbol || helius?.symbol || '???',
+      symbol: r.symbol || helius?.symbol || r.token_mint.slice(0, 5).toUpperCase(),
       price: parseFloat(r.price) || 0,
       priceChange24h: 0,
       volume24h: parseFloat(r.volume_24h) || 0,
@@ -1097,7 +1105,7 @@ router.get('/spikes', searchLimiter, asyncHandler(async (req, res) => {
             const meta = metadata[addr];
             if (meta) {
               if (!token.name || token.name === token.symbol) token.name = meta.name || token.name;
-              if (!token.symbol || token.symbol === '???') token.symbol = meta.symbol || token.symbol;
+              if (!token.symbol || token.symbol === '???' || token.symbol === (addr || '').slice(0, 5).toUpperCase()) token.symbol = meta.symbol || token.symbol;
               if (!token.logoUri && !token.logoURI) {
                 token.logoUri = meta.logoUri || null;
                 token.logoURI = meta.logoUri || null;
@@ -1169,7 +1177,7 @@ router.get('/spikes', searchLimiter, asyncHandler(async (req, res) => {
         mintAddress: addr,
         address: addr,
         name: token.name || `${addr.slice(0, 4)}...${addr.slice(-4)}`,
-        symbol: token.symbol || '???',
+        symbol: token.symbol || addr.slice(0, 5).toUpperCase(),
         logoUri: token.logoUri || token.logoURI || null,
         price: token.price || 0,
         priceChange24h: priceChange,
@@ -1284,16 +1292,25 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         circulatingSupply = supply;
       }
 
+      // If neither Helius nor GeckoTerminal have the name, try Jupiter as last resort
+      let jupiterMeta = null;
+      if (!helius.name && !gecko.name) {
+        try {
+          jupiterMeta = await jupiterService.getTokenInfo(mint);
+        } catch { /* non-critical */ }
+      }
+      const jup = jupiterMeta || {};
+
       // Merge data with priority:
-      // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal
+      // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal > Jupiter
       // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
       // - Market data (volume, price change, liquidity): GeckoTerminal only
       const tokenResult = {
         mintAddress: mint,
         address: mint,
-        // Metadata: prefer Helius (faster, from RPC) then GeckoTerminal
-        name: helius.name || gecko.name || 'Unknown Token',
-        symbol: helius.symbol || gecko.symbol || '???',
+        // Metadata: prefer Helius (faster, from RPC) then GeckoTerminal then Jupiter
+        name: helius.name || gecko.name || jup.name || `${mint.slice(0, 4)}...${mint.slice(-4)}`,
+        symbol: helius.symbol || gecko.symbol || jup.symbol || mint.slice(0, 5).toUpperCase(),
         decimals: helius.decimals || gecko.decimals || 9,
         logoUri: helius.logoUri || gecko.logoUri || null,
         logoURI: helius.logoUri || gecko.logoURI || null,

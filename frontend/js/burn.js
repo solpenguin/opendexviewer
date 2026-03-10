@@ -656,6 +656,8 @@ const burnPage = {
   formatFeatureName(feature) {
     const names = {
       'ai_holder_analysis': 'AI Holder Analysis',
+      'ai_advanced_analysis': 'Advanced AI Analysis',
+      'folio_ai_analysis': 'Folio AI Analysis',
     };
     return names[feature] || feature.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   },
@@ -665,6 +667,9 @@ const burnPage = {
     if (metadata.mint) {
       const short = metadata.mint.slice(0, 6) + '...' + metadata.mint.slice(-4);
       return this.escapeHtml(short);
+    }
+    if (metadata.folioId) {
+      return `Folio #${metadata.folioId}`;
     }
     return '';
   },

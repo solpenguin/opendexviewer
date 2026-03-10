@@ -482,8 +482,8 @@ const tokenList = {
           return {
             mintAddress: item.mint,
             address: item.mint,
-            name: item.name || 'Unknown',
-            symbol: item.symbol || '???',
+            name: item.name || `${item.mint.slice(0, 4)}...${item.mint.slice(-4)}`,
+            symbol: item.symbol || item.mint.slice(0, 5).toUpperCase(),
             logoUri: item.logoUri,
             price: null,
             priceChange24h: null,
@@ -498,8 +498,8 @@ const tokenList = {
         this.tokens = watchlistTokens.map(item => ({
           mintAddress: item.mint,
           address: item.mint,
-          name: item.name || 'Unknown',
-          symbol: item.symbol || '???',
+          name: item.name || `${item.mint.slice(0, 4)}...${item.mint.slice(-4)}`,
+          symbol: item.symbol || item.mint.slice(0, 5).toUpperCase(),
           logoUri: item.logoUri,
           price: null,
           priceChange24h: null,
@@ -796,8 +796,8 @@ const tokenList = {
                 data-fallback="${defaultLogo}"
               >
               <div class="token-info">
-                <span class="token-name">${this.escapeHtml(token.name || 'Unknown')}${token.hasCommunityUpdates ? '<span class="community-badge" title="Has community updates"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></path></svg></span>' : ''}</span>
-                <span class="token-symbol-cell ${token.symbol === '???' ? 'symbol-pending' : ''}">${this.escapeHtml(token.symbol || '???')}</span>
+                <span class="token-name">${this.escapeHtml(token.name || (safeAddress.slice(0, 4) + '...' + safeAddress.slice(-4)))}${token.hasCommunityUpdates ? '<span class="community-badge" title="Has community updates"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></path></svg></span>' : ''}</span>
+                <span class="token-symbol-cell ${!token.symbol ? 'symbol-pending' : ''}">${this.escapeHtml(token.symbol || safeAddress.slice(0, 5).toUpperCase())}</span>
               </div>
             </div>
           </td>

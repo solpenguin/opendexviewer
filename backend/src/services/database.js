@@ -579,9 +579,10 @@ async function searchTokens(query, limit = 10) {
   const result = await pool.query(
     `SELECT mint_address, name, symbol, decimals, logo_uri, price, market_cap, volume_24h, created_at
      FROM tokens
-     WHERE LOWER(name) LIKE $1
+     WHERE (LOWER(name) LIKE $1
         OR LOWER(symbol) LIKE $1
-        OR mint_address LIKE $2
+        OR mint_address LIKE $2)
+       AND LOWER(COALESCE(name, '')) NOT IN ('unknown token', 'unknown', '')
      ORDER BY
        CASE
          WHEN LOWER(symbol) = $3 THEN 1
@@ -2771,6 +2772,30 @@ async function getAdvancedAIAnalysisCost() {
   }
 }
 
+// Get the Folio AI analysis cost in BC
+async function getFolioAIAnalysisCost() {
+  if (!pool) return 50;
+  try {
+    const result = await pool.query(
+      "SELECT value FROM burn_config WHERE key = 'folio_ai_analysis_cost'"
+    );
+    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 50;
+  } catch {
+    return 50;
+  }
+}
+
+// Set the Folio AI analysis cost in BC (admin only)
+async function setFolioAIAnalysisCost(cost) {
+  if (!pool) throw new Error('Database not available');
+  await pool.query(
+    `INSERT INTO burn_config (key, value, updated_at) VALUES ('folio_ai_analysis_cost', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+    [String(cost)]
+  );
+  return cost;
+}
+
 // Set the Advanced AI analysis cost in BC (admin only)
 async function setAdvancedAIAnalysisCost(cost) {
   if (!pool) throw new Error('Database not available');
@@ -3252,6 +3277,8 @@ module.exports = {
   setAIAnalysisCost,
   getAdvancedAIAnalysisCost,
   setAdvancedAIAnalysisCost,
+  getFolioAIAnalysisCost,
+  setFolioAIAnalysisCost,
   isBurnTxUsed,
   recordBurnCredit,
   adminGrantBurnCredits,
