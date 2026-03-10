@@ -8,6 +8,7 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../services/database');
 const jupiterService = require('../services/jupiter');
+const geckoService = require('../services/geckoTerminal');
 const { asyncHandler, requireDatabase, validateAdminSession, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const { searchLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
 const { cache, keys, TTL } = require('../services/cache');
@@ -194,25 +195,21 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
   if (folio.tokens?.length > 0) {
     await enrichUnknownTokens(folio.tokens);
 
-    // Fetch live price + 24h change from Jupiter APIs in parallel
+    // Fetch live market data from GeckoTerminal (reliable 24h change) + Jupiter (prices)
     const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
     if (mints.length > 0) {
       try {
-        const [batchPrices, tokenMetrics] = await Promise.all([
-          jupiterService.getTokenPrices(mints).catch(() => ({})),
-          Promise.all(folio.tokens.map(async (t) => {
-            try { return await jupiterService.getTokenMetrics(t.token_mint); }
-            catch { return null; }
-          }))
+        const [geckoData, batchPrices] = await Promise.all([
+          geckoService.getMultiTokenInfo(mints).catch(() => ({})),
+          jupiterService.getTokenPrices(mints).catch(() => ({}))
         ]);
-        folio.tokens.forEach((t, i) => {
+        folio.tokens.forEach(t => {
+          const g = geckoData[t.token_mint] || {};
           const bp = batchPrices[t.token_mint] || {};
-          const m = tokenMetrics[i] || {};
-          if (bp.price || m.price) t.price = bp.price || m.price;
-          if (m.marketCap) t.market_cap = m.marketCap;
-          if (m.volume24h) t.volume_24h = m.volume24h;
-          const change = m.priceChange24h ?? bp.priceChange24h ?? null;
-          if (change != null) t.price_change_24h = change;
+          if (g.price || bp.price) t.price = g.price || bp.price;
+          if (g.marketCap) t.market_cap = g.marketCap;
+          if (g.volume24h) t.volume_24h = g.volume24h;
+          if (g.priceChange24h != null) t.price_change_24h = g.priceChange24h;
         });
       } catch { /* non-critical */ }
     }
@@ -275,16 +272,14 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     });
   }
 
-  // Fetch live metrics in parallel:
-  // - Per-token V2 search gives holder count, mcap, volume, liquidity (one call each)
-  // - Batch price API gives fresh price + 24h change (single call for all tokens)
+  // Fetch live metrics from GeckoTerminal (24h change, price, mcap, vol) + Jupiter V2 (holders, liquidity)
   const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
-  const [tokenMetrics, batchPrices] = await Promise.all([
+  const [geckoData, tokenMetrics] = await Promise.all([
+    geckoService.getMultiTokenInfo(mints).catch(() => ({})),
     Promise.all(folio.tokens.map(async (t) => {
       try { return await jupiterService.getTokenMetrics(t.token_mint); }
       catch { return null; }
-    })),
-    jupiterService.getTokenPrices(mints).catch(() => ({}))
+    }))
   ]);
 
   // Formatting helpers
@@ -313,15 +308,15 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
 
   const tokenLines = folio.tokens.map((t, i) => {
     const mint = t.token_mint || '';
+    const g = geckoData[mint] || {};
     const m = tokenMetrics[i] || {};
-    const bp = batchPrices[mint] || {};
     const name = t.name || mint.slice(0, 8) || 'Unknown';
     const symbol = t.symbol || '???';
-    // Prefer live Jupiter V2 metrics, then batch price, then DB values
-    const price = fmtUsd(m.price || bp.price || (t.price ? parseFloat(t.price) : null));
-    const mcap = fmtUsd(m.marketCap || (t.market_cap ? parseFloat(t.market_cap) : null));
-    const vol = fmtUsd(m.volume24h || (t.volume_24h ? parseFloat(t.volume_24h) : null));
-    const change24h = fmtPct(m.priceChange24h ?? bp.priceChange24h ?? (t.price_change_24h != null ? parseFloat(t.price_change_24h) : null));
+    // GeckoTerminal for price/mcap/vol/change, Jupiter V2 for holders/liquidity, DB as fallback
+    const price = fmtUsd(g.price || m.price || (t.price ? parseFloat(t.price) : null));
+    const mcap = fmtUsd(g.marketCap || m.marketCap || (t.market_cap ? parseFloat(t.market_cap) : null));
+    const vol = fmtUsd(g.volume24h || m.volume24h || (t.volume_24h ? parseFloat(t.volume_24h) : null));
+    const change24h = fmtPct(g.priceChange24h ?? (t.price_change_24h != null ? parseFloat(t.price_change_24h) : null));
     const liq = fmtUsd(m.liquidity);
     const holders = fmtNum(m.holderCount);
     const age = fmtAge(t.pair_created_at);
