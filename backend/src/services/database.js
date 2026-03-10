@@ -3067,7 +3067,8 @@ async function getFolioWithTokens(id) {
 
   const tokens = await pool.query(
     `SELECT ft.token_mint, ft.note, ft.added_at,
-            t.name, t.symbol, t.logo_uri, t.price, t.market_cap, t.volume_24h
+            t.name, t.symbol, t.logo_uri, t.price, t.market_cap, t.volume_24h,
+            t.pair_created_at
      FROM folio_tokens ft
      LEFT JOIN tokens t ON t.mint_address = ft.token_mint
      WHERE ft.folio_id = $1

@@ -252,17 +252,19 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     });
   }
 
-  // Fetch holder counts for all tokens in parallel (best-effort, non-blocking)
-  const holderCounts = await Promise.all(
-    folio.tokens.map(async (t) => {
-      try {
-        const count = await jupiterService.getTokenHolderCount(t.token_mint);
-        return count;
-      } catch { return null; }
-    })
-  );
+  // Fetch fresh market data + holder counts in parallel
+  const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
+  const [freshPrices, holderCounts] = await Promise.all([
+    // Batch price fetch (single API call for up to 50 tokens)
+    jupiterService.getTokenPrices(mints).catch(() => ({})),
+    // Individual holder count calls in parallel
+    Promise.all(folio.tokens.map(async (t) => {
+      try { return await jupiterService.getTokenHolderCount(t.token_mint); }
+      catch { return null; }
+    }))
+  ]);
 
-  // Build compact token summary for Claude
+  // Formatting helpers
   const fmtUsd = (v) => {
     const n = typeof v === 'number' && v > 0 ? v : null;
     return n ? '$' + (n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toFixed(2)) : 'N/A';
@@ -271,23 +273,44 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     if (v == null || v <= 0) return 'N/A';
     return v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : String(v);
   };
+  const fmtPct = (v) => {
+    if (v == null || typeof v !== 'number') return 'N/A';
+    return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  };
+  const fmtAge = (v) => {
+    if (!v) return 'N/A';
+    const ms = Date.now() - new Date(v).getTime();
+    if (ms < 0 || isNaN(ms)) return 'N/A';
+    const d = Math.floor(ms / 86400000);
+    if (d >= 365) return Math.floor(d / 365) + 'y ' + (d % 365 >= 30 ? Math.floor((d % 365) / 30) + 'mo' : '');
+    if (d >= 30) return Math.floor(d / 30) + 'mo ' + (d % 30) + 'd';
+    if (d >= 1) return d + 'd';
+    return Math.floor(ms / 3600000) + 'h';
+  };
 
   const tokenLines = folio.tokens.map((t, i) => {
-    const name = t.name || t.token_mint?.slice(0, 8) || 'Unknown';
+    const mint = t.token_mint || '';
+    const fresh = freshPrices[mint] || {};
+    const name = t.name || mint.slice(0, 8) || 'Unknown';
     const symbol = t.symbol || '???';
-    const price = fmtUsd(t.price);
-    const mcap = fmtUsd(t.market_cap);
-    const vol = fmtUsd(t.volume_24h);
+    // Prefer fresh Jupiter data, fall back to DB values
+    const price = fmtUsd(fresh.price || t.price);
+    const mcap = fmtUsd(fresh.marketCap || t.market_cap);
+    const vol = fmtUsd(fresh.volume24h || t.volume_24h);
+    const change24h = fmtPct(fresh.priceChange24h);
+    const liq = fmtUsd(fresh.liquidity);
     const holders = fmtNum(holderCounts[i]);
-    const note = t.note ? ` Note: ${t.note.slice(0, 50)}` : '';
-    return `${i + 1}. ${name} (${symbol}) — Price: ${price}, MCap: ${mcap}, Vol24h: ${vol}, Holders: ${holders}${note}`;
+    const age = fmtAge(t.pair_created_at);
+    const note = t.note ? ` | Note: ${t.note.slice(0, 50)}` : '';
+    return `${i + 1}. ${name} (${symbol}) — Price: ${price} (${change24h}), MCap: ${mcap}, Vol24h: ${vol}, Liq: ${liq}, Holders: ${holders}, Age: ${age}${note}`;
   }).join('\n');
 
   const prompt = `Analyze this curated Solana token folio (portfolio list) from KOL "${folio.name}" (@${(folio.twitter_handle || '').replace(/^@/, '')}). Provide a concise but insightful analysis covering:
 1. Overall portfolio theme/strategy (what types of tokens, any sector focus)
-2. Risk profile (concentration, market cap distribution, holder health, any red flags)
-3. Notable observations (standout tokens, interesting patterns, holder distribution)
-4. Brief summary verdict (1 sentence)
+2. Risk assessment (market cap distribution, liquidity depth, 24h price action, red flags)
+3. Holder conviction insights: evaluate holder health by analyzing holder count relative to token age and market cap. High holders-to-mcap ratio suggests broad distribution; low ratio may indicate whale concentration. Volume-to-mcap ratio signals trading activity vs holding conviction. Young tokens with rapidly growing holder counts suggest strong adoption momentum.
+4. Notable observations (standout tokens, interesting patterns, risk/reward outliers)
+5. Brief summary verdict (1 sentence)
 
 Keep the analysis to 4-6 concise paragraphs. Be factual and data-driven. Do not give financial advice.
 
@@ -301,7 +324,7 @@ ${tokenLines}`;
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
+      max_tokens: 700,
       messages: [{ role: 'user', content: prompt }]
     });
 
