@@ -193,6 +193,29 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
   // Enrich any tokens with placeholder names before returning
   if (folio.tokens?.length > 0) {
     await enrichUnknownTokens(folio.tokens);
+
+    // Fetch live price + 24h change from Jupiter APIs in parallel
+    const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
+    if (mints.length > 0) {
+      try {
+        const [batchPrices, tokenMetrics] = await Promise.all([
+          jupiterService.getTokenPrices(mints).catch(() => ({})),
+          Promise.all(folio.tokens.map(async (t) => {
+            try { return await jupiterService.getTokenMetrics(t.token_mint); }
+            catch { return null; }
+          }))
+        ]);
+        folio.tokens.forEach((t, i) => {
+          const bp = batchPrices[t.token_mint] || {};
+          const m = tokenMetrics[i] || {};
+          if (bp.price || m.price) t.price = bp.price || m.price;
+          if (m.marketCap) t.market_cap = m.marketCap;
+          if (m.volume24h) t.volume_24h = m.volume24h;
+          const change = m.priceChange24h ?? bp.priceChange24h ?? null;
+          if (change != null) t.price_change_24h = change;
+        });
+      } catch { /* non-critical */ }
+    }
   }
 
   const response = { success: true, data: folio };

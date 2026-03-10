@@ -1243,6 +1243,9 @@ a:hover {
   font-weight: 500;
 }
 
+.cell-change.positive { color: var(--green); }
+.cell-change.negative { color: var(--red); }
+
 .cell-price {
   color: var(--text-primary);
 }
