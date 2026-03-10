@@ -2967,7 +2967,7 @@ async function fixUnknownTokens() {
        UNION
        SELECT token_mint AS mint_address FROM watchlist WHERE token_mint = ANY($1)
        UNION
-       SELECT mint_address FROM token_views WHERE mint_address = ANY($1) AND view_count > 0
+       SELECT token_mint AS mint_address FROM token_views WHERE token_mint = ANY($1) AND view_count > 0
      ) AS used`,
     [mints]
   );
