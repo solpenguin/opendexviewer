@@ -437,7 +437,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
 // GET /api/votes/submission/:id - Get votes for a submission
 router.get('/submission/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const parsedId = parseInt(id);
+  const parsedId = parseInt(id, 10);
 
   if (isNaN(parsedId) || parsedId < 1 || parsedId > 2147483647) {
     return res.status(400).json({ error: 'Invalid submission ID' });
@@ -518,7 +518,7 @@ router.get('/check', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
 
-  const parsedId = parseInt(submissionId);
+  const parsedId = parseInt(submissionId, 10);
   if (isNaN(parsedId)) {
     return res.status(400).json({ error: 'Invalid submission ID' });
   }
@@ -552,7 +552,7 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
   // Validate all IDs are valid integers - reject if any are invalid
   const parsedIds = [];
   for (const id of submissionIds) {
-    const parsed = parseInt(id);
+    const parsed = parseInt(id, 10);
     if (isNaN(parsed) || parsed <= 0) {
       return res.status(400).json({ error: 'Invalid submission ID' });
     }

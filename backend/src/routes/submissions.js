@@ -47,7 +47,7 @@ function sanitizeSubmissionsArray(submissions) {
 // GET /api/submissions/:id - Get submission details
 router.get('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const submissionId = parseInt(id);
+  const submissionId = parseInt(id, 10);
 
   // Validate ID is a reasonable integer
   if (isNaN(submissionId) || submissionId < 1 || submissionId > 2147483647) {
@@ -229,7 +229,7 @@ router.get('/status/pending', validateAdminSession, asyncHandler(async (req, res
   let { limit = 50 } = req.query;
 
   // Validate and clamp limit
-  limit = parseInt(limit);
+  limit = parseInt(limit, 10);
   if (isNaN(limit) || limit < 1) limit = 50;
   if (limit > 100) limit = 100;
 

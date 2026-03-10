@@ -5,7 +5,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { asyncHandler, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
+const { asyncHandler, requireDatabase, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
 const db = require('../services/database');
 const solanaService = require('../services/solana');
 const geckoService = require('../services/geckoTerminal');
@@ -31,7 +31,7 @@ if (raw) {
  * Returns market data for all hackathon-tracked tokens.
  * No authentication required (public endpoint).
  */
-router.get('/tokens', asyncHandler(async (req, res) => {
+router.get('/tokens', requireDatabase, asyncHandler(async (req, res) => {
   if (hackathonMints.length === 0) {
     return res.json({
       success: true,

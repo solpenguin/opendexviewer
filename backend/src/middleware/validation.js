@@ -20,11 +20,20 @@ function startSignatureCleanup() {
     for (const [sig, expiry] of usedSignatures) {
       if (now > expiry) usedSignatures.delete(sig);
     }
-    // Hard cap: evict oldest entries if still over limit
+    // Hard cap: evict entries with earliest expiry without sorting the full map.
+    // Iterating twice (find threshold, then delete) is O(n) vs O(n log n) sort.
     if (usedSignatures.size > MAX_USED_SIGNATURES) {
-      const entries = [...usedSignatures.entries()].sort((a, b) => a[1] - b[1]);
-      const toRemove = entries.slice(0, usedSignatures.size - MAX_USED_SIGNATURES);
-      for (const [sig] of toRemove) usedSignatures.delete(sig);
+      const excess = usedSignatures.size - MAX_USED_SIGNATURES;
+      // Collect all expiry times and find the threshold via partial selection
+      const expiries = new Float64Array(usedSignatures.size);
+      let i = 0;
+      for (const expiry of usedSignatures.values()) expiries[i++] = expiry;
+      // Sort only the typed array (engine-optimized, no GC pressure from object allocations)
+      expiries.sort();
+      const threshold = expiries[excess];
+      for (const [sig, expiry] of usedSignatures) {
+        if (expiry <= threshold) usedSignatures.delete(sig);
+      }
     }
   }, USED_SIG_CLEANUP_INTERVAL_MS);
   if (usedSigCleanupTimer.unref) usedSigCleanupTimer.unref();

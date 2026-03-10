@@ -127,10 +127,11 @@ const foliosPage = {
 
     grid.innerHTML = this.folios.map(folio => {
       const handle = this.esc(folio.twitter_handle).replace(/^@/, '');
+      const initial = handle[0]?.toUpperCase() || '?';
       const tokenCount = parseInt(folio.token_count, 10) || 0;
       const avatar = folio.twitter_avatar
-        ? `<img src="${this.esc(folio.twitter_avatar)}" alt="${handle}" class="folio-card-avatar" width="40" height="40" onerror="this.outerHTML='<div class=\\'folio-card-avatar folio-card-avatar-placeholder\\'>${handle[0].toUpperCase()}</div>'">`
-        : `<div class="folio-card-avatar folio-card-avatar-placeholder">${handle[0].toUpperCase()}</div>`;
+        ? `<img src="${this.esc(folio.twitter_avatar)}" alt="${handle}" class="folio-card-avatar" width="40" height="40" onerror="this.outerHTML='<div class=\\'folio-card-avatar folio-card-avatar-placeholder\\'>${initial}</div>'">`
+        : `<div class="folio-card-avatar folio-card-avatar-placeholder">${initial}</div>`;
 
       return `
         <div class="folio-card" data-folio-id="${folio.id}">

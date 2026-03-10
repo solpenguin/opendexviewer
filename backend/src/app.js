@@ -229,7 +229,7 @@ app.use(compression({
 }));
 
 // Request timeout middleware - prevent hung requests and abort in-flight work
-const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
+const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 30000;
 app.use((req, res, next) => {
   req.setTimeout(REQUEST_TIMEOUT);
   res.setTimeout(REQUEST_TIMEOUT, () => {
@@ -436,11 +436,12 @@ async function gracefulShutdown(signal) {
     }).catch(() => {});
   }
 
-  // Force exit after 10 seconds if cleanup takes too long
+  // Force exit after 35 seconds if cleanup takes too long
+  // Must exceed REQUEST_TIMEOUT (30s) so in-flight requests can complete during deploys
   const forceTimer = setTimeout(() => {
     console.error('[Shutdown] Forced exit after timeout');
     process.exit(exitCode);
-  }, 10000);
+  }, 35000);
   forceTimer.unref();
 
   // Clear cleanup interval (fallback mode)
@@ -499,6 +500,38 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+// Warm caches for popular tokens after startup to prevent thundering herd on cold restart.
+// Runs in the background — does not block server readiness.
+async function warmCache() {
+  try {
+    const { cache, keys, TTL } = require('./services/cache');
+    const geckoService = require('./services/geckoTerminal');
+    const topTokens = await db.getMostViewedTokens(20);
+    if (!topTokens || topTokens.length === 0) return;
+
+    let warmed = 0;
+    for (const token of topTokens) {
+      const mint = token.token_mint;
+      // Skip if already cached (e.g. Redis survived the restart)
+      const existing = await cache.get(keys.tokenInfo(mint));
+      if (existing) { warmed++; continue; }
+
+      try {
+        const overview = await geckoService.getTokenOverview(mint);
+        if (overview) {
+          await cache.set(keys.tokenInfo(mint), overview, TTL.PRICE_DATA);
+          warmed++;
+        }
+      } catch (_) {
+        // Non-critical — token will be fetched on first request instead
+      }
+    }
+    console.log(`[CacheWarm] Warmed ${warmed}/${topTokens.length} top tokens`);
+  } catch (err) {
+    console.error('[CacheWarm] Failed (non-critical):', err.message);
+  }
+}
+
 // Start server
 // Privacy: Don't log which API keys are configured - reveals infrastructure details
 httpServer = app.listen(PORT, () => {
@@ -511,6 +544,9 @@ httpServer = app.listen(PORT, () => {
 ║  Status: ${'Ready'.padEnd(34)}║
 ╚════════════════════════════════════════════╝
   `);
+
+  // Warm cache after server is ready (non-blocking)
+  warmCache();
 });
 
 module.exports = app;
