@@ -154,6 +154,7 @@ async function initializeDatabase() {
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS price DECIMAL;
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS market_cap DECIMAL;
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS volume_24h DECIMAL;
+      ALTER TABLE tokens ADD COLUMN IF NOT EXISTS price_change_24h DECIMAL;
 
       CREATE TABLE IF NOT EXISTS submissions (
         id SERIAL PRIMARY KEY,
@@ -497,7 +498,7 @@ async function upsertToken(token) {
     console.warn('Database not available - skipping token upsert');
     return null;
   }
-  const { mintAddress, name, symbol, decimals, logoUri, pairCreatedAt, price, marketCap, volume24h } = token;
+  const { mintAddress, name, symbol, decimals, logoUri, pairCreatedAt, price, marketCap, volume24h, priceChange24h } = token;
 
   // Never persist placeholder names — they poison search results
   const isPlaceholder = !name || PLACEHOLDER_NAMES.has(name.toLowerCase());
@@ -506,16 +507,17 @@ async function upsertToken(token) {
   // If both name and symbol are placeholders, only update price/market data
   if (isPlaceholder && isPlaceholderSymbol) {
     // Still update price/market data if we have any
-    if (price || marketCap || volume24h) {
+    if (price || marketCap || volume24h || priceChange24h != null) {
       const result = await pool.query(
         `UPDATE tokens SET
            price = COALESCE($2, tokens.price),
            market_cap = COALESCE($3, tokens.market_cap),
            volume_24h = COALESCE($4, tokens.volume_24h),
+           price_change_24h = COALESCE($5, tokens.price_change_24h),
            updated_at = NOW()
          WHERE mint_address = $1
          RETURNING *`,
-        [mintAddress, price || null, marketCap || null, volume24h || null]
+        [mintAddress, price || null, marketCap || null, volume24h || null, priceChange24h != null ? priceChange24h : null]
       );
       return result.rows[0] || null;
     }
@@ -524,8 +526,8 @@ async function upsertToken(token) {
 
   // Use COALESCE for name/symbol so placeholders never overwrite real data
   const result = await pool.query(
-    `INSERT INTO tokens (mint_address, name, symbol, decimals, logo_uri, pair_created_at, price, market_cap, volume_24h)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO tokens (mint_address, name, symbol, decimals, logo_uri, pair_created_at, price, market_cap, volume_24h, price_change_24h)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (mint_address) DO UPDATE SET
        name = CASE WHEN LOWER(EXCLUDED.name) IN ('unknown token', 'unknown') THEN tokens.name ELSE COALESCE(EXCLUDED.name, tokens.name) END,
        symbol = CASE WHEN EXCLUDED.symbol IN ('UNKNOWN', '???') THEN tokens.symbol ELSE COALESCE(EXCLUDED.symbol, tokens.symbol) END,
@@ -535,9 +537,10 @@ async function upsertToken(token) {
        price = COALESCE(EXCLUDED.price, tokens.price),
        market_cap = COALESCE(EXCLUDED.market_cap, tokens.market_cap),
        volume_24h = COALESCE(EXCLUDED.volume_24h, tokens.volume_24h),
+       price_change_24h = COALESCE(EXCLUDED.price_change_24h, tokens.price_change_24h),
        updated_at = NOW()
      RETURNING *`,
-    [mintAddress, name, symbol, decimals, logoUri, pairCreatedAt || null, price || null, marketCap || null, volume24h || null]
+    [mintAddress, name, symbol, decimals, logoUri, pairCreatedAt || null, price || null, marketCap || null, volume24h || null, priceChange24h != null ? priceChange24h : null]
   );
   return result.rows[0];
 }
@@ -3068,7 +3071,7 @@ async function getFolioWithTokens(id) {
   const tokens = await pool.query(
     `SELECT ft.token_mint, ft.note, ft.added_at,
             t.name, t.symbol, t.logo_uri, t.price, t.market_cap, t.volume_24h,
-            t.pair_created_at
+            t.price_change_24h, t.pair_created_at
      FROM folio_tokens ft
      LEFT JOIN tokens t ON t.mint_address = ft.token_mint
      WHERE ft.folio_id = $1

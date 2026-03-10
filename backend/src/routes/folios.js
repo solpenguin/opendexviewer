@@ -321,7 +321,7 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
     const price = fmtUsd(m.price || bp.price || (t.price ? parseFloat(t.price) : null));
     const mcap = fmtUsd(m.marketCap || (t.market_cap ? parseFloat(t.market_cap) : null));
     const vol = fmtUsd(m.volume24h || (t.volume_24h ? parseFloat(t.volume_24h) : null));
-    const change24h = fmtPct(m.priceChange24h ?? bp.priceChange24h ?? null);
+    const change24h = fmtPct(m.priceChange24h ?? bp.priceChange24h ?? (t.price_change_24h != null ? parseFloat(t.price_change_24h) : null));
     const liq = fmtUsd(m.liquidity);
     const holders = fmtNum(m.holderCount);
     const age = fmtAge(t.pair_created_at);

@@ -153,7 +153,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
             name: local.name,
             symbol: local.symbol || mint.slice(0, 5).toUpperCase(),
             price: local.price || 0,
-            priceChange24h: local.price_change_24h || 0,
+            priceChange24h: local.price_change_24h != null ? parseFloat(local.price_change_24h) : null,
             volume24h: local.volume_24h || 0,
             marketCap: local.market_cap || 0,
             logoUri: local.logo_uri || null,
@@ -169,7 +169,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
             name: helius.name,
             symbol: helius.symbol || mint.slice(0, 5).toUpperCase(),
             price: 0,
-            priceChange24h: 0,
+            priceChange24h: null,
             volume24h: 0,
             marketCap: 0,
             logoUri: helius.logoUri || null,
@@ -186,7 +186,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
             name: cached.name,
             symbol: cached.symbol || mint.slice(0, 5).toUpperCase(),
             price: cached.price || 0,
-            priceChange24h: cached.priceChange24h || 0,
+            priceChange24h: cached.priceChange24h != null ? cached.priceChange24h : null,
             volume24h: cached.volume24h || 0,
             marketCap: cached.marketCap || 0,
             logoUri: cached.logoUri || null,
@@ -202,7 +202,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
           name: `${mint.slice(0, 4)}...${mint.slice(-4)}`,
           symbol: mint.slice(0, 5).toUpperCase(),
           price: 0,
-          priceChange24h: 0,
+          priceChange24h: null,
           volume24h: 0,
           marketCap: 0,
           logoUri: null,
@@ -1325,7 +1325,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         // Price: prefer GeckoTerminal (more accurate), fallback to Helius
         price: gecko.price || helius.price || 0,
         // Market data: GeckoTerminal only (Helius doesn't provide these)
-        priceChange24h: gecko.priceChange24h || 0,
+        priceChange24h: gecko.priceChange24h || jup.priceChange24h || 0,
         volume24h: gecko.volume24h || 0,
         liquidity: gecko.liquidity || 0,
         marketCap: gecko.marketCap || gecko.fdv || 0,
@@ -1363,7 +1363,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
           pairCreatedAt: gecko.pairCreatedAt || null,
           price: gecko.price || null,
           marketCap: gecko.marketCap || gecko.fdv || null,
-          volume24h: gecko.volume24h || null
+          volume24h: gecko.volume24h || null,
+          priceChange24h: gecko.priceChange24h || null
         }).catch(() => { /* Privacy: Don't log error details */ });
       }
 
