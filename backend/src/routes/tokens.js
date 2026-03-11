@@ -25,9 +25,12 @@ const VALID_ORDERS = ['asc', 'desc'];
 
 // Known burn wallets and LP program IDs — shared across holder endpoints
 const BURN_WALLETS = new Set([
-  '1nc1nerator11111111111111111111111111111111',
-  '1111111111111111111111111111111111111111111',
-  'burnedFi11111111111111111111111111111111111'
+  '1nc1nerator11111111111111111111111111111111',  // Solana incinerator
+  '1111111111111111111111111111111111111111111',   // Null address (44 ones)
+  'burnedFi11111111111111111111111111111111111',   // burnedFi vanity address
+  '11111111111111111111111111111111',              // System program (32 ones)
+  'dead000000000000000000000000000000000000000',   // Dead vanity address
+  'DeadB1ockxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',     // Dead block vanity
 ]);
 const LP_PROGRAMS = new Set([
   '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',  // Raydium AMM v4
@@ -1858,37 +1861,71 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       console.warn('[Tokens] Failed to check Streamflow locks:', err.message);
     }
 
-    // SPL burn detection: the `burn` instruction reduces the mint's supply directly,
-    // so burnt tokens no longer exist in any account. Detect by comparing the known
-    // initial supply against the current on-chain supply.
-    // Pump.fun tokens always start with 1,000,000,000 tokens (6 decimals).
+    // SPL burn detection: the `burn` and `burnChecked` instructions reduce the mint's
+    // supply directly, so burnt tokens no longer exist in any account.
+    //
+    // Three detection methods (tried in order):
+    // 1. On-chain: Query Helius Enhanced Transactions API for BURN-type transactions
+    //    targeting this mint. Sums actual burn amounts from parsed transaction history.
+    //    Most accurate — works for ALL tokens regardless of launch platform.
+    // 2. Pump.fun: Known initial supply of 1B tokens (6 decimals). If on-chain query
+    //    returned 0 (e.g. Helius unavailable), infer burns from supply difference.
+    // 3. Heuristic: For tokens with revoked mint authority, check if current supply
+    //    aligns with a common round initial supply and infer burns from the difference.
     const PUMP_FUN_AUTHORITIES = new Set([
       'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',  // pump.fun metadata authority
       '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // pump.fun program
       '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg', // pump.fun fee account
     ]);
+
     let splBurnt = 0;
-    if (tokenAuth && currentSupply) {
-      // Check if any authority matches pump.fun
-      const isPumpFun = tokenAuth.authorities?.some(a =>
-        PUMP_FUN_AUTHORITIES.has(a.address) ||
-        (a.scopes && PUMP_FUN_AUTHORITIES.has(a.address))
-      );
+    let initialSupply = null;
+
+    // Method 1: On-chain burn detection via Helius transaction history
+    try {
+      splBurnt = await solanaService.getTokenBurnAmount(mint, decimals);
+    } catch (err) {
+      console.warn('[Tokens] On-chain burn detection failed:', err.message);
+    }
+
+    // Method 2 & 3: Heuristic fallback when on-chain detection found nothing
+    // (Helius unavailable, or burns happened via supply reduction without parsed tx history)
+    if (splBurnt === 0 && currentSupply && currentSupply > 0) {
+      const isPumpFun = tokenAuth?.authorities?.some(a => PUMP_FUN_AUTHORITIES.has(a.address));
       if (isPumpFun && decimals === 6) {
-        const initialSupply = 1000000000; // 1 billion — all pump.fun tokens
-        if (initialSupply > currentSupply) {
-          splBurnt = initialSupply - currentSupply;
+        initialSupply = 1000000000; // 1 billion — all pump.fun tokens
+      }
+
+      if (!initialSupply && mintData && mintData.mintAuthority === null) {
+        const circulating = currentSupply + deadWalletBurnt;
+        const candidates = [1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12];
+        for (const candidate of candidates) {
+          if (circulating > candidate * 0.999 && circulating <= candidate) {
+            initialSupply = candidate;
+            break;
+          }
         }
       }
+
+      if (initialSupply && initialSupply > currentSupply) {
+        splBurnt = initialSupply - currentSupply;
+      }
     }
+
     const burntAmount = splBurnt + deadWalletBurnt;
+    // For percentage, use the total pre-burn supply as denominator.
+    // If we detected on-chain burns, the original supply = currentSupply + splBurnt.
+    // For dead-wallet burns the tokens still exist on-chain so currentSupply includes them.
+    const supplyDenominator = initialSupply || (currentSupply + splBurnt);
 
     supply = {
       total: currentSupply,
       burnt: burntAmount,
-      burntPct: currentSupply > 0 && burntAmount > 0 ? (burntAmount / currentSupply) * 100 : 0,
+      burntPct: supplyDenominator > 0 && burntAmount > 0 ? (burntAmount / supplyDenominator) * 100 : 0,
       locked: lockedAmount,
-      lockedPct: currentSupply > 0 && lockedAmount > 0 ? (lockedAmount / currentSupply) * 100 : 0
+      lockedPct: currentSupply > 0 && lockedAmount > 0 ? (lockedAmount / currentSupply) * 100 : 0,
+      splBurnt,
+      deadWalletBurnt
     };
 
     // Build holders list with LP/burnt flags
@@ -1972,10 +2009,36 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: false });
     }
 
-    // Only compute for real holders (skip LP and burn wallets)
-    const wallets = holdersCache.holders
+    // Start with top 20 holders (skip LP and burn wallets)
+    const top20Wallets = holdersCache.holders
       .filter(h => !h.isLP && !h.isBurnt && h.address)
       .map(h => h.address);
+
+    // Expand to a broader 250-wallet sample for more accurate fresh-wallet detection.
+    // Uses the same sample cache as diamond-hands to avoid duplicate API calls.
+    let wallets = top20Wallets;
+    if (solanaService.isHeliusConfigured()) {
+      try {
+        const sampleCacheKey = `diamond-hands-wallets:${mint}`;
+        let sample = await cache.get(sampleCacheKey);
+        if (!sample) {
+          const excludeSet = new Set([...BURN_WALLETS, ...LP_PROGRAMS]);
+          sample = await solanaService.getTokenHolderSample(mint, 250, excludeSet);
+          if (sample && sample.length > 0) {
+            await cache.set(sampleCacheKey, sample, TTL.HOUR);
+          }
+        }
+        if (sample && sample.length > top20Wallets.length) {
+          // Merge: keep top 20 first (they need hold times for the table),
+          // then add extra sample wallets (used for fresh-wallet counting)
+          const top20Set = new Set(top20Wallets);
+          const extra = sample.filter(w => !top20Set.has(w));
+          wallets = [...top20Wallets, ...extra];
+        }
+      } catch (err) {
+        console.warn('[HoldTimes] Failed to expand holder sample:', err.message);
+      }
+    }
 
     if (wallets.length === 0) {
       return res.json({ holdTimes: {}, tokenHoldTimes: {}, computed: true });

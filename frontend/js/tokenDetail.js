@@ -1182,13 +1182,11 @@ const tokenDetail = {
         const t5 = document.getElementById('holders-top5');
         const t10 = document.getElementById('holders-top10');
         const t20 = document.getElementById('holders-top20');
-        const t1 = document.getElementById('holders-top1');
         const avgHoldTimeEl = document.getElementById('holders-avg-hold-time');
         const avg = document.getElementById('holders-avg');
         if (t5) t5.textContent = metrics.top5Pct.toFixed(1) + '%';
         if (t10) t10.textContent = metrics.top10Pct.toFixed(1) + '%';
         if (t20) t20.textContent = metrics.top20Pct.toFixed(1) + '%';
-        if (t1) t1.textContent = metrics.top1Pct.toFixed(1) + '%';
         // Avg Hold Time metric is populated by _updateAvgHoldTimeMetric after hold times load
         if (avgHoldTimeEl) avgHoldTimeEl.textContent = '...';
         if (avg) {
@@ -1200,7 +1198,7 @@ const tokenDetail = {
         }
 
         // Color-code percentage metrics (green = distributed, red = concentrated)
-        [t5, t10, t20, t1].forEach(el => {
+        [t5, t10, t20].forEach(el => {
           if (!el) return;
           el.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
           const val = parseFloat(el.textContent);
@@ -1219,14 +1217,15 @@ const tokenDetail = {
         }
       }
 
-      // Render locked supply info (inside the metrics grid)
+      // Render locked & burnt supply info (inside the metrics grid)
       if (data.supply) {
+        const fmtAmount = (v) => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B'
+          : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M'
+          : v >= 1e3 ? (v / 1e3).toFixed(2) + 'K'
+          : v.toFixed(2);
+
         const lockedEl = document.getElementById('holders-locked');
         if (lockedEl) {
-          const fmtAmount = (v) => v >= 1e9 ? (v / 1e9).toFixed(2) + 'B'
-            : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M'
-            : v >= 1e3 ? (v / 1e3).toFixed(2) + 'K'
-            : v.toFixed(2);
           const lk = data.supply.locked;
           if (lk > 0) {
             lockedEl.textContent = fmtAmount(lk) + ' (' + data.supply.lockedPct.toFixed(1) + '%)';
@@ -1234,6 +1233,28 @@ const tokenDetail = {
           } else {
             lockedEl.textContent = 'None';
             lockedEl.className = 'holder-metric-value';
+          }
+        }
+
+        const burntEl = document.getElementById('holders-burnt');
+        if (burntEl) {
+          const bt = data.supply.burnt;
+          if (bt > 0) {
+            let tooltip = '';
+            if (data.supply.splBurnt > 0 && data.supply.deadWalletBurnt > 0) {
+              tooltip = `SPL Burn: ${fmtAmount(data.supply.splBurnt)} · Dead Wallets: ${fmtAmount(data.supply.deadWalletBurnt)}`;
+            } else if (data.supply.splBurnt > 0) {
+              tooltip = 'Burned via SPL burn instruction';
+            } else {
+              tooltip = 'Sent to dead/burn wallet addresses';
+            }
+            burntEl.textContent = fmtAmount(bt) + ' (' + data.supply.burntPct.toFixed(1) + '%)';
+            burntEl.className = 'holder-metric-value burnt-highlight';
+            burntEl.title = tooltip;
+          } else {
+            burntEl.textContent = 'None';
+            burntEl.className = 'holder-metric-value';
+            burntEl.title = '';
           }
         }
       }
@@ -1482,7 +1503,7 @@ const tokenDetail = {
   },
 
   // Update the "Fresh Wallets" metric — wallets with first-ever tx within 24h.
-  // Color-coded: green (0) = healthy, yellow (1-2) = watch, red (3+) = suspicious.
+  // Color-coded by percentage: green (<2%) = healthy, yellow (2-5%) = watch, red (>5%) = suspicious.
   _updateFreshWalletsMetric(freshData) {
     const el = document.getElementById('holders-fresh-wallets');
     if (!el) return;
@@ -1493,12 +1514,13 @@ const tokenDetail = {
       return;
     }
 
-    el.textContent = `${count}/${total}`;
+    const pct = checked > 0 ? (count / checked) * 100 : 0;
+    el.textContent = `${count}/${total} (${pct.toFixed(0)}%)`;
     el.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
-    // More fresh wallets among top holders = more suspicious
-    if (count === 0) el.classList.add('concentration-low');       // green = good
-    else if (count <= 2) el.classList.add('concentration-medium'); // yellow = some
-    else el.classList.add('concentration-high');                   // red = many
+    // Percentage-based thresholds — scales with any sample size
+    if (pct < 2) el.classList.add('concentration-low');        // green = healthy
+    else if (pct < 5) el.classList.add('concentration-medium'); // yellow = watch
+    else el.classList.add('concentration-high');                 // red = suspicious
   },
 
   // Share holder analytics as a screenshot image
