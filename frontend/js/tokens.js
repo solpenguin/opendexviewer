@@ -830,10 +830,10 @@ const tokenList = {
               </div>
             </div>
           </td>
-          <td class="cell-price" data-navigate="${safeAddress}">${token.price == null ? '--' : token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatPrice(token.price, 6)}</td>
-          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${change == null ? '--' : token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatChange(change)}</td>
-          <td class="cell-volume" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatNumber(token.volume24h, '$')}</td>
-          <td class="cell-mcap" data-navigate="${safeAddress}">${token.price === 0 ? '<span class="mini-spinner" title="Fetching price data\u2026"></span>' : utils.formatNumber(token.marketCap, '$')}</td>
+          <td class="cell-price" data-navigate="${safeAddress}">${token.price ? utils.formatPrice(token.price, 6) : '--'}</td>
+          <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${change == null || !token.price ? '--' : utils.formatChange(change)}</td>
+          <td class="cell-volume" data-navigate="${safeAddress}">${token.volume24h ? utils.formatNumber(token.volume24h, '$') : '--'}</td>
+          <td class="cell-mcap" data-navigate="${safeAddress}">${token.marketCap ? utils.formatNumber(token.marketCap, '$') : '--'}</td>
           <td class="cell-views" data-navigate="${safeAddress}">${token.views > 0 ? token.views.toLocaleString() : '0'}</td>
           <td class="cell-sentiment" data-navigate="${safeAddress}">${(() => {
             const s = token.sentimentScore || 0;
