@@ -1202,6 +1202,7 @@ const tokenDetail = {
           if (!el) return;
           el.classList.remove('concentration-low', 'concentration-medium', 'concentration-high');
           const val = parseFloat(el.textContent);
+          if (isNaN(val)) return;
           if (val > 80) el.classList.add('concentration-high');
           else if (val > 50) el.classList.add('concentration-medium');
           else el.classList.add('concentration-low');
@@ -1251,10 +1252,14 @@ const tokenDetail = {
             burntEl.textContent = fmtAmount(bt) + ' (' + data.supply.burntPct.toFixed(1) + '%)';
             burntEl.className = 'holder-metric-value burnt-highlight';
             burntEl.title = tooltip;
-          } else {
+          } else if (data.supply.isPumpFun) {
             burntEl.textContent = 'None';
             burntEl.className = 'holder-metric-value';
             burntEl.title = '';
+          } else {
+            burntEl.textContent = 'N/A';
+            burntEl.className = 'holder-metric-value holder-metric-na';
+            burntEl.title = 'Burn detection only available for Pump.fun tokens';
           }
         }
       }
@@ -1662,7 +1667,7 @@ const tokenDetail = {
 
     // Diamond hands conviction data (defaults to 0 if not available)
     const dh = this._diamondHandsData;
-    const dist = dh && dh.distribution || {};
+    const dist = dh?.distribution || {};
     metrics.dh6h = dist['6h'] ?? 0;
     metrics.dh24h = dist['24h'] ?? 0;
     metrics.dh3d = dist['3d'] ?? 0;

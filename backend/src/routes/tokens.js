@@ -1841,8 +1841,9 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
           walletAccounts.value.forEach((acct, wi) => {
             if (!acct) return;
             if (LP_PROGRAMS.has(acct.owner)) {
-              for (const idx of walletToIndices.get(wallets[wi])) {
-                lpIndices.add(idx);
+              const indices = walletToIndices.get(wallets[wi]);
+              if (indices) {
+                for (const idx of indices) lpIndices.add(idx);
               }
             }
           });
@@ -1858,20 +1859,11 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       console.warn('[Tokens] Failed to check Streamflow locks:', err.message);
     }
 
-    // SPL burn detection: the `burn` and `burnChecked` instructions reduce the mint's
-    // supply directly, so burnt tokens no longer exist in any account. The on-chain
-    // supply (from getTokenSupply) already has these burns subtracted. To quantify
-    // SPL burns we need to know the initial supply and diff against current supply.
-    //
-    // Detection methods:
-    // 1. Pump.fun: all tokens mint exactly 1,000,000,000 (6 decimals).
-    //    Detected via Helius authorities OR mint account patterns (freeze authority
-    //    revoked + 6 decimals + supply < 1B).
-    // 2. Common launch patterns: many tokens launch with clean round initial supplies
-    //    (1M, 10M, 100M, 1B, etc.) and revoke mint authority. If current supply is
-    //    slightly below a round number, infer that was the initial supply.
-    // 3. General: if mint authority is revoked and the supply + dead wallet burns
-    //    are close to a round number, infer initial supply.
+    // SPL burn detection — only reliable for pump.fun tokens where the initial supply
+    // is known (exactly 1,000,000,000 with 6 decimals). For other tokens, the initial
+    // supply is unknown so we can't calculate SPL burns accurately.
+    // Dead wallet burns (tokens sent to incinerator etc.) are detected for all tokens
+    // via the top-holder scan above.
     const PUMP_FUN_AUTHORITIES = new Set([
       'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',  // pump.fun metadata authority
       '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // pump.fun program
@@ -1879,54 +1871,33 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     ]);
 
     let splBurnt = 0;
-    let initialSupply = null;
+    let isPumpFun = false;
 
     if (currentSupply && currentSupply > 0) {
-      // Method 1: Pump.fun detection — check Helius authorities first
+      // Pump.fun detection — check Helius authorities first
       const isPumpFunAuth = tokenAuth?.authorities?.some(a => PUMP_FUN_AUTHORITIES.has(a.address));
 
-      // Fallback pump.fun detection via mint account pattern:
-      // Pump.fun tokens have 6 decimals, mint authority revoked (null), freeze authority
-      // revoked (null), and supply <= 1B. This catches tokens even when Helius DAS
-      // doesn't return authority data.
+      // Fallback: detect via mint account pattern (6 decimals, both authorities revoked,
+      // supply <= 1B). Catches tokens when Helius DAS doesn't return authority data.
       const isPumpFunMint = !isPumpFunAuth && decimals === 6 && mintData
         && mintData.mintAuthority === null
         && mintData.freezeAuthority === null
         && currentSupply > 0 && currentSupply <= 1000000000;
 
-      if ((isPumpFunAuth || isPumpFunMint) && decimals === 6) {
-        initialSupply = 1000000000; // 1 billion — all pump.fun tokens
-      }
+      isPumpFun = !!(isPumpFunAuth || isPumpFunMint);
 
-      // Method 2: Detect common initial supplies for tokens with revoked mint authority.
-      // Use the total of current supply + all known burned tokens as the reference.
-      if (!initialSupply && mintData && mintData.mintAuthority === null) {
-        const circulating = currentSupply + deadWalletBurnt;
-        // Common round initial supplies — expanded set for broader coverage
-        const candidates = [
-          1e5, 4.2e5, 5e5,                       // 100K, 420K, 500K
-          1e6, 5e6, 1e7, 5e7, 1e8, 5e8,          // 1M to 500M
-          1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15 // 1B to 1Q
-        ];
-        for (const candidate of candidates) {
-          // If circulating is within 5% below a round number, it's likely the initial supply
-          if (circulating > candidate * 0.95 && circulating <= candidate * 1.001) {
-            initialSupply = candidate;
-            break;
-          }
+      if (isPumpFun && decimals === 6) {
+        const initialSupply = 1000000000; // 1 billion — all pump.fun tokens
+        if (initialSupply > currentSupply) {
+          splBurnt = initialSupply - currentSupply;
         }
-      }
-
-      if (initialSupply && initialSupply > currentSupply) {
-        splBurnt = initialSupply - currentSupply;
       }
     }
 
     const burntAmount = splBurnt + deadWalletBurnt;
-    // For percentage, use the total pre-burn supply as denominator.
-    // initialSupply accounts for SPL burns (which reduce on-chain supply).
-    // For dead-wallet-only burns, use currentSupply (dead wallet tokens are still on-chain).
-    const supplyDenominator = initialSupply || currentSupply;
+    // For pump.fun, denominator is the known 1B initial supply.
+    // For dead-wallet-only burns, use currentSupply (tokens still exist on-chain).
+    const supplyDenominator = isPumpFun ? 1000000000 : currentSupply;
 
     supply = {
       total: currentSupply,
@@ -1935,7 +1906,8 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       locked: lockedAmount,
       lockedPct: currentSupply > 0 && lockedAmount > 0 ? (lockedAmount / currentSupply) * 100 : 0,
       splBurnt,
-      deadWalletBurnt
+      deadWalletBurnt,
+      isPumpFun
     };
 
     // Build holders list with LP/burnt flags
@@ -1944,7 +1916,7 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
       rank: i + 1,
       address: a.wallet || a.address,
       balance: a.uiAmount,
-      percentage: totalSupply > 0 ? (a.uiAmount / totalSupply) * 100 : null,
+      percentage: (totalSupply || currentSupply) > 0 ? (a.uiAmount / (totalSupply || currentSupply)) * 100 : null,
       isLP: lpIndices.has(i),
       isBurnt: burntIndices.has(i)
     })).filter(h => h.balance > 0);
@@ -2354,10 +2326,13 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
  */
 function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
   const values = Object.values(holdTimes);
-  // Denominator: wallets with positive hold time data — not sentinels, not uncached
-  const denominator = values.length;
+  // Denominator must be `analyzed` (all wallets with data, including -1 sentinels),
+  // not just `values.length` (only positive hold times). Using values.length would
+  // inflate percentages because wallets with no hold time data are excluded from the
+  // denominator but should count as "not holding for X time".
+  const denominator = analyzed > 0 ? analyzed : values.length;
   if (denominator === 0) {
-    return { distribution: null, sampleSize, analyzed: analyzed || 0, computed: true };
+    return { distribution: null, sampleSize, analyzed: 0, computed: true };
   }
 
   const distribution = {};
@@ -2366,7 +2341,7 @@ function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
     distribution[bucket.key] = Math.round((count / denominator) * 1000) / 10;
   }
 
-  return { distribution, sampleSize, analyzed: analyzed || denominator, computed: true };
+  return { distribution, sampleSize, analyzed, computed: true };
 }
 
 // POST /api/tokens/:mint/holders/ai-analysis

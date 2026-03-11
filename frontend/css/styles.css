@@ -2790,6 +2790,7 @@ a:hover {
 .holder-metric-value.concentration-medium { color: var(--warning, #f59e0b); }
 .holder-metric-value.concentration-high { color: var(--error, #ef4444); }
 .holder-metric-value.burnt-highlight { color: #f97316; }
+.holder-metric-value.holder-metric-na { color: var(--text-muted, #6b7280); font-size: 0.8em; }
 
 .holders-risk-row {
   display: flex;
