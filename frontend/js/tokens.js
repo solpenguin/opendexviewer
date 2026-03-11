@@ -695,16 +695,20 @@ const tokenList = {
   PLATFORM_TOKEN: '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump',
 
   // Fetch and inject platform token into results if missing on page 1
+  _platformTokenInjected: false,
   async _ensurePlatformToken() {
+    this._platformTokenInjected = false;
     if (this.currentPage !== 1 || !this.tokens || this.currentFilter === 'watchlist') return;
     const hasPlatform = this.tokens.some(t =>
       (t.address || t.mintAddress || t.mint) === this.PLATFORM_TOKEN
     );
     if (hasPlatform) return;
     try {
-      const batch = await api.tokens.getBatch([this.PLATFORM_TOKEN]);
-      if (batch && batch.length > 0) {
-        this.tokens.push(batch[0]);
+      // Use detail endpoint (not batch) to get full market data from GeckoTerminal
+      const detail = await api.tokens.get(this.PLATFORM_TOKEN);
+      if (detail && (detail.address || detail.mintAddress)) {
+        this.tokens.push(detail);
+        this._platformTokenInjected = true;
       }
     } catch (_) {}
   },
@@ -967,7 +971,9 @@ const tokenList = {
     const totalInfo = document.getElementById('total-info');
 
     // Determine if there are more pages
-    this.hasMorePages = this.tokens.length === this.pageSize;
+    // Account for the injected platform token which adds 1 extra on page 1
+    const expectedSize = this._platformTokenInjected ? this.pageSize + 1 : this.pageSize;
+    this.hasMorePages = this.tokens.length >= expectedSize;
 
     // Update total pages estimate based on response
     if (!this.hasMorePages) {
