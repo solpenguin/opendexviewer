@@ -299,7 +299,21 @@
         return '$' + Number(n).toFixed(2);
       }
 
-      api.tokens.get(PLATFORM_MINT).then(function(t) {
+      function formatCount(n) {
+        if (n == null || isNaN(n)) return '--';
+        n = parseFloat(n);
+        if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+        if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return Number(n).toLocaleString();
+      }
+
+      Promise.all([
+        api.tokens.get(PLATFORM_MINT),
+        api.burnCredits.getPlatformStats().catch(function() { return null; })
+      ]).then(function(results) {
+        var t = results[0];
+        var burnStats = results[1];
         if (!t) { card.innerHTML = '<p class="landing-token-card-error">Token data unavailable</p>'; return; }
 
         var logo = t.logoUri || t.logoURI || t.logo || '';
@@ -319,10 +333,12 @@
         html += '</span>';
         html += '</div></div>';
 
+        var burned = burnStats && burnStats.totalOdBurned ? formatCount(burnStats.totalOdBurned) + ' $OD' : '--';
+
         html += '<div class="landing-token-stats">';
         html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Market Cap</span><span class="landing-token-stat-value">' + formatNumber(t.marketCap) + '</span></div>';
         html += '<div class="landing-token-stat"><span class="landing-token-stat-label">24h Volume</span><span class="landing-token-stat-value">' + formatNumber(t.volume24h) + '</span></div>';
-        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Liquidity</span><span class="landing-token-stat-value">' + formatNumber(t.liquidity) + '</span></div>';
+        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Tokens Burned</span><span class="landing-token-stat-value">' + burned + '</span></div>';
         if (t.holders) {
           html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Holders</span><span class="landing-token-stat-value">' + Number(t.holders).toLocaleString() + '</span></div>';
         }
