@@ -403,6 +403,9 @@ const tokenList = {
       // Discard stale results if a newer request was started (e.g., user changed filter)
       if (generation !== this._requestGeneration) return;
 
+      // Ensure platform token is present on page 1
+      await this._ensurePlatformToken();
+
       // Apply client-side sorting (API may return pre-sorted data from external sources)
       // This ensures the user's sort selection is always respected
       this.sortTokens();
@@ -690,6 +693,21 @@ const tokenList = {
 
   // Platform token always pinned to top on page 1
   PLATFORM_TOKEN: '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump',
+
+  // Fetch and inject platform token into results if missing on page 1
+  async _ensurePlatformToken() {
+    if (this.currentPage !== 1 || !this.tokens || this.currentFilter === 'watchlist') return;
+    const hasPlatform = this.tokens.some(t =>
+      (t.address || t.mintAddress || t.mint) === this.PLATFORM_TOKEN
+    );
+    if (hasPlatform) return;
+    try {
+      const batch = await api.tokens.getBatch([this.PLATFORM_TOKEN]);
+      if (batch && batch.length > 0) {
+        this.tokens.push(batch[0]);
+      }
+    } catch (_) {}
+  },
 
   // Sort tokens array based on current sort field and order
   // Maps sort keys to token properties and handles null/undefined values
