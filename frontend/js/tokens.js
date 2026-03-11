@@ -688,6 +688,9 @@ const tokenList = {
     }
   },
 
+  // Platform token always pinned to top on page 1
+  PLATFORM_TOKEN: '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump',
+
   // Sort tokens array based on current sort field and order
   // Maps sort keys to token properties and handles null/undefined values
   sortTokens() {
@@ -709,6 +712,14 @@ const tokenList = {
     if (config.app.debug) console.log(`[TokenList] Sorting by ${field} (${this.sortOrder})`);
 
     this.tokens.sort((a, b) => {
+      // Pin platform token to top on page 1
+      if (this.currentPage === 1) {
+        const aAddr = a.address || a.mintAddress || a.mint;
+        const bAddr = b.address || b.mintAddress || b.mint;
+        if (aAddr === this.PLATFORM_TOKEN) return -1;
+        if (bAddr === this.PLATFORM_TOKEN) return 1;
+      }
+
       // Get values, treating null/undefined as 0 for numeric comparison
       let aVal = a[field];
       let bVal = b[field];

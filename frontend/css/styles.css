@@ -14786,6 +14786,11 @@ body.landscape .hero h1 {
     min-width: 160px;
   }
 
+  .spikes-dropdown-item {
+    padding: 0.75rem 0.625rem;
+    min-height: 44px;
+  }
+
   .spikes-stats-bar {
     gap: 1rem;
     flex-wrap: wrap;

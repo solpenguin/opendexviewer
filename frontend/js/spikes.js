@@ -43,8 +43,9 @@ var spikeDetector = (function() {
     var menu = dropdownEl.querySelector('.spikes-dropdown-menu');
     var textEl = trigger.querySelector('.spikes-dropdown-text');
 
-    // Toggle open/close on trigger click
-    trigger.addEventListener('click', function(e) {
+    // Toggle open/close on trigger click/tap
+    function handleTrigger(e) {
+      e.preventDefault();
       e.stopPropagation();
       // Close any other open dropdown first
       var allDropdowns = document.querySelectorAll('.spikes-dropdown.open');
@@ -52,12 +53,14 @@ var spikeDetector = (function() {
         if (allDropdowns[i] !== dropdownEl) allDropdowns[i].classList.remove('open');
       }
       dropdownEl.classList.toggle('open');
-    });
+    }
+    trigger.addEventListener('click', handleTrigger);
 
-    // Item selection
-    menu.addEventListener('click', function(e) {
+    // Item selection (click + touchend for reliable mobile support)
+    function handleItemSelect(e) {
       var item = e.target.closest('.spikes-dropdown-item');
       if (!item) return;
+      e.preventDefault();
       e.stopPropagation();
 
       var value = item.dataset.value;
@@ -77,7 +80,9 @@ var spikeDetector = (function() {
 
       // Fire callback
       if (onSelect) onSelect(value);
-    });
+    }
+    menu.addEventListener('click', handleItemSelect);
+    menu.addEventListener('touchend', handleItemSelect);
   }
 
   function closeAllDropdowns() {
@@ -342,9 +347,8 @@ var spikeDetector = (function() {
       }
     });
 
-    // Close dropdowns on outside click
+    // Close dropdowns on outside click/tap
     document.addEventListener('click', closeAllDropdowns);
-    document.addEventListener('touchstart', closeAllDropdowns);
 
     // Make table headers sortable
     var headerRow = document.querySelector('.spikes-table thead tr');
