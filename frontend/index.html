@@ -179,6 +179,17 @@
       </div>
     </section>
 
+    <!-- Platform Token Preview -->
+    <section class="landing-token-preview">
+      <h2 class="landing-features-heading">$OD Token</h2>
+      <div class="landing-token-card" id="platform-token-card">
+        <div class="landing-token-card-loading">
+          <div class="loading-spinner small"></div>
+          <span>Loading token data...</span>
+        </div>
+      </div>
+    </section>
+
     <!-- Closing CTA -->
     <section class="landing-cta">
       <div class="landing-cta-card">
@@ -259,6 +270,74 @@
       window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
     })();
     /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
+
+    // Platform token preview
+    (function() {
+      var PLATFORM_MINT = '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump';
+      var card = document.getElementById('platform-token-card');
+      if (!card) return;
+
+      function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
+      function formatPrice(n) {
+        if (n == null || isNaN(n)) return '--';
+        if (n < 0.00001) return '$' + Number(n).toExponential(2);
+        if (n < 0.01) return '$' + Number(n).toFixed(6);
+        if (n < 1) return '$' + Number(n).toFixed(4);
+        return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function formatNumber(n) {
+        if (n == null || isNaN(n)) return '--';
+        if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+        if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+        if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K';
+        return '$' + Number(n).toFixed(2);
+      }
+
+      api.tokens.get(PLATFORM_MINT).then(function(t) {
+        if (!t) { card.innerHTML = '<p class="landing-token-card-error">Token data unavailable</p>'; return; }
+
+        var logo = t.logoUri || t.logoURI || t.logo || '';
+        var name = t.name || '$OD';
+        var symbol = t.symbol || 'OD';
+        var change = t.priceChange24h || 0;
+        var isPos = change >= 0;
+
+        var html = '<div class="landing-token-header">';
+        if (logo) {
+          html += '<img src="' + escapeHtml(logo) + '" width="40" height="40" class="landing-token-logo" alt="">';
+        }
+        html += '<div class="landing-token-info">';
+        html += '<span class="landing-token-name">' + escapeHtml(name) + ' <span class="landing-token-symbol">' + escapeHtml(symbol) + '</span></span>';
+        html += '<span class="landing-token-price">' + formatPrice(t.price);
+        html += '<span class="landing-token-change ' + (isPos ? 'positive' : 'negative') + '">' + (isPos ? '+' : '') + Number(change).toFixed(2) + '%</span>';
+        html += '</span>';
+        html += '</div></div>';
+
+        html += '<div class="landing-token-stats">';
+        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Market Cap</span><span class="landing-token-stat-value">' + formatNumber(t.marketCap) + '</span></div>';
+        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">24h Volume</span><span class="landing-token-stat-value">' + formatNumber(t.volume24h) + '</span></div>';
+        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Liquidity</span><span class="landing-token-stat-value">' + formatNumber(t.liquidity) + '</span></div>';
+        if (t.holders) {
+          html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Holders</span><span class="landing-token-stat-value">' + Number(t.holders).toLocaleString() + '</span></div>';
+        }
+        html += '</div>';
+
+        html += '<div class="landing-token-actions">';
+        html += '<a href="token.html?address=' + PLATFORM_MINT + '" class="btn btn-primary landing-btn landing-token-btn">View Token</a>';
+        html += '<a href="burn.html" class="btn btn-ghost landing-btn landing-token-btn">Burn Credits</a>';
+        html += '</div>';
+
+        card.innerHTML = html;
+      }).catch(function() {
+        card.innerHTML = '<p class="landing-token-card-error">Failed to load token data</p>';
+      });
+    })();
   </script>
 </body>
 </html>
