@@ -1138,6 +1138,48 @@ router.post('/ai-cache/delete-entry', validateAdminSession, asyncHandler(async (
   res.json({ success: true });
 }));
 
+// ==========================================
+// Diamond Hands Cache Management
+// ==========================================
+
+/**
+ * POST /admin/diamond-hands/reset
+ * Clear diamond hands cache for a specific token mint address.
+ * Clears: diamond-hands:{mint}, diamond-hands-wallets:{mint}, diamond-hands-pending:{mint}
+ */
+router.post('/diamond-hands/reset',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    const { mint } = req.body;
+
+    if (!mint || typeof mint !== 'string' || !SOLANA_ADDRESS_REGEX.test(mint)) {
+      return res.status(400).json({ success: false, error: 'Valid token mint address required' });
+    }
+
+    const keysToDelete = [
+      `diamond-hands:${mint}`,
+      `diamond-hands-wallets:${mint}`,
+      `diamond-hands-pending:${mint}`
+    ];
+
+    let deleted = 0;
+    for (const key of keysToDelete) {
+      const existed = await cache.get(key);
+      if (existed !== null && existed !== undefined) {
+        await cache.delete(key);
+        deleted++;
+      }
+    }
+
+    console.log(`[Admin] Diamond hands cache reset for ${mint.slice(0, 8)}... (${deleted} keys cleared)`);
+
+    res.json({
+      success: true,
+      data: { mint, keysCleared: deleted }
+    });
+  })
+);
+
 // Export both the router and adminSettings for use by other routes
 module.exports = router;
 module.exports.adminSettings = adminSettings;

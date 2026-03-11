@@ -282,6 +282,14 @@ const adminApi = {
   async clearAICache(type) {
     const url = type ? `/admin/ai-cache?type=${type}` : '/admin/ai-cache';
     return this.request(url, { method: 'DELETE' });
+  },
+
+  // Diamond Hands cache reset
+  async resetDiamondHandsCache(mint) {
+    return this.request('/admin/diamond-hands/reset', {
+      method: 'POST',
+      body: JSON.stringify({ mint })
+    });
   }
 };
 
@@ -435,6 +443,7 @@ const adminPanel = {
     // AI Cache management
     document.getElementById('refresh-ai-cache-btn')?.addEventListener('click', () => this.loadAICache());
     document.getElementById('clear-all-ai-cache-btn')?.addEventListener('click', () => this.clearAllAICache());
+    document.getElementById('reset-diamond-hands-btn')?.addEventListener('click', () => this.resetDiamondHandsCache());
     document.getElementById('ai-cache-table')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
@@ -2108,6 +2117,38 @@ const adminPanel = {
         }
       }
     );
+  },
+
+  async resetDiamondHandsCache() {
+    const input = document.getElementById('diamond-hands-mint-input');
+    const status = document.getElementById('diamond-hands-reset-status');
+    const mint = input?.value?.trim();
+
+    if (!mint) {
+      toast.error('Enter a token mint address');
+      return;
+    }
+
+    // Basic Solana address validation (base58, 32-44 chars)
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+      toast.error('Invalid Solana address format');
+      return;
+    }
+
+    try {
+      const result = await adminApi.resetDiamondHandsCache(mint);
+      const cleared = result.data?.keysCleared || 0;
+      status.style.display = 'block';
+      status.style.color = 'var(--accent-green, #22c55e)';
+      status.textContent = `Cache reset for ${mint.slice(0, 8)}... (${cleared} key${cleared !== 1 ? 's' : ''} cleared)`;
+      toast.success(`Diamond hands cache reset (${cleared} keys cleared)`);
+      input.value = '';
+    } catch (error) {
+      status.style.display = 'block';
+      status.style.color = 'var(--accent-red, #ef4444)';
+      status.textContent = `Failed: ${error.message}`;
+      toast.error(`Failed: ${error.message}`);
+    }
   },
 
 };
