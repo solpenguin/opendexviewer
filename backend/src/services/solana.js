@@ -862,84 +862,6 @@ async function getStreamflowLockedAmount(mintAddress, decimals = 0) {
   }
 }
 
-/**
- * Detect total SPL-burned amount for a token mint using Helius Enhanced Transactions API.
- * Queries the mint address for BURN-type transactions, paginates up to maxPages, and sums
- * the burned token amounts. This catches tokens burned via the `burn` and `burnChecked`
- * SPL Token instructions which reduce the on-chain supply directly.
- *
- * @param {string} mintAddress - Token mint address
- * @param {number} decimals - Token decimals for UI amount conversion
- * @param {number} [maxPages=5] - Max API pages to fetch (100 txns each)
- * @returns {Promise<number>} - Total burned amount in UI units (0 if none/error)
- */
-async function getTokenBurnAmount(mintAddress, decimals, maxPages = 5) {
-  if (!HELIUS_API_KEY) return 0;
-
-  try {
-    let totalBurned = 0;
-    let lastSignature = undefined;
-    const divisor = Math.pow(10, decimals);
-
-    for (let page = 0; page < maxPages; page++) {
-      const params = {
-        'api-key': HELIUS_API_KEY,
-        limit: 100,
-        type: 'BURN'
-      };
-      if (lastSignature) params.before = lastSignature;
-
-      const response = await axios.get(
-        `https://api.helius.xyz/v0/addresses/${mintAddress}/transactions`,
-        { params, timeout: 15000, httpsAgent }
-      );
-
-      const txns = response.data;
-      if (!txns || !Array.isArray(txns) || txns.length === 0) break;
-
-      for (const tx of txns) {
-        let txBurnFound = false;
-
-        // Primary: Helius enhanced transactions include a tokenTransfers array.
-        // For burn txns, tokenAmount is in UI units (already decimal-adjusted).
-        if (tx.tokenTransfers) {
-          for (const transfer of tx.tokenTransfers) {
-            if (transfer.mint === mintAddress && transfer.tokenAmount) {
-              totalBurned += transfer.tokenAmount;
-              txBurnFound = true;
-            }
-          }
-        }
-
-        // Fallback: some parsed burn events only appear under events.burn.
-        // Only use this if tokenTransfers didn't capture a burn for this mint
-        // (avoids double-counting the same transaction).
-        if (!txBurnFound && tx.events?.burn) {
-          const burn = tx.events.burn;
-          if (burn.mint === mintAddress && burn.amount) {
-            // events.burn.amount is in raw units
-            totalBurned += burn.amount / divisor;
-          }
-        }
-      }
-
-      // Pagination: use the last transaction's signature as cursor
-      lastSignature = txns[txns.length - 1]?.signature;
-      if (txns.length < 100) break; // No more pages
-    }
-
-    if (totalBurned > 0) {
-      console.log(`[Solana] On-chain burns for ${mintAddress.slice(0, 8)}...: ${totalBurned.toLocaleString()}`);
-    }
-    return totalBurned;
-  } catch (error) {
-    // 404 is expected for mints with no burn history
-    if (error.response?.status === 404) return 0;
-    console.warn(`[Solana] getTokenBurnAmount error for ${mintAddress.slice(0, 8)}...: ${error.response?.status || error.message}`);
-    return 0;
-  }
-}
-
 module.exports = {
   rpcCall,
   getAccountInfo,
@@ -959,7 +881,6 @@ module.exports = {
   getStreamflowLockedAmount,
   getTokenAuthorities,
   getTransactionsForAddress,
-  getTokenBurnAmount,
   getWalletHoldMetrics,
   isHeliusConfigured,
   checkHealth

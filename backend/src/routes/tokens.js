@@ -25,12 +25,9 @@ const VALID_ORDERS = ['asc', 'desc'];
 
 // Known burn wallets and LP program IDs — shared across holder endpoints
 const BURN_WALLETS = new Set([
-  '1nc1nerator11111111111111111111111111111111',  // Solana incinerator
+  '1nc1nerator11111111111111111111111111111111',  // Solana incinerator (most common)
   '1111111111111111111111111111111111111111111',   // Null address (44 ones)
   'burnedFi11111111111111111111111111111111111',   // burnedFi vanity address
-  '11111111111111111111111111111111',              // System program (32 ones)
-  'dead000000000000000000000000000000000000000',   // Dead vanity address
-  'DeadB1ockxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',     // Dead block vanity
 ]);
 const LP_PROGRAMS = new Set([
   '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',  // Raydium AMM v4
@@ -1862,16 +1859,19 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     }
 
     // SPL burn detection: the `burn` and `burnChecked` instructions reduce the mint's
-    // supply directly, so burnt tokens no longer exist in any account.
+    // supply directly, so burnt tokens no longer exist in any account. The on-chain
+    // supply (from getTokenSupply) already has these burns subtracted. To quantify
+    // SPL burns we need to know the initial supply and diff against current supply.
     //
-    // Three detection methods (tried in order):
-    // 1. On-chain: Query Helius Enhanced Transactions API for BURN-type transactions
-    //    targeting this mint. Sums actual burn amounts from parsed transaction history.
-    //    Most accurate — works for ALL tokens regardless of launch platform.
-    // 2. Pump.fun: Known initial supply of 1B tokens (6 decimals). If on-chain query
-    //    returned 0 (e.g. Helius unavailable), infer burns from supply difference.
-    // 3. Heuristic: For tokens with revoked mint authority, check if current supply
-    //    aligns with a common round initial supply and infer burns from the difference.
+    // Detection methods:
+    // 1. Pump.fun: all tokens mint exactly 1,000,000,000 (6 decimals).
+    //    Detected via Helius authorities OR mint account patterns (freeze authority
+    //    revoked + 6 decimals + supply < 1B).
+    // 2. Common launch patterns: many tokens launch with clean round initial supplies
+    //    (1M, 10M, 100M, 1B, etc.) and revoke mint authority. If current supply is
+    //    slightly below a round number, infer that was the initial supply.
+    // 3. General: if mint authority is revoked and the supply + dead wallet burns
+    //    are close to a round number, infer initial supply.
     const PUMP_FUN_AUTHORITIES = new Set([
       'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',  // pump.fun metadata authority
       '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // pump.fun program
@@ -1881,26 +1881,36 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     let splBurnt = 0;
     let initialSupply = null;
 
-    // Method 1: On-chain burn detection via Helius transaction history
-    try {
-      splBurnt = await solanaService.getTokenBurnAmount(mint, decimals);
-    } catch (err) {
-      console.warn('[Tokens] On-chain burn detection failed:', err.message);
-    }
+    if (currentSupply && currentSupply > 0) {
+      // Method 1: Pump.fun detection — check Helius authorities first
+      const isPumpFunAuth = tokenAuth?.authorities?.some(a => PUMP_FUN_AUTHORITIES.has(a.address));
 
-    // Method 2 & 3: Heuristic fallback when on-chain detection found nothing
-    // (Helius unavailable, or burns happened via supply reduction without parsed tx history)
-    if (splBurnt === 0 && currentSupply && currentSupply > 0) {
-      const isPumpFun = tokenAuth?.authorities?.some(a => PUMP_FUN_AUTHORITIES.has(a.address));
-      if (isPumpFun && decimals === 6) {
+      // Fallback pump.fun detection via mint account pattern:
+      // Pump.fun tokens have 6 decimals, mint authority revoked (null), freeze authority
+      // revoked (null), and supply <= 1B. This catches tokens even when Helius DAS
+      // doesn't return authority data.
+      const isPumpFunMint = !isPumpFunAuth && decimals === 6 && mintData
+        && mintData.mintAuthority === null
+        && mintData.freezeAuthority === null
+        && currentSupply > 0 && currentSupply <= 1000000000;
+
+      if ((isPumpFunAuth || isPumpFunMint) && decimals === 6) {
         initialSupply = 1000000000; // 1 billion — all pump.fun tokens
       }
 
+      // Method 2: Detect common initial supplies for tokens with revoked mint authority.
+      // Use the total of current supply + all known burned tokens as the reference.
       if (!initialSupply && mintData && mintData.mintAuthority === null) {
         const circulating = currentSupply + deadWalletBurnt;
-        const candidates = [1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12];
+        // Common round initial supplies — expanded set for broader coverage
+        const candidates = [
+          1e5, 4.2e5, 5e5,                       // 100K, 420K, 500K
+          1e6, 5e6, 1e7, 5e7, 1e8, 5e8,          // 1M to 500M
+          1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15 // 1B to 1Q
+        ];
         for (const candidate of candidates) {
-          if (circulating > candidate * 0.999 && circulating <= candidate) {
+          // If circulating is within 5% below a round number, it's likely the initial supply
+          if (circulating > candidate * 0.95 && circulating <= candidate * 1.001) {
             initialSupply = candidate;
             break;
           }
@@ -1914,9 +1924,9 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
 
     const burntAmount = splBurnt + deadWalletBurnt;
     // For percentage, use the total pre-burn supply as denominator.
-    // If we detected on-chain burns, the original supply = currentSupply + splBurnt.
-    // For dead-wallet burns the tokens still exist on-chain so currentSupply includes them.
-    const supplyDenominator = initialSupply || (currentSupply + splBurnt);
+    // initialSupply accounts for SPL burns (which reduce on-chain supply).
+    // For dead-wallet-only burns, use currentSupply (dead wallet tokens are still on-chain).
+    const supplyDenominator = initialSupply || currentSupply;
 
     supply = {
       total: currentSupply,
