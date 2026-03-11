@@ -2321,16 +2321,12 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
 
 /**
  * Build diamond hands distribution from hold time data.
- * Denominator is `analyzed` (wallets with actual data), not total sample.
- * Wallets with -1 sentinel (no data/failed) are excluded from denominator.
+ * Denominator is values.length (wallets with positive hold times only).
+ * Wallets with no data are excluded entirely from the calculation.
  */
 function buildDiamondHandsResult(holdTimes, sampleSize, analyzed) {
   const values = Object.values(holdTimes);
-  // Denominator must be `analyzed` (all wallets with data, including -1 sentinels),
-  // not just `values.length` (only positive hold times). Using values.length would
-  // inflate percentages because wallets with no hold time data are excluded from the
-  // denominator but should count as "not holding for X time".
-  const denominator = analyzed > 0 ? analyzed : values.length;
+  const denominator = values.length;
   if (denominator === 0) {
     return { distribution: null, sampleSize, analyzed: 0, computed: true };
   }
