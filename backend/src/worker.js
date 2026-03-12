@@ -33,7 +33,8 @@ const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
 // Tokens with a `pump_swap_pool` field = PumpSwap graduates.
 // Results are persisted to PostgreSQL for the API route to read.
 
-const DAILY_BRIEF_HOLDER_BATCH_SIZE = 10;
+const DAILY_BRIEF_HOLDER_BATCH_SIZE = 25;
+const GECKO_MULTI_BATCH_SIZE = 30; // getMultiTokenInfo max per call
 
 const DAILY_BRIEF_SKIP_ADDRESSES = new Set([
   'So11111111111111111111111111111111111111112',   // SOL
@@ -51,26 +52,33 @@ function computeDerivedFields(token) {
   token.liqMcapRatio = mc > 0 ? (token.liquidity || 0) / mc : 0;
 }
 
-async function enrichMarketData(token) {
-  try {
-    const overview = await geckoService.getTokenOverview(token.address);
-    if (overview) {
-      token.price = overview.price || overview.priceUsd || 0;
-      token.priceChange24h = overview.priceChange24h || 0;
-      token.volume24h = overview.volume24h || 0;
-      token.marketCap = overview.marketCap || overview.fdv || token.marketCap || 0;
-      token.liquidity = overview.liquidity || 0;
-      if (!token.logoUri && (overview.logoUri || overview.logoURI)) {
-        token.logoUri = overview.logoUri || overview.logoURI;
+/**
+ * Batch-enrich tokens with market data using getMultiTokenInfo (30 tokens/call).
+ * Falls back to individual getTokenOverview for any tokens missing from batch.
+ */
+async function enrichMarketDataBatched(tokens) {
+  if (tokens.length === 0) return;
+
+  for (let i = 0; i < tokens.length; i += GECKO_MULTI_BATCH_SIZE) {
+    const batch = tokens.slice(i, i + GECKO_MULTI_BATCH_SIZE);
+    try {
+      const addresses = batch.map(t => t.address);
+      const multiData = await geckoService.getMultiTokenInfo(addresses);
+
+      for (const token of batch) {
+        const info = multiData[token.address];
+        if (info) {
+          token.price = info.price || 0;
+          token.priceChange24h = info.priceChange24h || 0;
+          token.volume24h = info.volume24h || 0;
+          token.marketCap = info.marketCap || info.fdv || token.marketCap || 0;
+          if (info.logoUri && !token.logoUri) token.logoUri = info.logoUri;
+          if (info.name && (!token.name || token.name === token.symbol)) token.name = info.name;
+          if (info.symbol && !token.symbol) token.symbol = info.symbol;
+        }
       }
-      if (!token.name || token.name === token.symbol) {
-        token.name = overview.name || token.name;
-      }
-      if (!token.symbol) {
-        token.symbol = overview.symbol || token.symbol;
-      }
-    }
-  } catch (_) { /* non-critical */ }
+    } catch (_) { /* non-critical — tokens keep their defaults */ }
+  }
 }
 
 async function enrichWithHolders(token) {
@@ -338,9 +346,30 @@ const jobProcessors = {
       }
     }
 
-    // Step 4: DEX filtering for local DB results
-    // getTokenOverview is required here — only the pools endpoint returns dexIds
-    const localResults = results.filter(t => t.source === 'local');
+    // Step 4: Batch-enrich all results with getMultiTokenInfo (1 call per 30 tokens)
+    // Then DEX-filter local results using individual pool lookups only for top candidates
+    const allAddresses = results.map(t => t.address);
+    if (allAddresses.length > 0) {
+      try {
+        const batchInfo = await geckoService.getMultiTokenInfo(allAddresses);
+        for (const token of results) {
+          const data = batchInfo[token.address];
+          if (data) {
+            if (!token.name && data.name) token.name = data.name;
+            if (!token.symbol && data.symbol) token.symbol = data.symbol;
+            if (!token.price && data.price) token.price = data.price;
+            if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
+            if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
+            if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
+            token._enriched = true;
+          }
+        }
+      } catch (_) { /* non-critical */ }
+    }
+
+    // DEX filtering: only check local results that need dexId verification
+    // Limit to top 8 local results to cap API calls (only 5 needed in final)
+    const localResults = results.filter(t => t.source === 'local').slice(0, 8);
     if (localResults.length > 0) {
       try {
         const overviewResults = await Promise.allSettled(
@@ -349,14 +378,10 @@ const jobProcessors = {
         for (let i = 0; i < localResults.length; i++) {
           const result = overviewResults[i];
           if (result.status === 'fulfilled' && result.value) {
-            const overview = result.value;
-            localResults[i]._dexIds = overview.dexIds || [];
-            // Preserve overview data to avoid re-fetching in Step 5
-            if (!localResults[i].pairCreatedAt && overview.pairCreatedAt) localResults[i].pairCreatedAt = overview.pairCreatedAt;
-            if (!localResults[i].price && overview.price) localResults[i].price = overview.price;
-            if (!localResults[i].marketCap && overview.marketCap) localResults[i].marketCap = overview.marketCap;
-            if (!localResults[i].volume24h && overview.volume24h) localResults[i].volume24h = overview.volume24h;
-            localResults[i]._enriched = true;
+            localResults[i]._dexIds = result.value.dexIds || [];
+            if (!localResults[i].pairCreatedAt && result.value.pairCreatedAt) {
+              localResults[i].pairCreatedAt = result.value.pairCreatedAt;
+            }
           } else {
             localResults[i]._dexIds = [];
           }
@@ -375,51 +400,6 @@ const jobProcessors = {
     }
 
     const final = results.slice(0, 5);
-
-    // Step 5: Enrich tokens still missing metadata (skip tokens already enriched by Step 4)
-    const needsBatchMeta = final.filter(t =>
-      !t._enriched && (!t.name || !t.symbol || !t.price || !t.marketCap || !t.volume24h || !t.logoURI)
-    );
-    const needsOverview = final.filter(t =>
-      !t._enriched && (!t.pairCreatedAt || !t.price || !t.marketCap || !t.volume24h)
-    );
-
-    if (needsBatchMeta.length > 0 || needsOverview.length > 0) {
-      const [batchInfo, overviewResults] = await Promise.all([
-        needsBatchMeta.length > 0
-          ? geckoService.getMultiTokenInfo(needsBatchMeta.map(t => t.address)).catch(() => ({}))
-          : {},
-        needsOverview.length > 0
-          ? Promise.allSettled(needsOverview.map(t => geckoService.getTokenOverview(t.address)))
-          : []
-      ]);
-
-      for (const token of needsBatchMeta) {
-        const data = batchInfo[token.address];
-        if (data) {
-          if (!token.name && data.name) token.name = data.name;
-          if (!token.symbol && data.symbol) token.symbol = data.symbol;
-          if (!token.price && data.price) token.price = data.price;
-          if (!token.marketCap) token.marketCap = data.marketCap || data.fdv || null;
-          if (!token.volume24h && data.volume24h) token.volume24h = data.volume24h;
-          if (!token.logoURI && data.logoUri) token.logoURI = data.logoUri;
-        }
-      }
-
-      for (let i = 0; i < needsOverview.length; i++) {
-        const result = overviewResults[i];
-        if (result.status === 'fulfilled' && result.value) {
-          const overview = result.value;
-          const t = needsOverview[i];
-          if (!t.pairCreatedAt && overview.pairCreatedAt) t.pairCreatedAt = overview.pairCreatedAt;
-          if (!t.name && overview.name && overview.name !== '???' && overview.name.toLowerCase() !== 'unknown token' && overview.name.toLowerCase() !== 'unknown') t.name = overview.name;
-          if (!t.symbol && overview.symbol && overview.symbol !== '???' && overview.symbol !== 'UNKNOWN') t.symbol = overview.symbol;
-          if (!t.price && overview.price) t.price = overview.price;
-          if (!t.marketCap && overview.marketCap) t.marketCap = overview.marketCap;
-          if (!t.volume24h && overview.volume24h) t.volume24h = overview.volume24h;
-        }
-      }
-    }
 
     // Clean up internal fields
     for (const t of final) { delete t._dexIds; delete t._enriched; }
@@ -555,7 +535,6 @@ const jobProcessors = {
    */
   'refresh-daily-brief': async (job) => {
     const cycleStart = Date.now();
-    const GECKO_BATCH_SIZE = 10;
 
     if (!db.isReady()) {
       throw new Error('Database not ready');
@@ -615,7 +594,7 @@ const jobProcessors = {
       if (newTokens.length > 0) {
         console.log(`[DailyBrief] ${newTokens.length} new PumpSwap graduates found`);
 
-        await Promise.all(newTokens.map(enrichMarketData));
+        await enrichMarketDataBatched(newTokens);
         await enrichHoldersBatched(newTokens);
         await enrichWithHelius(newTokens);
 
@@ -628,7 +607,7 @@ const jobProcessors = {
       }
 
       // 4. Re-enrich stale existing tokens (market data + holders)
-      const staleMints = await db.getDailyBriefStaleTokens(5, GECKO_BATCH_SIZE);
+      const staleMints = await db.getDailyBriefStaleTokens(5, GECKO_MULTI_BATCH_SIZE);
 
       if (staleMints.length > 0) {
         const staleTokens = staleMints.map(addr => ({
@@ -637,7 +616,7 @@ const jobProcessors = {
           liquidity: 0, holders: 0, volMcapRatio: 0, liqMcapRatio: 0
         }));
 
-        await Promise.all(staleTokens.map(enrichMarketData));
+        await enrichMarketDataBatched(staleTokens);
         await enrichHoldersBatched(staleTokens);
 
         for (const t of staleTokens) {

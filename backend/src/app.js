@@ -513,21 +513,28 @@ async function warmCache() {
     const topTokens = await db.getMostViewedTokens(20);
     if (!topTokens || topTokens.length === 0) return;
 
-    let warmed = 0;
+    // Check which tokens need warming
+    const needsWarm = [];
+    let alreadyCached = 0;
     for (const token of topTokens) {
       const mint = token.token_mint;
-      // Skip if already cached (e.g. Redis survived the restart)
       const existing = await cache.get(keys.tokenInfo(mint));
-      if (existing) { warmed++; continue; }
+      if (existing) { alreadyCached++; } else { needsWarm.push(mint); }
+    }
 
+    // Batch-fetch all uncached tokens in 1 call (max 30)
+    let warmed = alreadyCached;
+    if (needsWarm.length > 0) {
       try {
-        const overview = await geckoService.getTokenOverview(mint);
-        if (overview) {
-          await cache.set(keys.tokenInfo(mint), overview, TTL.PRICE_DATA);
-          warmed++;
+        const batchInfo = await geckoService.getMultiTokenInfo(needsWarm);
+        for (const mint of needsWarm) {
+          if (batchInfo[mint]) {
+            await cache.set(keys.tokenInfo(mint), batchInfo[mint], TTL.PRICE_DATA);
+            warmed++;
+          }
         }
       } catch (_) {
-        // Non-critical — token will be fetched on first request instead
+        // Non-critical — tokens will be fetched on first request
       }
     }
     console.log(`[CacheWarm] Warmed ${warmed}/${topTokens.length} top tokens`);
