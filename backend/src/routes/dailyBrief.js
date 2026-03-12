@@ -31,7 +31,8 @@ function computeAggregateStats(tokens) {
   const holders = tokens.map(t => t.holders || 0).filter(v => v > 0);
   const volRatios = tokens.map(t => t.volMcapRatio || 0).filter(v => v > 0);
   const liqRatios = tokens.map(t => t.liqMcapRatio || 0).filter(v => v > 0);
-  const changes = tokens.map(t => t.priceChange24h || 0);
+  // Only include tokens with actual price change data (non-zero = has data)
+  const changes = tokens.map(t => t.priceChange24h || 0).filter(c => c !== 0);
 
   function median(arr) {
     if (arr.length === 0) return 0;

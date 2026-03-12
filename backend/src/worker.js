@@ -607,7 +607,10 @@ const jobProcessors = {
       }
 
       // 4. Re-enrich stale existing tokens (market data + holders)
-      const staleMints = await db.getDailyBriefStaleTokens(5, GECKO_MULTI_BATCH_SIZE);
+      //    Uses individual getTokenOverview (pools endpoint) because it returns
+      //    accurate priceChange24h and liquidity — the batch /tokens/multi/ endpoint
+      //    often returns null for these fields on newer tokens.
+      const staleMints = await db.getDailyBriefStaleTokens(5, 15);
 
       if (staleMints.length > 0) {
         const staleTokens = staleMints.map(addr => ({
@@ -616,7 +619,19 @@ const jobProcessors = {
           liquidity: 0, holders: 0, volMcapRatio: 0, liqMcapRatio: 0
         }));
 
-        await enrichMarketDataBatched(staleTokens);
+        // Use individual pool lookups for accurate price change + liquidity
+        for (const token of staleTokens) {
+          try {
+            const overview = await geckoService.getTokenOverview(token.address);
+            if (overview) {
+              token.price = overview.price || 0;
+              token.priceChange24h = overview.priceChange24h || 0;
+              token.volume24h = overview.volume24h || 0;
+              token.marketCap = overview.marketCap || overview.fdv || 0;
+              token.liquidity = overview.liquidity || 0;
+            }
+          } catch (_) { /* non-critical */ }
+        }
         await enrichHoldersBatched(staleTokens);
 
         for (const t of staleTokens) {
