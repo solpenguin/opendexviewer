@@ -1,28 +1,23 @@
 /**
- * Daily Brief — Shows tokens that graduated from PumpFun in the last 24 hours.
+ * Daily Brief — Shows tokens that graduated from PumpFun recently.
  * "Graduated" = completed their bonding curve on PumpFun and migrated to PumpSwap.
  *
  * Discovery strategy:
- *   We use GeckoTerminal's new_pools endpoint:
- *     GET /networks/solana/new_pools
- *   This returns ALL new pools across all DEXes, sorted by creation time
- *   (newest first). We filter client-side to PumpSwap pools only.
+ *   PumpFun is the SOLE discovery source. We query their /coins endpoint
+ *   sorted by last_trade_timestamp descending, filtering for complete=true.
+ *   For graduated tokens, last_trade_timestamp = the final bonding curve trade
+ *   = the graduation moment.
  *
- *   Since pools are time-sorted, we paginate until the oldest pool on a
- *   page is older than our window — guaranteeing complete coverage of
- *   every PumpSwap pool created within the window.
- *
- *   Each candidate is then verified against the PumpFun API to confirm
- *   it's a true PumpFun graduate (not spam on PumpSwap).
+ *   This eliminates GeckoTerminal rate limit issues entirely — no pool
+ *   pagination needed. GeckoTerminal is only used for per-token market data
+ *   enrichment (individual lookups, not bulk scanning).
  *
  * Architecture: Incremental rolling-window token store.
- *   1. Fetch PumpSwap pools from GeckoTerminal (paginate until covered)
- *   2. pool_created_at = graduation timestamp (authoritative)
- *   3. Verify each candidate against PumpFun API (reject non-PumpFun spam)
- *   4. Admit only confirmed PumpFun graduates
- *   5. Enrich with Jupiter (holders) and Helius (metadata)
- *   6. Periodically re-enrich stale market data
- *   7. Evict tokens older than the configured window
+ *   1. Fetch graduated tokens directly from PumpFun API
+ *   2. Admit new tokens not already in the store
+ *   3. Enrich with GeckoTerminal (market data) + Jupiter (holders)
+ *   4. Periodically re-enrich stale market data
+ *   5. Evict tokens older than the configured window
  *
  * API requests read directly from the store — near-instant responses.
  */
@@ -37,19 +32,12 @@ const { searchLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../middleware/validation');
 
 // ── Timing constants ─────────────────────────────────────────────────
-const FETCH_INTERVAL_MS  = 3 * 60 * 1000;   // Poll every 3 min (was 2 — breathe room for Gecko budget)
+const FETCH_INTERVAL_MS  = 3 * 60 * 1000;   // Poll every 3 min
 const ENRICH_STALE_MS    = 5 * 60 * 1000;   // Re-enrich market data every 5 min
 const MAX_WINDOW_MS      = 72 * 60 * 60 * 1000; // Hard eviction at 72h
-const GECKO_BATCH_SIZE   = 10;               // Max Gecko re-enrich calls per cycle (was 25)
+const GECKO_BATCH_SIZE   = 10;               // Max Gecko re-enrich calls per cycle
 const HOLDER_BATCH_SIZE  = 10;               // Max parallel Jupiter holder lookups
-
-// Discovery uses /new_pools (sorted by creation time, newest first).
-// We paginate until all pools on a page are older than our window.
-// MAX_DISCOVERY_PAGES is a safety cap to avoid runaway pagination.
-const MAX_DISCOVERY_PAGES = 40;
-const PUMPFUN_VERIFY_CONCURRENCY = 10;       // Parallel PumpFun verification calls
-
-const PUMPSWAP_DEX_ID = 'pumpswap';
+const PUMPFUN_MAX_PAGES  = 10;              // Max pages to scan from PumpFun per cycle
 
 // Skip known non-token addresses
 const SKIP_ADDRESSES = new Set([
@@ -59,7 +47,6 @@ const SKIP_ADDRESSES = new Set([
 
 // ── In-memory token store ────────────────────────────────────────────
 const tokenStore = new Map();  // address → enrichedToken
-const _rejectedAddresses = new Set(); // addresses confirmed NOT PumpFun tokens
 let _lastFetchCycle = 0;
 let _refreshInFlight = null;
 let _storeReady = false;
@@ -121,7 +108,7 @@ function computeDerivedFields(token) {
 
 // ── Enrichment helpers ───────────────────────────────────────────────
 
-async function refreshMarketData(token) {
+async function enrichMarketData(token) {
   try {
     const overview = await geckoService.getTokenOverview(token.address);
     if (overview) {
@@ -196,128 +183,77 @@ function evictStale() {
 
 /**
  * Core refresh cycle:
- *  1. Discover PumpSwap pools via /new_pools (sorted by creation time)
- *  2. Verify candidates against PumpFun API (reject non-PumpFun spam)
- *  3. Enrich confirmed tokens with Jupiter + Helius
+ *  1. Fetch graduated tokens from PumpFun API
+ *  2. Admit new tokens to the store
+ *  3. Enrich with GeckoTerminal (market data) + Jupiter (holders) + Helius (metadata)
  *  4. Re-enrich stale existing tokens
  *  5. Evict expired tokens
  */
 async function refreshStore() {
   const cycleStart = Date.now();
-  const windowCutoff = Date.now() - MAX_WINDOW_MS;
 
   try {
-    // 1. Discover PumpSwap pools via /new_pools (sorted by creation time, newest first).
-    //    We paginate until every pool on a page is older than our window,
-    //    guaranteeing we catch EVERY recently created PumpSwap pool.
-    let totalPoolsScanned = 0;
-    let pumpswapInWindow = 0;
-    let pagesScanned = 0;
+    // 1. Fetch graduated tokens directly from PumpFun
+    const pfTokens = await pumpfunService.getGraduatedTokens(MAX_WINDOW_MS, PUMPFUN_MAX_PAGES);
+
+    // 2. Admit new tokens not already in the store
     const newTokens = [];
-    const candidates = [];  // PumpSwap pools to verify against PumpFun
 
-    for (let page = 1; page <= MAX_DISCOVERY_PAGES; page++) {
-      const { filtered: pools, totalOnPage, oldestOnPageMs } =
-        await geckoService.getNewPoolsByDex(PUMPSWAP_DEX_ID, page);
-      pagesScanned = page;
+    for (const pf of pfTokens) {
+      const addr = pf.mint;
+      if (!addr || SKIP_ADDRESSES.has(addr)) continue;
+      if (tokenStore.has(addr)) continue;
 
-      if (totalOnPage === 0) break; // No more pages
+      // last_trade_timestamp = graduation time (final bonding curve trade)
+      const graduatedAtMs = pf.last_trade_timestamp || 0;
+      const createdAtMs = pf.created_timestamp || 0;
 
-      totalPoolsScanned += totalOnPage;
+      const token = {
+        address: addr,
+        name: pf.name || pf.symbol || '',
+        symbol: pf.symbol || '',
+        logoUri: pf.image_uri || null,
+        createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
+        _createdAtMs: createdAtMs,
+        _graduatedAtMs: graduatedAtMs,
+        _enrichedAt: 0,
+        graduatedAt: graduatedAtMs ? new Date(graduatedAtMs).toISOString() : null,
+        description: pf.description || '',
+        website: pf.website || null,
+        twitter: pf.twitter || null,
+        telegram: pf.telegram || null,
+        price: 0,
+        priceChange24h: 0,
+        volume24h: 0,
+        marketCap: pf.usd_market_cap || 0,
+        liquidity: 0,
+        holders: 0,
+        gradVelocityHours: computeGradVelocity(createdAtMs, graduatedAtMs),
+        volMcapRatio: 0,
+        liqMcapRatio: 0
+      };
 
-      for (const pool of pools) {
-        const addr = pool.baseAddress;
-        if (!addr || SKIP_ADDRESSES.has(addr)) continue;
-        if (!pool.createdAt) continue;
-
-        const createdMs = new Date(pool.createdAt).getTime();
-        if (isNaN(createdMs) || createdMs < windowCutoff) continue;
-
-        pumpswapInWindow++;
-
-        // Skip if already in store or already rejected
-        if (tokenStore.has(addr) || _rejectedAddresses.has(addr)) continue;
-
-        candidates.push({ pool, addr, createdMs });
-      }
-
-      // Since /new_pools is sorted by creation time (newest first),
-      // once the oldest pool on this page is older than our window,
-      // all subsequent pages will be entirely outside it — stop.
-      if (oldestOnPageMs > 0 && oldestOnPageMs < windowCutoff) {
-        break;
-      }
+      newTokens.push(token);
+      tokenStore.set(addr, token);
     }
 
-    // 2. Verify candidates against PumpFun API — only admit real PumpFun tokens
-    if (candidates.length > 0) {
-      const mintsToVerify = candidates.map(c => c.addr);
-      const { confirmed, pumpFunData, inconclusive } =
-        await pumpfunService.verifyPumpFunBatch(mintsToVerify, PUMPFUN_VERIFY_CONCURRENCY);
-
-      let rejected = 0;
-      for (const { pool, addr, createdMs } of candidates) {
-        if (!confirmed.has(addr)) {
-          // Only permanently reject if we got a definitive 404.
-          // Transient errors (429/network) are retried next cycle.
-          if (!inconclusive.has(addr)) {
-            _rejectedAddresses.add(addr);
-            rejected++;
-          }
-          continue;
-        }
-
-        const pfData = pumpFunData[addr] || {};
-        const tokenSymbol = pfData.symbol || pool.name.split(' / ')[0] || '';
-
-        const token = {
-          address: addr,
-          name: pfData.name || tokenSymbol,
-          symbol: tokenSymbol,
-          logoUri: pfData.image_uri || null,
-          createdAt: pfData.created_timestamp ? new Date(pfData.created_timestamp).toISOString() : null,
-          _createdAtMs: pfData.created_timestamp || 0,
-          _graduatedAtMs: createdMs,
-          _enrichedAt: 0,
-          graduatedAt: new Date(createdMs).toISOString(),
-          description: pfData.description || '',
-          website: pfData.website || null,
-          twitter: pfData.twitter || null,
-          telegram: pfData.telegram || null,
-          price: pool.price,
-          priceChange24h: pool.priceChange24h,
-          volume24h: pool.volume24h,
-          marketCap: pool.marketCap,
-          liquidity: pool.liquidity,
-          holders: 0,
-          gradVelocityHours: computeGradVelocity(
-            pfData.created_timestamp || 0,
-            createdMs
-          ),
-          volMcapRatio: 0,
-          liqMcapRatio: 0
-        };
-
-        computeDerivedFields(token);
-        newTokens.push(token);
-        tokenStore.set(addr, token);
-      }
-
-      if (rejected > 0 || inconclusive.size > 0) {
-        console.log(`[DailyBrief] Verified: ${confirmed.size} confirmed, ${rejected} rejected, ${inconclusive.size} inconclusive (retry next cycle)`);
-      }
-    }
-
-    // 3. Enrich new tokens with Jupiter (holders) + Helius (metadata)
+    // 3. Enrich new tokens with market data + holders + metadata
     if (newTokens.length > 0) {
       console.log(`[DailyBrief] ${newTokens.length} new PumpFun graduates found`);
 
+      // Enrich market data from GeckoTerminal (individual lookups, rate-limited internally)
+      await Promise.all(newTokens.map(enrichMarketData));
+
+      // Enrich holders from Jupiter (batched)
       await enrichHoldersBatched(newTokens);
+
+      // Enrich metadata from Helius (batch API)
       await enrichWithHelius(newTokens);
 
       const now = Date.now();
       for (const t of newTokens) {
         t._enrichedAt = now;
+        computeDerivedFields(t);
       }
     }
 
@@ -334,9 +270,7 @@ async function refreshStore() {
       staleTokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
       const refreshBatch = staleTokens.slice(0, GECKO_BATCH_SIZE);
 
-      // refreshMarketData calls go through the Gecko rate limiter (2s each)
-      // so parallel is fine — they serialize internally
-      await Promise.all(refreshBatch.map(refreshMarketData));
+      await Promise.all(refreshBatch.map(enrichMarketData));
       await enrichHoldersBatched(refreshBatch);
 
       for (const t of refreshBatch) {
@@ -355,7 +289,7 @@ async function refreshStore() {
     _lastFetchCycle = Date.now();
     _storeReady = true;
 
-    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, pages: ${pagesScanned}, pools scanned: ${totalPoolsScanned}, pumpswap in window: ${pumpswapInWindow}, verified: ${candidates.length}, admitted: ${newTokens.length}, rejected cache: ${_rejectedAddresses.size}, store: ${tokenStore.size}`);
+    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, from PumpFun: ${pfTokens.length}, new: ${newTokens.length}, store: ${tokenStore.size}`);
 
   } catch (err) {
     console.error('[DailyBrief] Refresh error:', err.message);
@@ -433,32 +367,19 @@ router.get('/', searchLimiter, asyncHandler(async (req, res) => {
 
 // ── Admin helpers (used by admin route) ──────────────────────────────
 
-/**
- * Clear the entire in-memory store, rejected cache, and trigger a fresh scan.
- * Returns stats about what was cleared.
- */
 function clearStore() {
   const storeSize = tokenStore.size;
-  const rejectedSize = _rejectedAddresses.size;
-
   tokenStore.clear();
-  _rejectedAddresses.clear();
   _lastFetchCycle = 0;
   _storeReady = false;
-
-  console.log(`[DailyBrief] Admin clear: ${storeSize} tokens + ${rejectedSize} rejected entries`);
-
-  // Trigger immediate re-scan
+  console.log(`[DailyBrief] Admin clear: ${storeSize} tokens`);
   triggerRefresh();
-
-  return { tokensCleared: storeSize, rejectedCleared: rejectedSize };
+  return { tokensCleared: storeSize };
 }
 
-/** Return store stats for admin dashboard */
 function getStoreStats() {
   return {
     storeSize: tokenStore.size,
-    rejectedSize: _rejectedAddresses.size,
     lastRefresh: _lastFetchCycle,
     storeReady: _storeReady,
     refreshInFlight: !!_refreshInFlight

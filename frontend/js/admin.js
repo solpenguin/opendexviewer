@@ -2184,7 +2184,6 @@ const adminPanel = {
       container.innerHTML =
         '<div class="stats-grid" style="margin-bottom: 0;">' +
           '<div class="stat-card"><div class="stat-value">' + (d.storeSize || 0) + '</div><div class="stat-label">Tokens in Store</div></div>' +
-          '<div class="stat-card"><div class="stat-value">' + (d.rejectedSize || 0) + '</div><div class="stat-label">Rejected (non-PF)</div></div>' +
           '<div class="stat-card"><div class="stat-value">' + (d.storeReady ? 'Yes' : 'No') + '</div><div class="stat-label">Store Ready</div></div>' +
           '<div class="stat-card"><div class="stat-value">' + (d.refreshInFlight ? 'Yes' : 'No') + '</div><div class="stat-label">Refresh Active</div></div>' +
         '</div>' +
@@ -2202,7 +2201,7 @@ const adminPanel = {
         try {
           var result = await adminApi.clearDailyBriefCache();
           var d = result.data || {};
-          toast.success('Daily Brief cleared: ' + d.tokensCleared + ' tokens, ' + d.rejectedCleared + ' rejected entries. Re-scan started.');
+          toast.success('Daily Brief cleared: ' + d.tokensCleared + ' tokens. Re-scan started.');
           this.loadDailyBriefCache();
         } catch (error) {
           toast.error('Failed to clear: ' + error.message);

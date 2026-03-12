@@ -1,174 +1,165 @@
 /**
  * PumpFun API Service
- * Queries PumpFun's frontend API to search for tokens by name/ticker.
- * Includes a request throttle to avoid rate limiting from PumpFun.
+ * Queries PumpFun's frontend API for token data.
+ *
+ * Key endpoints:
+ *   GET /coins                 — List tokens (with optional searchTerm)
+ *   GET /coins/{mint}          — Single token lookup
+ *   GET /coins/currently-live  — Tokens with active bonding curves
+ *
+ * The /coins listing endpoint supports sorting and filtering.
+ * Graduated tokens have `complete: true`.
  */
 
 const PUMPFUN_BASE_URL = 'https://frontend-api-v3.pump.fun';
 
-// Throttle: serialize outbound PumpFun calls with a minimum gap.
-// Prevents bursts when many unique queries arrive at once.
-const MIN_GAP_MS = 1500; // 1.5 seconds between calls (~40/min max)
-const MAX_QUEUE_DEPTH = 20; // Reject new requests if queue is too deep
-const QUEUE_TIMEOUT_MS = 30000; // Timeout if queued longer than 30s
+// Simple serial request queue with minimum gap between calls.
+const MIN_GAP_MS = 500;  // 500ms between calls (~120/min max)
 let _lastCallTime = 0;
-let _queue = Promise.resolve();
-let _queueDepth = 0;
 
-/**
- * Wraps the actual fetch in a serial queue so only one PumpFun call
- * runs at a time, with at least MIN_GAP_MS between calls.
- * Rejects if queue is too deep or request waits too long.
- */
-function throttled(fn) {
-  if (_queueDepth >= MAX_QUEUE_DEPTH) {
-    return Promise.reject(new Error('PumpFun throttle queue full — try again later'));
-  }
-  _queueDepth++;
-  const enqueueTime = Date.now();
-  return new Promise((resolve, reject) => {
-    _queue = _queue.then(async () => {
-      // Timeout: reject if this request waited too long in the queue
-      if (Date.now() - enqueueTime > QUEUE_TIMEOUT_MS) {
-        _queueDepth--;
-        reject(new Error('PumpFun throttle queue timeout'));
-        return;
-      }
-      const now = Date.now();
-      const elapsed = now - _lastCallTime;
-      if (elapsed < MIN_GAP_MS) {
-        await new Promise(r => setTimeout(r, MIN_GAP_MS - elapsed));
-      }
-      try {
-        const result = await fn();
-        resolve(result);
-      } catch (err) {
-        reject(err);
-      } finally {
-        _queueDepth--;
-        _lastCallTime = Date.now();
-      }
-    });
+async function pumpfunFetch(url, timeoutMs = 15000) {
+  // Enforce minimum gap
+  const now = Date.now();
+  const wait = MIN_GAP_MS - (now - _lastCallTime);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  _lastCallTime = Date.now();
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'OpenDex/1.0'
+    },
+    signal: AbortSignal.timeout(timeoutMs)
   });
+
+  return response;
 }
 
 /**
- * Search PumpFun tokens by name or ticker, sorted by creation date (oldest first).
- * Uses /coins (public listing endpoint) — /coins/search requires auth.
- * @param {string} searchTerm - The name or ticker to search for
- * @param {number} [limit=50] - Max results to return
- * @returns {Promise<Array>} Array of token objects
+ * Search PumpFun tokens by name or ticker.
  */
 async function searchTokens(searchTerm, limit = 50) {
-  return throttled(async () => {
-    const params = new URLSearchParams({
-      searchTerm,
-      sort: 'created_timestamp',
-      order: 'asc',
-      limit: String(limit),
-      offset: '0',
-      includeNsfw: 'false'
-    });
-
-    const url = `${PUMPFUN_BASE_URL}/coins?${params}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'OpenDex/1.0'
-      },
-      signal: AbortSignal.timeout(15000)
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`PumpFun API error ${response.status}: ${text.slice(0, 200)}`);
-    }
-
-    const data = await response.json();
-
-    let coins;
-    if (Array.isArray(data)) {
-      coins = data;
-    } else if (data && Array.isArray(data.data)) {
-      coins = data.data;
-    } else {
-      console.warn('[PumpFun] Unexpected response shape:', typeof data);
-      return [];
-    }
-
-    // Keep only PumpFun-native tokens (exclude Bonk launchpad etc.)
-    return coins.filter(t => !t.program || t.program === 'pump');
+  const params = new URLSearchParams({
+    searchTerm,
+    sort: 'created_timestamp',
+    order: 'asc',
+    limit: String(limit),
+    offset: '0',
+    includeNsfw: 'false'
   });
+
+  const response = await pumpfunFetch(`${PUMPFUN_BASE_URL}/coins?${params}`);
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`PumpFun API error ${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const coins = Array.isArray(data) ? data : (data?.data || []);
+
+  return coins.filter(t => !t.program || t.program === 'pump');
 }
 
-// Sentinel: returned when PumpFun gives a transient error (429/5xx/network).
-// Callers must NOT permanently reject tokens that return TRANSIENT.
-const TRANSIENT = Symbol('transient');
+/**
+ * Get recently graduated PumpFun tokens.
+ *
+ * Strategy: query /coins sorted by last_trade_timestamp descending.
+ * For graduated tokens (`complete: true`), last_trade_timestamp is the
+ * final bonding curve trade ≈ graduation time.
+ *
+ * We paginate through multiple pages, collecting graduated tokens
+ * until we've passed the time window cutoff.
+ *
+ * @param {number} windowMs - How far back to look (e.g. 72h in ms)
+ * @param {number} maxPages - Safety cap on pagination
+ * @returns {Promise<Array>} Array of graduated token objects
+ */
+async function getGraduatedTokens(windowMs = 72 * 60 * 60 * 1000, maxPages = 10) {
+  const cutoffMs = Date.now() - windowMs;
+  const graduated = [];
+  const PAGE_SIZE = 50;
+
+  for (let page = 0; page < maxPages; page++) {
+    try {
+      const params = new URLSearchParams({
+        sort: 'last_trade_timestamp',
+        order: 'desc',
+        limit: String(PAGE_SIZE),
+        offset: String(page * PAGE_SIZE),
+        includeNsfw: 'false'
+      });
+
+      const response = await pumpfunFetch(`${PUMPFUN_BASE_URL}/coins?${params}`);
+
+      if (response.status === 429) {
+        console.warn(`[PumpFun] Rate limited on page ${page + 1}, stopping pagination`);
+        break;
+      }
+      if (!response.ok) {
+        console.error(`[PumpFun] getGraduatedTokens page ${page + 1}: HTTP ${response.status}`);
+        break;
+      }
+
+      const data = await response.json();
+      const coins = Array.isArray(data) ? data : (data?.data || []);
+
+      if (coins.length === 0) break;
+
+      // Track the oldest timestamp on this page for stop condition
+      let oldestOnPage = Infinity;
+
+      for (const coin of coins) {
+        // Only PumpFun-native tokens
+        if (coin.program && coin.program !== 'pump') continue;
+
+        // Only graduated tokens
+        if (!coin.complete) continue;
+
+        const ts = coin.last_trade_timestamp || 0;
+        if (ts < oldestOnPage) oldestOnPage = ts;
+
+        // Within our time window?
+        if (ts >= cutoffMs) {
+          graduated.push(coin);
+        }
+      }
+
+      // If the oldest item on this page is before our cutoff, we've covered the window
+      if (oldestOnPage < cutoffMs) break;
+
+      // If we got fewer results than PAGE_SIZE, no more pages
+      if (coins.length < PAGE_SIZE) break;
+
+    } catch (err) {
+      console.error(`[PumpFun] getGraduatedTokens page ${page + 1} error:`, err.message);
+      break;
+    }
+  }
+
+  console.log(`[PumpFun] Found ${graduated.length} graduated tokens within window`);
+  return graduated;
+}
 
 /**
- * Verify a single token exists on PumpFun by mint address.
- * Returns:
- *   - coin object  → confirmed PumpFun token
- *   - null         → definitively NOT a PumpFun token (404)
- *   - TRANSIENT    → inconclusive (rate limited / network error) — retry later
+ * Get a single token by mint address.
+ * Returns the coin object, null (404), or 'transient' for retryable errors.
  */
 async function getToken(mint) {
   try {
-    const url = `${PUMPFUN_BASE_URL}/coins/${mint}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'OpenDex/1.0'
-      },
-      signal: AbortSignal.timeout(10000)
-    });
+    const response = await pumpfunFetch(`${PUMPFUN_BASE_URL}/coins/${mint}`, 10000);
 
-    if (response.status === 404) return null; // Definitively not a PumpFun token
-    if (!response.ok) return TRANSIENT;       // 429, 5xx — don't permanently reject
+    if (response.status === 404) return null;
+    if (!response.ok) return 'transient';
 
     const data = await response.json();
     if (!data || !data.mint) return null;
 
     return data;
   } catch (_) {
-    return TRANSIENT; // Network error — retry next cycle
+    return 'transient';
   }
 }
 
-/**
- * Verify multiple tokens against PumpFun in parallel (with concurrency limit).
- * Returns:
- *   - confirmed: Set of mint addresses that are confirmed PumpFun tokens
- *   - pumpFunData: { [mint]: coinObject } for confirmed tokens
- *   - inconclusive: Set of mints that got transient errors (should NOT be rejected)
- */
-async function verifyPumpFunBatch(mints, concurrency = 10) {
-  const confirmed = new Set();
-  const pumpFunData = {};
-  const inconclusive = new Set();
-
-  for (let i = 0; i < mints.length; i += concurrency) {
-    const chunk = mints.slice(i, i + concurrency);
-    const results = await Promise.all(chunk.map(async (mint) => {
-      const data = await getToken(mint);
-      return { mint, data };
-    }));
-
-    for (const { mint, data } of results) {
-      if (data === TRANSIENT) {
-        inconclusive.add(mint);
-      } else if (data) {
-        confirmed.add(mint);
-        pumpFunData[mint] = data;
-      }
-      // data === null → definitively not PumpFun, caller can reject
-    }
-  }
-
-  return { confirmed, pumpFunData, inconclusive };
-}
-
-module.exports = { searchTokens, getToken, verifyPumpFunBatch };
+module.exports = { searchTokens, getGraduatedTokens, getToken };
