@@ -231,11 +231,19 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
           const g = geckoData[t.token_mint] || {};
           const bp = batchPrices[t.token_mint] || {};
           const jup = jupiterMetrics[i] || {};
+
+          // Name/symbol: fill from GeckoTerminal if DB has placeholder or missing
+          if ((!t.name || PLACEHOLDER_NAMES.has(t.name.toLowerCase())) && g.name) {
+            t.name = g.name;
+          }
+          if (!t.symbol && g.symbol) t.symbol = g.symbol;
+          if (!t.logo_uri && g.logoUri) t.logo_uri = g.logoUri;
+
           // Price: GeckoTerminal > Jupiter batch > Jupiter V2
           const price = g.price ?? bp.price ?? jup.price ?? null;
           if (price != null) t.price = price;
-          // Market cap & volume: GeckoTerminal > Jupiter V2
-          const mcap = g.marketCap ?? jup.marketCap ?? null;
+          // Market cap: GeckoTerminal mcap > GeckoTerminal fdv > Jupiter V2
+          const mcap = g.marketCap ?? g.fdv ?? jup.marketCap ?? null;
           if (mcap != null) t.market_cap = mcap;
           const vol = g.volume24h ?? jup.volume24h ?? null;
           if (vol != null) t.volume_24h = vol;
@@ -245,6 +253,29 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
           if (jup.holderCount != null) t.holders = jup.holderCount;
         });
       } catch { /* non-critical */ }
+    }
+
+    // Final fallback: Helius metadata batch for tokens still missing name/logo
+    if (solanaService.isHeliusConfigured()) {
+      const stillMissing = folio.tokens.filter(t =>
+        !t.name || PLACEHOLDER_NAMES.has(t.name.toLowerCase()) || !t.logo_uri
+      );
+      if (stillMissing.length > 0) {
+        try {
+          const addrs = stillMissing.map(t => t.token_mint);
+          const metadata = await solanaService.getTokenMetadataBatch(addrs);
+          for (const t of stillMissing) {
+            const meta = metadata[t.token_mint];
+            if (meta) {
+              if ((!t.name || PLACEHOLDER_NAMES.has(t.name.toLowerCase())) && meta.name) {
+                t.name = meta.name;
+              }
+              if (!t.symbol && meta.symbol) t.symbol = meta.symbol;
+              if (!t.logo_uri && meta.logoUri) t.logo_uri = meta.logoUri;
+            }
+          }
+        } catch { /* non-critical */ }
+      }
     }
   }
 
