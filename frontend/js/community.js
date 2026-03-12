@@ -21,21 +21,39 @@ const communityPage = {
       callBtn.addEventListener('click', () => this.showCallModal());
     }
 
-    // Wallet events for "Your Calls" section
-    window.addEventListener('walletConnected', () => {
+    // Wallet events for "Your Calls" section (store refs for cleanup)
+    this._onWalletConnected = () => {
       this.yourCallsLoaded = false;
       if (this.currentTab === 'calls') this.loadYourCalls();
-    });
-    window.addEventListener('walletDisconnected', () => {
+    };
+    this._onWalletDisconnected = () => {
       this.yourCalls = [];
       this.yourCallsLoaded = false;
       this.hideYourCalls();
-    });
-    window.addEventListener('walletReady', (e) => {
+    };
+    this._onWalletReady = (e) => {
       if (e.detail?.connected && this.currentTab === 'calls') {
         this.loadYourCalls();
       }
-    }, { once: true });
+    };
+    window.addEventListener('walletConnected', this._onWalletConnected);
+    window.addEventListener('walletDisconnected', this._onWalletDisconnected);
+    window.addEventListener('walletReady', this._onWalletReady, { once: true });
+  },
+
+  destroy() {
+    if (this._onWalletConnected) {
+      window.removeEventListener('walletConnected', this._onWalletConnected);
+      this._onWalletConnected = null;
+    }
+    if (this._onWalletDisconnected) {
+      window.removeEventListener('walletDisconnected', this._onWalletDisconnected);
+      this._onWalletDisconnected = null;
+    }
+    if (this._onWalletReady) {
+      window.removeEventListener('walletReady', this._onWalletReady);
+      this._onWalletReady = null;
+    }
   },
 
   bindTabs() {
@@ -724,7 +742,7 @@ const communityPage = {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const card = btn.closest('.your-call-card');
-        const callId = parseInt(card.dataset.callId);
+        const callId = parseInt(card.dataset.callId, 10);
         const callData = this.yourCalls.find(c => c.id == callId);
         if (callData) this.exportCallGraphic(callData);
       });
@@ -1055,8 +1073,10 @@ const communityPage = {
     const defaultLogo = utils.getDefaultLogo();
     const logoSrc = token.logoURI || token.logoUri || defaultLogo;
     const address = token.address || token.mintAddress || '';
-    const name = this.escapeHtml(token.name || (address ? `${address.slice(0, 4)}...${address.slice(-4)}` : '...'));
-    const symbol = this.escapeHtml(token.symbol || (address ? address.slice(0, 5).toUpperCase() : '...'));
+    const rawName = token.name || (address ? `${address.slice(0, 4)}...${address.slice(-4)}` : '...');
+    const rawSymbol = token.symbol || (address ? address.slice(0, 5).toUpperCase() : '...');
+    const name = this.escapeHtml(rawName);
+    const symbol = this.escapeHtml(rawSymbol);
 
     if (!address) {
       modal.remove();
@@ -1131,7 +1151,7 @@ const communityPage = {
       } catch (err) {
         const errorMsg = err.message || 'Failed to call token. Please try again.';
         confirmBtn.disabled = false;
-        confirmBtn.textContent = `Call ${symbol}`;
+        confirmBtn.textContent = `Call ${rawSymbol}`;
 
         // Show error inline
         let errorEl = content.querySelector('.call-modal-error');

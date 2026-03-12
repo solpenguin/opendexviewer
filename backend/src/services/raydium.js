@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { rateLimitedRequest } = require('./rateLimiter');
+const { rateLimitedRequest, sleep } = require('./rateLimiter');
 const { circuitBreakers } = require('./circuitBreaker');
 const { httpsAgent } = require('./httpAgent');
 
@@ -20,7 +20,7 @@ const CACHE_DURATION = 60000; // 1 minute
 
 // Periodic cache cleanup - evict expired entries every 5 minutes
 const MAX_POOL_CACHE_SIZE = 1000;
-setInterval(() => {
+const _cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   let evicted = 0;
   for (const [key, entry] of poolCache) {
@@ -30,21 +30,57 @@ setInterval(() => {
     }
   }
   if (poolCache.size > MAX_POOL_CACHE_SIZE) {
-    const entries = [...poolCache.entries()].sort((a, b) => a[1].expiry - b[1].expiry);
-    const toRemove = entries.slice(0, entries.length - MAX_POOL_CACHE_SIZE);
-    for (const [key] of toRemove) {
-      poolCache.delete(key);
-      evicted++;
+    let sum = 0, count = 0;
+    for (const entry of poolCache.values()) { sum += entry.expiry; count++; }
+    const avgExpiry = sum / count;
+    for (const [key, entry] of poolCache) {
+      if (entry.expiry <= avgExpiry) {
+        poolCache.delete(key);
+        evicted++;
+      }
     }
   }
 }, 5 * 60 * 1000);
 
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 5000,
+  maxDelay: 30000,
+  backoffMultiplier: 2
+};
+
+async function withRetry(requestFn, context = 'request') {
+  let lastError;
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+      if (error.response?.status !== 429) {
+        throw error;
+      }
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        console.error(`[Raydium] ${context}: Max retries (${RETRY_CONFIG.maxRetries}) exceeded for 429 error`);
+        throw error;
+      }
+      const baseDelay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
+      const jitter = Math.random() * 1000;
+      const delay = Math.min(baseDelay + jitter, RETRY_CONFIG.maxDelay);
+      console.log(`[Raydium] ${context}: Rate limited (429), retry ${attempt + 1}/${RETRY_CONFIG.maxRetries} after ${Math.round(delay)}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Make a rate-limited, circuit-breaker-protected request to Raydium
+ * @param {Function} requestFn - Function that returns an axios promise
+ * @param {string} [context] - Context label for retry logging
  */
-async function raydiumRequest(requestFn) {
+async function raydiumRequest(requestFn, context = 'raydiumRequest') {
   return circuitBreakers.raydium.execute(() =>
-    rateLimitedRequest('raydium', requestFn)
+    withRetry(() => rateLimitedRequest('raydium', requestFn), context)
   );
 }
 
@@ -314,11 +350,14 @@ function clearCache() {
   poolCache.clear();
 }
 
+function stopCleanup() { clearInterval(_cacheCleanupTimer); }
+
 module.exports = {
   getPoolsByToken,
   getPoolInfo,
   getTopPools,
   getPairLiquidity,
   getSwapQuote,
-  clearCache
+  clearCache,
+  stopCleanup
 };

@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { httpsAgent } = require('./httpAgent');
 const { circuitBreakers } = require('./circuitBreaker');
-const { rateLimitedRequest } = require('./rateLimiter');
+const { rateLimitedRequest, sleep } = require('./rateLimiter');
 
 // Birdeye API - Free tier available at https://birdeye.so
 const BIRDEYE_API = 'https://public-api.birdeye.so';
@@ -22,7 +22,7 @@ const CACHE_DURATION = 60000; // 1 minute
 
 // Periodic cache cleanup - evict expired entries every 5 minutes
 const MAX_HISTORY_CACHE_SIZE = 2000;
-setInterval(() => {
+const _cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   let evicted = 0;
   for (const [key, entry] of historyCache) {
@@ -32,11 +32,14 @@ setInterval(() => {
     }
   }
   if (historyCache.size > MAX_HISTORY_CACHE_SIZE) {
-    const entries = [...historyCache.entries()].sort((a, b) => a[1].expiry - b[1].expiry);
-    const toRemove = entries.slice(0, entries.length - MAX_HISTORY_CACHE_SIZE);
-    for (const [key] of toRemove) {
-      historyCache.delete(key);
-      evicted++;
+    let sum = 0, count = 0;
+    for (const entry of historyCache.values()) { sum += entry.expiry; count++; }
+    const avgExpiry = sum / count;
+    for (const [key, entry] of historyCache) {
+      if (entry.expiry <= avgExpiry) {
+        historyCache.delete(key);
+        evicted++;
+      }
     }
   }
   if (evicted > 0) {
@@ -44,14 +47,46 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 5000,
+  maxDelay: 30000,
+  backoffMultiplier: 2
+};
+
+async function withRetry(requestFn, context = 'request') {
+  let lastError;
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+      if (error.response?.status !== 429) {
+        throw error;
+      }
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        console.error(`[Birdeye] ${context}: Max retries (${RETRY_CONFIG.maxRetries}) exceeded for 429 error`);
+        throw error;
+      }
+      const baseDelay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
+      const jitter = Math.random() * 1000;
+      const delay = Math.min(baseDelay + jitter, RETRY_CONFIG.maxDelay);
+      console.log(`[Birdeye] ${context}: Rate limited (429), retry ${attempt + 1}/${RETRY_CONFIG.maxRetries} after ${Math.round(delay)}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Make a rate-limited request to Birdeye API
  * @param {Function} requestFn - Function that returns an axios promise
+ * @param {string} [context] - Context label for retry logging
  * @returns {Promise<any>}
  */
-async function birdeyeRequest(requestFn) {
+async function birdeyeRequest(requestFn, context = 'birdeyeRequest') {
   return circuitBreakers.birdeye.execute(() =>
-    rateLimitedRequest('birdeye', requestFn)
+    withRetry(() => rateLimitedRequest('birdeye', requestFn), context)
   );
 }
 
@@ -566,6 +601,8 @@ function clearCache() {
   historyCache.clear();
 }
 
+function stopCleanup() { clearInterval(_cacheCleanupTimer); }
+
 module.exports = {
   getTokenPrice,
   getMultiTokenPrices,
@@ -575,5 +612,6 @@ module.exports = {
   getTrendingTokens,
   getNewTokens,
   searchTokens,
-  clearCache
+  clearCache,
+  stopCleanup
 };

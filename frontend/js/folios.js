@@ -232,7 +232,7 @@ const foliosPage = {
       const name = t.name || (mint ? `${mint.slice(0, 4)}...${mint.slice(-4)}` : 'Loading...');
       const symbol = t.symbol || (mint ? mint.slice(0, 5).toUpperCase() : '...');
       const logo = t.logo_uri
-        ? `<img src="${this.esc(t.logo_uri)}" alt="${this.esc(symbol)}" class="token-logo" width="24" height="24" loading="lazy" onerror="this.style.display='none'">`
+        ? `<img src="${this.esc(t.logo_uri)}" alt="${this.esc(symbol)}" class="token-logo" width="24" height="24" loading="lazy">`
         : '';
       const price = t.price ? utils.formatPrice(t.price) : '--';
       const change24h = t.price_change_24h != null ? t.price_change_24h : null;
@@ -263,6 +263,11 @@ const foliosPage = {
         </tr>
       `;
     }).join('');
+
+    // Attach onerror handlers via JS (CSP-safe) instead of inline handlers
+    tbody.querySelectorAll('img.token-logo').forEach(img => {
+      img.onerror = function() { this.style.display = 'none'; };
+    });
   },
 
   async runAIAnalysis() {
@@ -361,12 +366,19 @@ const foliosPage = {
     if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  },
+
+  destroy() {
+    if (this._onPopState) {
+      window.removeEventListener('popstate', this._onPopState);
+      this._onPopState = null;
+    }
   }
 };
 
-// Handle browser back/forward
-window.addEventListener('popstate', () => {
+// Handle browser back/forward (store ref for cleanup)
+foliosPage._onPopState = () => {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
   if (id) {
@@ -374,7 +386,8 @@ window.addEventListener('popstate', () => {
   } else {
     foliosPage.showList();
   }
-});
+};
+window.addEventListener('popstate', foliosPage._onPopState);
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => foliosPage.init());

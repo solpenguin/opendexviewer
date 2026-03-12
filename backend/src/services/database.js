@@ -1992,7 +1992,7 @@ async function callToken(tokenMint, callerWallet) {
 
     // Advisory lock on wallet to serialize concurrent requests from same wallet
     // Uses a hash of the wallet address as the lock key
-    const lockKey = Math.abs(callerWallet.split('').reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0));
+    const lockKey = crypto.createHash('sha256').update(callerWallet).digest().readInt32BE(0);
     await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
 
     // Check cooldown within the locked transaction
@@ -2252,16 +2252,24 @@ async function deleteUserData(walletAddress) {
       [walletAddress]
     );
 
-    // Recalculate sentiment tallies for affected tokens
-    for (const row of sentimentTokens.rows) {
+    // Recalculate sentiment tallies for affected tokens (batch query)
+    if (sentimentTokens.rows.length > 0) {
+      const affectedMints = sentimentTokens.rows.map(r => r.token_mint);
       await client.query(
-        `UPDATE sentiment_tallies SET
-           bullish = (SELECT COUNT(*) FROM sentiment_votes WHERE token_mint = $1 AND sentiment = 'bullish'),
-           bearish = (SELECT COUNT(*) FROM sentiment_votes WHERE token_mint = $1 AND sentiment = 'bearish'),
-           score = (SELECT COUNT(*) FILTER (WHERE sentiment = 'bullish') - COUNT(*) FILTER (WHERE sentiment = 'bearish') FROM sentiment_votes WHERE token_mint = $1),
+        `UPDATE sentiment_tallies st SET
+           bullish = COALESCE(sub.bullish, 0),
+           bearish = COALESCE(sub.bearish, 0),
+           score = COALESCE(sub.bullish, 0) - COALESCE(sub.bearish, 0),
            updated_at = NOW()
-         WHERE token_mint = $1`,
-        [row.token_mint]
+         FROM unnest($1::text[]) AS m(token_mint)
+         LEFT JOIN LATERAL (
+           SELECT
+             COUNT(*) FILTER (WHERE sentiment = 'bullish') AS bullish,
+             COUNT(*) FILTER (WHERE sentiment = 'bearish') AS bearish
+           FROM sentiment_votes sv WHERE sv.token_mint = m.token_mint
+         ) sub ON true
+         WHERE st.token_mint = m.token_mint`,
+        [affectedMints]
       );
     }
 

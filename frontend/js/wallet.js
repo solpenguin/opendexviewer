@@ -247,7 +247,7 @@ const wallet = {
           this.updateUI();
           if (typeof toast !== 'undefined') toast.success('Connected via linked device');
           // Close modal immediately
-          setTimeout(() => { const m = document.querySelector('.wallet-selector'); if (m) m.remove(); }, 100);
+          setTimeout(() => { const m = document.querySelector('.wallet-selector-modal'); if (m) m.remove(); }, 100);
         } else {
           // Show mobile connection options
           const mobileSection = document.createElement('div');

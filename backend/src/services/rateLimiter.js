@@ -107,7 +107,7 @@ const BURST_CLEANUP_INTERVAL_MS = 60000; // Clean up old burst counters every mi
 const BURST_MAX_AGE_MS = 10000; // Remove burst counters older than 10 seconds
 
 // Periodic cleanup to prevent burst counter accumulation
-setInterval(() => {
+const _burstCleanupTimer = setInterval(() => {
   const now = Date.now();
   let removed = 0;
   for (const [key] of burstCounters) {
@@ -436,6 +436,8 @@ function getQueueMetrics() {
   };
 }
 
+function stopCleanup() { clearInterval(_burstCleanupTimer); }
+
 module.exports = {
   rateLimitedRequest,
   queueRequest,
@@ -446,5 +448,6 @@ module.exports = {
   getQueueMetrics,
   queueMetrics,
   sleep,
-  RATE_LIMITS
+  RATE_LIMITS,
+  stopCleanup
 };

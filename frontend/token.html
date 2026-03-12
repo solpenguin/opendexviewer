@@ -32,7 +32,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="css/styles.css">
-  <script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
+  <link rel="preconnect" href="https://opendex-api-dy30.onrender.com" crossorigin>
+  <link rel="dns-prefetch" href="https://api.geckoterminal.com">
+  <link rel="dns-prefetch" href="https://api.jup.ag">
+  <link rel="preload" href="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js" as="script">
+  <script async src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <header class="header">
@@ -893,19 +897,19 @@
     </div>
   </footer>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/bugReport.js"></script>
-  <script src="js/geckoTerminal.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
-  <script src="js/wallet.js"></script>
-  <script src="js/watchlist.js"></script>
-  <script src="js/voting.js"></script>
-  <script src="js/sentiment.js"></script>
-  <script src="js/pumpfun.js"></script>
-  <script src="js/chartDrawTools.js"></script>
-  <script src="js/tokenDetail.js"></script>
-  <script src="js/announcements.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/api.js"></script>
+  <script defer src="js/bugReport.js"></script>
+  <script defer src="js/geckoTerminal.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script defer src="js/wallet.js"></script>
+  <script defer src="js/watchlist.js"></script>
+  <script defer src="js/voting.js"></script>
+  <script defer src="js/sentiment.js"></script>
+  <script defer src="js/pumpfun.js"></script>
+  <script defer src="js/chartDrawTools.js"></script>
+  <script defer src="js/tokenDetail.js"></script>
+  <script defer src="js/announcements.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
     (function() {

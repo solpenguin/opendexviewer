@@ -23,16 +23,16 @@ function startSignatureCleanup() {
     // Hard cap: evict entries with earliest expiry without sorting the full map.
     // Iterating twice (find threshold, then delete) is O(n) vs O(n log n) sort.
     if (usedSignatures.size > MAX_USED_SIGNATURES) {
-      const excess = usedSignatures.size - MAX_USED_SIGNATURES;
-      // Collect all expiry times and find the threshold via partial selection
-      const expiries = new Float64Array(usedSignatures.size);
-      let i = 0;
-      for (const expiry of usedSignatures.values()) expiries[i++] = expiry;
-      // Sort only the typed array (engine-optimized, no GC pressure from object allocations)
-      expiries.sort();
-      const threshold = expiries[excess];
+      // O(n) eviction: compute average expiry, delete everything at or below it
+      let sum = 0, count = 0;
+      for (const expiry of usedSignatures.values()) { sum += expiry; count++; }
+      const avgExpiry = sum / count;
+      let evicted = 0;
       for (const [sig, expiry] of usedSignatures) {
-        if (expiry <= threshold) usedSignatures.delete(sig);
+        if (expiry <= avgExpiry) { usedSignatures.delete(sig); evicted++; }
+      }
+      if (evicted > 0) {
+        console.log(`[Validation] Signature replay eviction: removed ${evicted} entries, ${usedSignatures.size} remaining`);
       }
     }
   }, USED_SIG_CLEANUP_INTERVAL_MS);

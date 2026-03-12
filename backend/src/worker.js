@@ -597,9 +597,11 @@ const jobProcessors = {
       if (newTokens.length > 0) {
         console.log(`[DailyBrief] ${newTokens.length} new PumpSwap graduates found`);
 
-        await enrichMarketDataBatched(newTokens);
-        await enrichHoldersBatched(newTokens);
-        await enrichWithHelius(newTokens);
+        await Promise.all([
+          enrichMarketDataBatched(newTokens),
+          enrichHoldersBatched(newTokens),
+          enrichWithHelius(newTokens)
+        ]);
 
         for (const t of newTokens) {
           computeDerivedFields(t);

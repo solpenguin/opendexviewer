@@ -174,12 +174,14 @@ const tokenDetail = {
     bindHandler(watchlistBtn, 'click', watchlistHandler);
 
     // Chart type toggle (line/candle)
-    document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)').forEach(btn => {
+    const chartTypeBtns = document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)');
+    const modalTypeBtns = document.querySelectorAll('.modal-type-btn');
+    chartTypeBtns.forEach(btn => {
       const handler = () => {
-        document.querySelectorAll('.chart-type-btn:not(.modal-type-btn)').forEach(b => b.classList.remove('active'));
+        chartTypeBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         // Sync modal type buttons
-        document.querySelectorAll('.modal-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === btn.dataset.type));
+        modalTypeBtns.forEach(b => b.classList.toggle('active', b.dataset.type === btn.dataset.type));
         this.chartType = btn.dataset.type;
         if (this.chartData) {
           this.renderChart(this.chartData);
@@ -190,12 +192,14 @@ const tokenDetail = {
     });
 
     // Chart metric toggle (price/mcap)
-    document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(btn => {
+    const chartMetricBtns = document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)');
+    const modalMetricBtns = document.querySelectorAll('.modal-metric-btn');
+    chartMetricBtns.forEach(btn => {
       const handler = () => {
-        document.querySelectorAll('.chart-metric-btn:not(.modal-metric-btn)').forEach(b => b.classList.remove('active'));
+        chartMetricBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         // Sync modal metric buttons
-        document.querySelectorAll('.modal-metric-btn').forEach(b => b.classList.toggle('active', b.dataset.metric === btn.dataset.metric));
+        modalMetricBtns.forEach(b => b.classList.toggle('active', b.dataset.metric === btn.dataset.metric));
         this.chartMetric = btn.dataset.metric;
 
         // Update chart title
@@ -218,13 +222,15 @@ const tokenDetail = {
     });
 
     // Chart timeframes (page only — modal timeframes bound in _bindModalControls)
-    document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)').forEach(btn => {
+    const timeframeBtns = document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)');
+    const modalTimeframeBtns = document.querySelectorAll('.modal-timeframe-btn');
+    timeframeBtns.forEach(btn => {
       const handler = () => {
-        document.querySelectorAll('.timeframe-btn:not(.modal-timeframe-btn)').forEach(b => b.classList.remove('active'));
+        timeframeBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentInterval = btn.dataset.interval;
         // Sync modal timeframe buttons
-        document.querySelectorAll('.modal-timeframe-btn').forEach(b => {
+        modalTimeframeBtns.forEach(b => {
           b.classList.toggle('active', b.dataset.interval === btn.dataset.interval);
         });
 
@@ -249,7 +255,9 @@ const tokenDetail = {
     }
 
     // Indicator toggle buttons
-    document.querySelectorAll('.indicator-btn:not(.modal-indicator-btn)').forEach(btn => {
+    const indicatorBtns = document.querySelectorAll('.indicator-btn:not(.modal-indicator-btn)');
+    const modalIndicatorLogBtns = document.querySelectorAll('.modal-indicator-btn[data-indicator="log"]');
+    indicatorBtns.forEach(btn => {
       const handler = () => {
         const ind = btn.dataset.indicator;
 
@@ -257,7 +265,7 @@ const tokenDetail = {
         if (ind === 'log') {
           this.logScale = !this.logScale;
           btn.classList.toggle('active', this.logScale);
-          document.querySelectorAll('.modal-indicator-btn[data-indicator="log"]').forEach(b =>
+          modalIndicatorLogBtns.forEach(b =>
             b.classList.toggle('active', this.logScale)
           );
           if (this.chartData) {
@@ -282,9 +290,10 @@ const tokenDetail = {
     });
 
     // Submission tabs
-    document.querySelectorAll('.submissions-tab').forEach(tab => {
+    const submissionTabs = document.querySelectorAll('.submissions-tab');
+    submissionTabs.forEach(tab => {
       const handler = () => {
-        document.querySelectorAll('.submissions-tab').forEach(t => t.classList.remove('active'));
+        submissionTabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         this.renderSubmissions(tab.dataset.type);
       };

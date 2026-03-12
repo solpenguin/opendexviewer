@@ -110,7 +110,7 @@ const ERROR_CACHE_TTL = 60 * 1000;
 const MAX_POOL_ADDRESS_CACHE_SIZE = 2000;
 const MAX_ERROR_CACHE_SIZE = 500;
 
-setInterval(() => {
+const _cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   // Clean pool address cache
   for (const [key, entry] of poolAddressCache) {
@@ -119,7 +119,7 @@ setInterval(() => {
     }
   }
   if (poolAddressCache.size > MAX_POOL_ADDRESS_CACHE_SIZE) {
-    const entries = [...poolAddressCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const entries = [...poolAddressCache.entries()].sort((a, b) => a[1].expiry - b[1].expiry);
     for (const [key] of entries.slice(0, entries.length - MAX_POOL_ADDRESS_CACHE_SIZE)) {
       poolAddressCache.delete(key);
     }
@@ -1021,6 +1021,8 @@ async function getNewPoolsByDex(dexId, page = 1) {
   }
 }
 
+function stopCleanup() { clearInterval(_cacheCleanupTimer); }
+
 module.exports = {
   getTokenInfo,
   getTokenPrice,
@@ -1034,5 +1036,6 @@ module.exports = {
   searchTokens,
   getOHLCV,
   getPriceHistory,
-  getTokenPools
+  getTokenPools,
+  stopCleanup
 };

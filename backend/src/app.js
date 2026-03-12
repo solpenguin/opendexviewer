@@ -478,6 +478,15 @@ async function gracefulShutdown(signal) {
     console.error('[Shutdown] Database pool close error:', err.message);
   }
 
+  // Clear service cache cleanup timers
+  try {
+    require('./services/jupiter').stopCleanup();
+    require('./services/birdeye').stopCleanup();
+    require('./services/raydium').stopCleanup();
+    require('./services/geckoTerminal').stopCleanup();
+    require('./services/rateLimiter').stopCleanup();
+  } catch (_) {}
+
   // Destroy HTTP agents
   try {
     const { destroy } = require('./services/httpAgent');

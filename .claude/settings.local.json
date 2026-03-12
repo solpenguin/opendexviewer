@@ -96,7 +96,14 @@
       "Bash(grep -n \"hasSubmissions\\\\|communityUpdates\\\\|submissionCount\\\\|hasContent\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
       "Bash(find /c/VS/OPENDEX/opendexviewer -type f -name .env* -o -name render.yaml -o -name *.config.js)",
       "Bash(node -e \"require\\(''''./src/services/geckoTerminal''''\\)\")",
-      "Bash(node -e \"require\\(''''./src/services/jobQueue''''\\)\")"
+      "Bash(node -e \"require\\(''''./src/services/jobQueue''''\\)\")",
+      "Bash(xargs wc:*)",
+      "Bash(grep -n \"\\\\.addEventListener.*scroll\\\\|window.addEventListener.*scroll\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(grep -r srcset /c/VS/OPENDEX/opendexviewer/frontend/ --include=*.js --include=*.html)",
+      "Bash(grep -n \"async\\\\|defer\" /c/VS/OPENDEX/opendexviewer/frontend/*.html)",
+      "Bash(grep -n \"Promise.all\\\\|Promise.allSettled\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(grep -n \"Image\\(\\)\\\\|new Image\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(grep -n \"onerror\\\\|onload\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
     ]
   }
 }

@@ -32,8 +32,9 @@ const httpsAgent = new https.Agent({
 });
 
 // Log agent stats periodically in development
+let _statsTimer = null;
 if (process.env.NODE_ENV !== 'production') {
-  setInterval(() => {
+  _statsTimer = setInterval(() => {
     const httpStats = {
       pending: httpAgent.requests ? Object.keys(httpAgent.requests).length : 0,
       sockets: httpAgent.sockets ? Object.values(httpAgent.sockets).reduce((acc, arr) => acc + arr.length, 0) : 0,
@@ -53,6 +54,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Graceful shutdown
 function destroy() {
+  if (_statsTimer) clearInterval(_statsTimer);
   httpAgent.destroy();
   httpsAgent.destroy();
 }

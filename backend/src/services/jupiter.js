@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { httpsAgent } = require('./httpAgent');
 const { circuitBreakers } = require('./circuitBreaker');
-const { rateLimitedRequest } = require('./rateLimiter');
+const { rateLimitedRequest, sleep } = require('./rateLimiter');
 
 /**
  * Jupiter API Service (2026)
@@ -49,6 +49,37 @@ function createClient() {
 // Shared client instance (created once at module load)
 const client = createClient();
 
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 5000,
+  maxDelay: 30000,
+  backoffMultiplier: 2
+};
+
+async function withRetry(requestFn, context = 'request') {
+  let lastError;
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+      if (error.response?.status !== 429) {
+        throw error;
+      }
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        console.error(`[Jupiter] ${context}: Max retries (${RETRY_CONFIG.maxRetries}) exceeded for 429 error`);
+        throw error;
+      }
+      const baseDelay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
+      const jitter = Math.random() * 1000;
+      const delay = Math.min(baseDelay + jitter, RETRY_CONFIG.maxDelay);
+      console.log(`[Jupiter] ${context}: Rate limited (429), retry ${attempt + 1}/${RETRY_CONFIG.maxRetries} after ${Math.round(delay)}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * In-flight request deduplication
  * Prevents multiple concurrent requests for the same resource
@@ -67,7 +98,7 @@ async function jupiterRequest(requestFn, dedupeKey) {
   }
 
   const promise = circuitBreakers.jupiter.execute(() =>
-    rateLimitedRequest('jupiter', requestFn)
+    withRetry(() => rateLimitedRequest('jupiter', requestFn), dedupeKey || 'jupiterRequest')
   ).finally(() => {
     if (dedupeKey) inFlightRequests.delete(dedupeKey);
   });
@@ -90,7 +121,7 @@ const cache = {
 const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000;
 const MAX_CACHE_SIZE = 5000;
 
-setInterval(() => {
+const _cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   let evicted = 0;
   for (const [key, entry] of cache.prices) {
@@ -99,13 +130,16 @@ setInterval(() => {
       evicted++;
     }
   }
-  // Hard cap: if still too large, remove oldest entries
+  // Hard cap: if still too large, evict oldest half using average timestamp
   if (cache.prices.size > MAX_CACHE_SIZE) {
-    const entries = [...cache.prices.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
-    for (const [key] of toRemove) {
-      cache.prices.delete(key);
-      evicted++;
+    let sum = 0, count = 0;
+    for (const entry of cache.prices.values()) { sum += entry.timestamp; count++; }
+    const avgTimestamp = sum / count;
+    for (const [key, entry] of cache.prices) {
+      if (entry.timestamp <= avgTimestamp) {
+        cache.prices.delete(key);
+        evicted++;
+      }
     }
   }
   if (evicted > 0) {
@@ -665,6 +699,8 @@ async function checkHealth() {
   }
 }
 
+function stopCleanup() { clearInterval(_cacheCleanupTimer); }
+
 module.exports = {
   searchTokens,
   getTokenInfo,
@@ -677,5 +713,6 @@ module.exports = {
   getTokenMetrics,
   getPriceHistory,
   isConfigured,
-  checkHealth
+  checkHealth,
+  stopCleanup
 };
