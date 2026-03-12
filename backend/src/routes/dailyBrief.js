@@ -3,18 +3,17 @@
  * "Graduated" = completed their bonding curve on PumpFun and migrated to PumpSwap.
  *
  * Discovery strategy:
- *   We use GeckoTerminal's DEX-specific endpoint:
- *     GET /networks/solana/dexes/pumpswap/pools
- *   This returns ONLY PumpSwap pools (no Raydium/Orca/Meteora noise).
- *   Each pool has `pool_created_at` = the graduation timestamp.
+ *   We use GeckoTerminal's new_pools endpoint:
+ *     GET /networks/solana/new_pools
+ *   This returns ALL new pools across all DEXes, sorted by creation time
+ *   (newest first). We filter client-side to PumpSwap pools only.
  *
- *   We paginate until we've covered the full time window (up to 72h).
- *   The endpoint returns pools sorted by volume, so we must scan all pages
- *   to find every pool created within the window — we can't stop early
- *   based on creation time ordering.
+ *   Since pools are time-sorted, we paginate until the oldest pool on a
+ *   page is older than our window — guaranteeing complete coverage of
+ *   every PumpSwap pool created within the window.
  *
- *   On the first load this scans more pages (initial backfill). Subsequent
- *   refreshes are cheaper since most tokens are already in the store.
+ *   Each candidate is then verified against the PumpFun API to confirm
+ *   it's a true PumpFun graduate (not spam on PumpSwap).
  *
  * Architecture: Incremental rolling-window token store.
  *   1. Fetch PumpSwap pools from GeckoTerminal (paginate until covered)
@@ -43,12 +42,10 @@ const ENRICH_STALE_MS    = 5 * 60 * 1000;   // Re-enrich market data every 5 min
 const MAX_WINDOW_MS      = 72 * 60 * 60 * 1000; // Hard eviction at 72h
 const GECKO_BATCH_SIZE   = 25;               // Max parallel Gecko calls for re-enrichment
 
-// How many pages of PumpSwap pools to scan per cycle.
-// GeckoTerminal returns ~20 pools/page sorted by volume (not creation time).
-// On the FIRST load we scan more pages to backfill the full window.
-// On subsequent refreshes we scan fewer — only need to catch new pools.
-const INITIAL_SCAN_PAGES = 10;  // First load: scan up to 10 pages (~200 pools)
-const REFRESH_SCAN_PAGES = 5;   // Subsequent: 5 pages per cycle
+// Discovery uses /new_pools (sorted by creation time, newest first).
+// We paginate until all pools on a page are older than our window.
+// MAX_DISCOVERY_PAGES is a safety cap to avoid runaway pagination.
+const MAX_DISCOVERY_PAGES = 40;
 
 const PUMPSWAP_DEX_ID = 'pumpswap';
 
@@ -64,7 +61,6 @@ const _rejectedAddresses = new Set(); // addresses confirmed NOT PumpFun tokens
 let _lastFetchCycle = 0;
 let _refreshInFlight = null;
 let _storeReady = false;
-let _initialLoadDone = false;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -191,7 +187,7 @@ function evictStale() {
 
 /**
  * Core refresh cycle:
- *  1. Fetch PumpSwap pools from GeckoTerminal (DEX-specific endpoint)
+ *  1. Discover PumpSwap pools via /new_pools (sorted by creation time)
  *  2. Verify candidates against PumpFun API (reject non-PumpFun spam)
  *  3. Enrich confirmed tokens with Jupiter + Helius
  *  4. Re-enrich stale existing tokens
@@ -201,23 +197,24 @@ async function refreshStore() {
   const cycleStart = Date.now();
   const windowCutoff = Date.now() - MAX_WINDOW_MS;
 
-  // Scan more pages on first load to backfill the full window
-  const maxPages = _initialLoadDone ? REFRESH_SCAN_PAGES : INITIAL_SCAN_PAGES;
-
   try {
-    // 1. Fetch PumpSwap pools — paginate through the DEX-specific endpoint
-    //    Pools are sorted by volume (not creation time), so we must scan
-    //    all pages to find every pool created within the window.
+    // 1. Discover PumpSwap pools via /new_pools (sorted by creation time, newest first).
+    //    We paginate until every pool on a page is older than our window,
+    //    guaranteeing we catch EVERY recently created PumpSwap pool.
     let totalPoolsScanned = 0;
-    let newInWindow = 0;
+    let pumpswapInWindow = 0;
+    let pagesScanned = 0;
     const newTokens = [];
     const candidates = [];  // PumpSwap pools to verify against PumpFun
 
-    for (let page = 1; page <= maxPages; page++) {
-      const pools = await geckoService.getDexPools(PUMPSWAP_DEX_ID, page);
-      if (pools.length === 0) break; // No more pages
+    for (let page = 1; page <= MAX_DISCOVERY_PAGES; page++) {
+      const { filtered: pools, totalOnPage, oldestOnPageMs } =
+        await geckoService.getNewPoolsByDex(PUMPSWAP_DEX_ID, page);
+      pagesScanned = page;
 
-      totalPoolsScanned += pools.length;
+      if (totalOnPage === 0) break; // No more pages
+
+      totalPoolsScanned += totalOnPage;
 
       for (const pool of pools) {
         const addr = pool.baseAddress;
@@ -227,13 +224,19 @@ async function refreshStore() {
         const createdMs = new Date(pool.createdAt).getTime();
         if (isNaN(createdMs) || createdMs < windowCutoff) continue;
 
-        // Pool is within our window
-        newInWindow++;
+        pumpswapInWindow++;
 
         // Skip if already in store or already rejected
         if (tokenStore.has(addr) || _rejectedAddresses.has(addr)) continue;
 
         candidates.push({ pool, addr, createdMs });
+      }
+
+      // Since /new_pools is sorted by creation time (newest first),
+      // once the oldest pool on this page is older than our window,
+      // all subsequent pages will be entirely outside it — stop.
+      if (oldestOnPageMs > 0 && oldestOnPageMs < windowCutoff) {
+        break;
       }
     }
 
@@ -335,9 +338,8 @@ async function refreshStore() {
 
     _lastFetchCycle = Date.now();
     _storeReady = true;
-    _initialLoadDone = true;
 
-    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, pages: ${maxPages}, pools scanned: ${totalPoolsScanned}, in window: ${newInWindow}, verified: ${candidates.length}, admitted: ${newTokens.length}, rejected cache: ${_rejectedAddresses.size}, store: ${tokenStore.size}`);
+    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, pages: ${pagesScanned}, pools scanned: ${totalPoolsScanned}, pumpswap in window: ${pumpswapInWindow}, verified: ${candidates.length}, admitted: ${newTokens.length}, rejected cache: ${_rejectedAddresses.size}, store: ${tokenStore.size}`);
 
   } catch (err) {
     console.error('[DailyBrief] Refresh error:', err.message);

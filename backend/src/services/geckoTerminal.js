@@ -959,6 +959,67 @@ async function getDexPools(dexId, page = 1) {
   }
 }
 
+/**
+ * Get new pools filtered by DEX, sorted by creation time (newest first).
+ * Uses /networks/{network}/new_pools which returns ALL DEXes' new pools
+ * in chronological order, then filters client-side to the target DEX.
+ *
+ * Returns same shape as getDexPools for interchangeability.
+ */
+async function getNewPoolsByDex(dexId, page = 1) {
+  try {
+    const response = await geckoRequest(() =>
+      geckoAxios.get(`/networks/${NETWORK}/new_pools`, {
+        params: { page }
+      }),
+      'getNewPoolsByDex'
+    );
+
+    const pools = response.data.data || [];
+    const filtered = [];
+    let oldestOnPageMs = Infinity;
+
+    for (const pool of pools) {
+      const attrs = pool.attributes || {};
+
+      // Track the oldest pool on the entire page (any DEX) for stop condition
+      const poolCreatedAt = attrs.pool_created_at;
+      if (poolCreatedAt) {
+        const ts = new Date(poolCreatedAt).getTime();
+        if (!isNaN(ts) && ts < oldestOnPageMs) oldestOnPageMs = ts;
+      }
+
+      // Filter to target DEX — relationship ID may be plain or namespaced
+      const poolDexId = pool.relationships?.dex?.data?.id || '';
+      if (poolDexId !== dexId && poolDexId !== `${NETWORK}_${dexId}`) continue;
+
+      const baseTokenId = pool.relationships?.base_token?.data?.id;
+
+      filtered.push({
+        baseAddress: baseTokenId ? baseTokenId.replace('solana_', '') : null,
+        poolAddress: attrs.address || null,
+        name: attrs.name || '',
+        createdAt: poolCreatedAt || null,
+        price: parseFloat(attrs.base_token_price_usd) || 0,
+        priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
+        volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
+        liquidity: parseFloat(attrs.reserve_in_usd) || 0,
+        marketCap: parseFloat(attrs.market_cap_usd) || parseFloat(attrs.fdv_usd) || 0,
+        fdv: parseFloat(attrs.fdv_usd) || 0
+      });
+    }
+
+    return {
+      filtered,
+      totalOnPage: pools.length,
+      oldestOnPageMs: oldestOnPageMs === Infinity ? 0 : oldestOnPageMs
+    };
+  } catch (error) {
+    console.error('[GeckoTerminal] getNewPoolsByDex error:', error.message);
+    return { filtered: [], totalOnPage: 0 };
+  }
+}
+
 module.exports = {
   getTokenInfo,
   getTokenPrice,
@@ -968,6 +1029,7 @@ module.exports = {
   getTrendingTokens,
   getNewTokens,
   getDexPools,
+  getNewPoolsByDex,
   searchTokens,
   getOHLCV,
   getPriceHistory,
