@@ -103,4 +103,59 @@ async function searchTokens(searchTerm, limit = 50) {
   });
 }
 
-module.exports = { searchTokens };
+/**
+ * Verify a single token exists on PumpFun by mint address.
+ * Returns the coin object if found (with `complete`, `mint`, etc.), or null.
+ * Uses a lightweight direct fetch (no throttle queue — these are simple GETs).
+ */
+async function getToken(mint) {
+  try {
+    const url = `${PUMPFUN_BASE_URL}/coins/${mint}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'OpenDex/1.0'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!response.ok) return null; // 404 or error = not a PumpFun token
+
+    const data = await response.json();
+    if (!data || !data.mint) return null;
+
+    return data;
+  } catch (_) {
+    return null; // Network error — treat as unverified
+  }
+}
+
+/**
+ * Verify multiple tokens against PumpFun in parallel (with concurrency limit).
+ * Returns a Set of mint addresses that are confirmed PumpFun tokens.
+ */
+async function verifyPumpFunBatch(mints, concurrency = 5) {
+  const confirmed = new Set();
+  const pumpFunData = {};
+
+  // Process in chunks to limit concurrency
+  for (let i = 0; i < mints.length; i += concurrency) {
+    const chunk = mints.slice(i, i + concurrency);
+    const results = await Promise.all(chunk.map(async (mint) => {
+      const data = await getToken(mint);
+      return { mint, data };
+    }));
+
+    for (const { mint, data } of results) {
+      if (data) {
+        confirmed.add(mint);
+        pumpFunData[mint] = data;
+      }
+    }
+  }
+
+  return { confirmed, pumpFunData };
+}
+
+module.exports = { searchTokens, getToken, verifyPumpFunBatch };

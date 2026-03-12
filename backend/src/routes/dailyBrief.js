@@ -19,10 +19,11 @@
  * Architecture: Incremental rolling-window token store.
  *   1. Fetch PumpSwap pools from GeckoTerminal (paginate until covered)
  *   2. pool_created_at = graduation timestamp (authoritative)
- *   3. Admit tokens that graduated within the window
- *   4. Enrich with Birdeye (holders) and Helius (metadata)
- *   5. Periodically re-enrich stale market data
- *   6. Evict tokens older than the configured window
+ *   3. Verify each candidate against PumpFun API (reject non-PumpFun spam)
+ *   4. Admit only confirmed PumpFun graduates
+ *   5. Enrich with Birdeye (holders) and Helius (metadata)
+ *   6. Periodically re-enrich stale market data
+ *   7. Evict tokens older than the configured window
  *
  * API requests read directly from the store — near-instant responses.
  */
@@ -32,6 +33,7 @@ const router = express.Router();
 const geckoService = require('../services/geckoTerminal');
 const birdeyeService = require('../services/birdeye');
 const solanaService = require('../services/solana');
+const pumpfunService = require('../services/pumpfun');
 const { searchLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../middleware/validation');
 
@@ -58,6 +60,7 @@ const SKIP_ADDRESSES = new Set([
 
 // ── In-memory token store ────────────────────────────────────────────
 const tokenStore = new Map();  // address → enrichedToken
+const _rejectedAddresses = new Set(); // addresses confirmed NOT PumpFun tokens
 let _lastFetchCycle = 0;
 let _refreshInFlight = null;
 let _storeReady = false;
@@ -189,11 +192,10 @@ function evictStale() {
 /**
  * Core refresh cycle:
  *  1. Fetch PumpSwap pools from GeckoTerminal (DEX-specific endpoint)
- *  2. Filter to pools created within the window
- *  3. Admit new tokens to the store
- *  4. Enrich new tokens with Birdeye + Helius
- *  5. Re-enrich stale existing tokens
- *  6. Evict expired tokens
+ *  2. Verify candidates against PumpFun API (reject non-PumpFun spam)
+ *  3. Enrich confirmed tokens with Birdeye + Helius
+ *  4. Re-enrich stale existing tokens
+ *  5. Evict expired tokens
  */
 async function refreshStore() {
   const cycleStart = Date.now();
@@ -209,6 +211,7 @@ async function refreshStore() {
     let totalPoolsScanned = 0;
     let newInWindow = 0;
     const newTokens = [];
+    const candidates = [];  // PumpSwap pools to verify against PumpFun
 
     for (let page = 1; page <= maxPages; page++) {
       const pools = await geckoService.getDexPools(PUMPSWAP_DEX_ID, page);
@@ -227,32 +230,53 @@ async function refreshStore() {
         // Pool is within our window
         newInWindow++;
 
-        // Skip if already in store
-        if (tokenStore.has(addr)) continue;
+        // Skip if already in store or already rejected
+        if (tokenStore.has(addr) || _rejectedAddresses.has(addr)) continue;
 
-        const tokenSymbol = pool.name.split(' / ')[0] || '';
+        candidates.push({ pool, addr, createdMs });
+      }
+    }
+
+    // 2. Verify candidates against PumpFun API — only admit real PumpFun tokens
+    if (candidates.length > 0) {
+      const mintsToVerify = candidates.map(c => c.addr);
+      const { confirmed, pumpFunData } = await pumpfunService.verifyPumpFunBatch(mintsToVerify, 5);
+
+      let rejected = 0;
+      for (const { pool, addr, createdMs } of candidates) {
+        if (!confirmed.has(addr)) {
+          _rejectedAddresses.add(addr);
+          rejected++;
+          continue;
+        }
+
+        const pfData = pumpFunData[addr] || {};
+        const tokenSymbol = pfData.symbol || pool.name.split(' / ')[0] || '';
 
         const token = {
           address: addr,
-          name: tokenSymbol,
+          name: pfData.name || tokenSymbol,
           symbol: tokenSymbol,
-          logoUri: null,
-          createdAt: null,
-          _createdAtMs: 0,
+          logoUri: pfData.image_uri || null,
+          createdAt: pfData.created_timestamp ? new Date(pfData.created_timestamp * 1000).toISOString() : null,
+          _createdAtMs: pfData.created_timestamp ? pfData.created_timestamp * 1000 : 0,
           _graduatedAtMs: createdMs,
           _enrichedAt: 0,
           graduatedAt: new Date(createdMs).toISOString(),
-          description: '',
-          website: null,
-          twitter: null,
-          telegram: null,
+          description: pfData.description || '',
+          website: pfData.website || null,
+          twitter: pfData.twitter || null,
+          telegram: pfData.telegram || null,
           price: pool.price,
           priceChange24h: pool.priceChange24h,
           volume24h: pool.volume24h,
           marketCap: pool.marketCap,
           liquidity: pool.liquidity,
           holders: 0,
-          gradVelocityHours: null,
+          gradVelocityHours: computeGradVelocity(
+            pfData.created_timestamp ? pfData.created_timestamp * 1000 : 0,
+            createdMs
+          ),
           volMcapRatio: 0,
           liqMcapRatio: 0
         };
@@ -261,11 +285,15 @@ async function refreshStore() {
         newTokens.push(token);
         tokenStore.set(addr, token);
       }
+
+      if (rejected > 0) {
+        console.log(`[DailyBrief] Rejected ${rejected} non-PumpFun tokens`);
+      }
     }
 
-    // 2. Enrich new tokens with Birdeye (holders) + Helius (metadata)
+    // 3. Enrich new tokens with Birdeye (holders) + Helius (metadata)
     if (newTokens.length > 0) {
-      console.log(`[DailyBrief] ${newTokens.length} new graduates found`);
+      console.log(`[DailyBrief] ${newTokens.length} new PumpFun graduates found`);
 
       await Promise.all(newTokens.map(enrichWithBirdeye));
       await enrichWithHelius(newTokens);
@@ -276,7 +304,7 @@ async function refreshStore() {
       }
     }
 
-    // 3. Re-enrich STALE existing tokens (market data + holders)
+    // 4. Re-enrich STALE existing tokens (market data + holders)
     const now = Date.now();
     const staleTokens = [];
     for (const token of tokenStore.values()) {
@@ -302,14 +330,14 @@ async function refreshStore() {
       }
     }
 
-    // 4. Evict expired tokens
+    // 5. Evict expired tokens
     evictStale();
 
     _lastFetchCycle = Date.now();
     _storeReady = true;
     _initialLoadDone = true;
 
-    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, pages: ${maxPages}, pools scanned: ${totalPoolsScanned}, in window: ${newInWindow}, new: ${newTokens.length}, store: ${tokenStore.size}`);
+    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, pages: ${maxPages}, pools scanned: ${totalPoolsScanned}, in window: ${newInWindow}, verified: ${candidates.length}, admitted: ${newTokens.length}, rejected cache: ${_rejectedAddresses.size}, store: ${tokenStore.size}`);
 
   } catch (err) {
     console.error('[DailyBrief] Refresh error:', err.message);
