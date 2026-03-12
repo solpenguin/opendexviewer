@@ -33,7 +33,7 @@ const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
 // Tokens with a `pump_swap_pool` field = PumpSwap graduates.
 // Results are persisted to PostgreSQL for the API route to read.
 
-const DAILY_BRIEF_HOLDER_BATCH_SIZE = 25;
+const DAILY_BRIEF_HOLDER_BATCH_SIZE = 5; // Helius rate limit: keep concurrency low
 const GECKO_MULTI_BATCH_SIZE = 30; // getMultiTokenInfo max per call
 
 const DAILY_BRIEF_SKIP_ADDRESSES = new Set([

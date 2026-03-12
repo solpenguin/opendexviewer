@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { httpsAgent } = require('./httpAgent');
 const { circuitBreakers } = require('./circuitBreaker');
+const { rateLimitedRequest } = require('./rateLimiter');
 
 // RPC endpoint configuration with failover
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
@@ -236,20 +237,22 @@ async function getTokenHolderCount(mintAddress) {
     // Use Helius DAS API getTokenAccounts method
     // The 'total' field returns the count of all matching token accounts
     // Using limit: 1 to minimize response size while still getting the total
-    const response = await axios.post(HELIUS_DAS_URL, {
-      jsonrpc: '2.0',
-      id: 'holder-count',
-      method: 'getTokenAccounts',
-      params: {
-        mint: mintAddress,
-        page: 1,
-        limit: 1 // Minimize response, we only need the total count
-      }
-    }, {
-      timeout: 10000,
-      headers: HELIUS_HEADERS,
-      httpsAgent
-    });
+    const response = await rateLimitedRequest('helius', () =>
+      axios.post(HELIUS_DAS_URL, {
+        jsonrpc: '2.0',
+        id: 'holder-count',
+        method: 'getTokenAccounts',
+        params: {
+          mint: mintAddress,
+          page: 1,
+          limit: 1 // Minimize response, we only need the total count
+        }
+      }, {
+        timeout: 10000,
+        headers: HELIUS_HEADERS,
+        httpsAgent
+      })
+    );
 
     if (response.data.error) {
       console.error('[Solana] Helius DAS error:', response.data.error.message);
