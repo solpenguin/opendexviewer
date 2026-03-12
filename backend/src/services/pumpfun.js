@@ -76,7 +76,7 @@ async function searchTokens(searchTerm, limit = 50) {
  * @param {number} maxPages - Safety cap on pagination
  * @returns {Promise<Array>} Array of graduated token objects
  */
-async function getGraduatedTokens(windowMs = 72 * 60 * 60 * 1000, maxPages = 10) {
+async function getGraduatedTokens(windowMs = 24 * 60 * 60 * 1000, maxPages = 10) {
   const cutoffMs = Date.now() - windowMs;
   const graduated = [];
   const PAGE_SIZE = 50;

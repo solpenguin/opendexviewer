@@ -11,6 +11,7 @@
  * - Session cleanup (hourly)
  * - View count batching
  * - Stats aggregation
+ * - Daily Brief refresh (PumpSwap graduation discovery, every 3 min)
  */
 
 require('dotenv').config();
@@ -19,11 +20,91 @@ const { Worker } = require('bullmq');
 // Import services for job processing
 const db = require('./services/database');
 const geckoService = require('./services/geckoTerminal');
+const jupiterService = require('./services/jupiter');
 const solanaService = require('./services/solana');
 const { cache, TTL, keys } = require('./services/cache');
 
 // Allowed DEXes for similar-tokens anti-spoofing filter
 const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
+
+// ── Daily Brief: PumpSwap graduation discovery ─────────────────────
+// The worker discovers NEW tokens that graduated to PumpSwap by polling
+// GeckoTerminal's /new_pools endpoint filtered to the PumpSwap DEX.
+// Each new pool = a token that just graduated from PumpFun to PumpSwap.
+// Results are persisted to PostgreSQL for the API route to read.
+
+const DAILY_BRIEF_PUMPSWAP_DEX_ID = 'pumpswap';
+const DAILY_BRIEF_MAX_PAGES = 10;
+const DAILY_BRIEF_HOLDER_BATCH_SIZE = 10;
+
+const DAILY_BRIEF_SKIP_ADDRESSES = new Set([
+  'So11111111111111111111111111111111111111112',   // SOL
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' // USDC
+]);
+
+function computeGradVelocity(createdMs, graduatedMs) {
+  if (!createdMs || !graduatedMs || graduatedMs <= createdMs) return null;
+  return (graduatedMs - createdMs) / (1000 * 60 * 60);
+}
+
+function computeDerivedFields(token) {
+  const mc = token.marketCap || 0;
+  token.volMcapRatio = mc > 0 ? (token.volume24h || 0) / mc : 0;
+  token.liqMcapRatio = mc > 0 ? (token.liquidity || 0) / mc : 0;
+}
+
+async function enrichMarketData(token) {
+  try {
+    const overview = await geckoService.getTokenOverview(token.address);
+    if (overview) {
+      token.price = overview.price || overview.priceUsd || 0;
+      token.priceChange24h = overview.priceChange24h || 0;
+      token.volume24h = overview.volume24h || 0;
+      token.marketCap = overview.marketCap || overview.fdv || token.marketCap || 0;
+      token.liquidity = overview.liquidity || 0;
+      if (!token.logoUri && (overview.logoUri || overview.logoURI)) {
+        token.logoUri = overview.logoUri || overview.logoURI;
+      }
+      if (!token.name || token.name === token.symbol) {
+        token.name = overview.name || token.name;
+      }
+      if (!token.symbol) {
+        token.symbol = overview.symbol || token.symbol;
+      }
+    }
+  } catch (_) { /* non-critical */ }
+}
+
+async function enrichWithHolders(token) {
+  try {
+    const count = await jupiterService.getTokenHolderCount(token.address);
+    if (count != null) token.holders = count;
+  } catch (_) { /* non-critical */ }
+}
+
+async function enrichHoldersBatched(tokens) {
+  for (let i = 0; i < tokens.length; i += DAILY_BRIEF_HOLDER_BATCH_SIZE) {
+    await Promise.all(tokens.slice(i, i + DAILY_BRIEF_HOLDER_BATCH_SIZE).map(enrichWithHolders));
+  }
+}
+
+async function enrichWithHelius(tokens) {
+  if (!solanaService.isHeliusConfigured()) return;
+  const needsMeta = tokens.filter(t => !t.name || !t.logoUri);
+  if (needsMeta.length === 0) return;
+  try {
+    const addresses = needsMeta.map(t => t.address);
+    const metadata = await solanaService.getTokenMetadataBatch(addresses);
+    for (const token of needsMeta) {
+      const meta = metadata[token.address];
+      if (meta) {
+        if (!token.name) token.name = meta.name || token.name;
+        if (!token.symbol) token.symbol = meta.symbol || token.symbol;
+        if (!token.logoUri) token.logoUri = meta.logoUri || null;
+      }
+    }
+  } catch (_) { /* non-critical */ }
+}
 
 // Redis connection config
 const REDIS_URL = process.env.REDIS_URL;
@@ -457,6 +538,174 @@ const jobProcessors = {
     await cache.delete(`diamond-hands-pending:${mint}`);
     console.log(`[Worker] Diamond hands for ${mint}: ${computed} with data, ${skipped} no data`);
     return { computed, skipped };
+  },
+
+  // ==========================================
+  // Daily Brief Jobs
+  // ==========================================
+
+  /**
+   * Refresh Daily Brief — discover NEW PumpSwap graduates.
+   *
+   * Discovery: Poll GeckoTerminal /new_pools filtered to PumpSwap DEX.
+   * Each new PumpSwap pool = a token that just graduated from PumpFun.
+   * pool_created_at = the actual graduation timestamp.
+   *
+   * Enrichment: GeckoTerminal (market data) + Jupiter (holders) + Helius (metadata)
+   * Storage: Persisted to PostgreSQL daily_brief_tokens table.
+   */
+  'refresh-daily-brief': async (job) => {
+    const cycleStart = Date.now();
+    const cutoffMs = Date.now() - (24 * 60 * 60 * 1000);
+    const GECKO_BATCH_SIZE = 10;
+
+    if (!db.isReady()) {
+      throw new Error('Database not ready');
+    }
+
+    try {
+      // 1. Get existing mints from DB for deduplication
+      const existingMints = await db.getDailyBriefExistingMints();
+
+      // 2. Discover new PumpSwap pools (graduated tokens)
+      let totalDiscovered = 0;
+      const newTokens = [];
+
+      for (let page = 1; page <= DAILY_BRIEF_MAX_PAGES; page++) {
+        const { filtered, totalOnPage, oldestOnPageMs } = await geckoService.getNewPoolsByDex(
+          DAILY_BRIEF_PUMPSWAP_DEX_ID, page
+        );
+
+        for (const pool of filtered) {
+          const addr = pool.baseAddress;
+          if (!addr || DAILY_BRIEF_SKIP_ADDRESSES.has(addr)) continue;
+          if (existingMints.has(addr)) continue;
+
+          const graduatedAtMs = pool.createdAt ? new Date(pool.createdAt).getTime() : 0;
+          if (isNaN(graduatedAtMs) || graduatedAtMs < cutoffMs) continue;
+
+          const poolName = pool.name || '';
+          const symbol = poolName.split(' / ')[0] || '';
+
+          const token = {
+            address: addr,
+            name: symbol || '',
+            symbol: symbol || '',
+            logoUri: null,
+            createdAt: null,
+            graduatedAt: pool.createdAt || null,
+            _graduatedAtMs: graduatedAtMs,
+            description: '',
+            website: null,
+            twitter: null,
+            telegram: null,
+            price: pool.price || 0,
+            priceChange24h: pool.priceChange24h || 0,
+            volume24h: pool.volume24h || 0,
+            marketCap: pool.marketCap || 0,
+            liquidity: pool.liquidity || 0,
+            holders: 0,
+            gradVelocityHours: null,
+            volMcapRatio: 0,
+            liqMcapRatio: 0,
+            poolAddress: pool.poolAddress || null
+          };
+
+          newTokens.push(token);
+          existingMints.add(addr); // Prevent duplicates within same cycle
+          totalDiscovered++;
+        }
+
+        // Stop if we've passed the 24h window or no more pages
+        if (totalOnPage === 0) break;
+        if (oldestOnPageMs && oldestOnPageMs < cutoffMs) break;
+      }
+
+      // 3. Enrich new tokens with market data + holders + metadata
+      if (newTokens.length > 0) {
+        console.log(`[DailyBrief] ${newTokens.length} new PumpSwap graduates found`);
+
+        await Promise.all(newTokens.map(enrichMarketData));
+        await enrichHoldersBatched(newTokens);
+        await enrichWithHelius(newTokens);
+
+        // Try to get PumpFun metadata (creation time, socials) for new tokens
+        const pumpfunService = require('./services/pumpfun');
+        for (const token of newTokens) {
+          try {
+            const pfData = await pumpfunService.getToken(token.address);
+            if (pfData && pfData !== 'transient') {
+              const createdMs = pfData.created_timestamp || 0;
+              token.createdAt = createdMs ? new Date(createdMs).toISOString() : null;
+              token.gradVelocityHours = computeGradVelocity(createdMs, token._graduatedAtMs);
+              if (pfData.description) token.description = pfData.description;
+              if (pfData.website) token.website = pfData.website;
+              if (pfData.twitter) token.twitter = pfData.twitter;
+              if (pfData.telegram) token.telegram = pfData.telegram;
+              if (pfData.image_uri && !token.logoUri) token.logoUri = pfData.image_uri;
+              if (pfData.name && (!token.name || token.name === token.symbol)) token.name = pfData.name;
+            }
+          } catch (_) { /* non-critical */ }
+        }
+
+        for (const t of newTokens) {
+          computeDerivedFields(t);
+        }
+
+        // Write new tokens to DB
+        await db.upsertDailyBriefTokens(newTokens);
+      }
+
+      // 4. Re-enrich stale existing tokens (market data + holders)
+      const staleMints = await db.getDailyBriefStaleTokens(5, GECKO_BATCH_SIZE);
+
+      if (staleMints.length > 0) {
+        const staleTokens = staleMints.map(addr => ({
+          address: addr, name: '', symbol: '', logoUri: null,
+          price: 0, priceChange24h: 0, volume24h: 0, marketCap: 0,
+          liquidity: 0, holders: 0, volMcapRatio: 0, liqMcapRatio: 0
+        }));
+
+        await Promise.all(staleTokens.map(enrichMarketData));
+        await enrichHoldersBatched(staleTokens);
+
+        for (const t of staleTokens) {
+          computeDerivedFields(t);
+        }
+
+        // Write updated market data to DB
+        await db.upsertDailyBriefTokens(staleTokens);
+      }
+
+      // 5. Evict expired tokens (older than 24h)
+      const evicted = await db.evictStaleDailyBriefTokens(24);
+      if (evicted > 0) {
+        console.log(`[DailyBrief] Evicted ${evicted} expired tokens`);
+      }
+
+      const stats = await db.getDailyBriefStats();
+      const duration = Date.now() - cycleStart;
+      console.log(`[DailyBrief] Refresh: ${duration}ms, new: ${totalDiscovered}, store: ${stats.storeSize}`);
+
+      return { newTokens: totalDiscovered, storeSize: stats.storeSize, durationMs: duration };
+
+    } catch (err) {
+      console.error('[DailyBrief] Refresh error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
+   * Clear the Daily Brief store and trigger a fresh scan.
+   * Called from admin endpoints.
+   */
+  'clear-daily-brief': async (job) => {
+    if (!db.isReady()) {
+      throw new Error('Database not ready');
+    }
+    const cleared = await db.clearDailyBriefTokens();
+    console.log(`[DailyBrief] Admin clear: ${cleared} tokens`);
+    return { tokensCleared: cleared };
   }
 };
 

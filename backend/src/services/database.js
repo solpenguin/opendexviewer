@@ -458,6 +458,35 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_folios_active ON folios(is_active, sort_order);
       CREATE INDEX IF NOT EXISTS idx_folio_tokens_folio ON folio_tokens(folio_id);
       CREATE INDEX IF NOT EXISTS idx_folio_tokens_mint ON folio_tokens(token_mint);
+
+      -- Daily Brief: tokens that graduated from PumpFun to PumpSwap
+      CREATE TABLE IF NOT EXISTS daily_brief_tokens (
+        mint_address VARCHAR(44) PRIMARY KEY,
+        name VARCHAR(255),
+        symbol VARCHAR(50),
+        logo_uri TEXT,
+        created_at TIMESTAMP WITH TIME ZONE,
+        graduated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        description TEXT,
+        website TEXT,
+        twitter TEXT,
+        telegram TEXT,
+        price DECIMAL,
+        price_change_24h DECIMAL,
+        volume_24h DECIMAL,
+        market_cap DECIMAL,
+        liquidity DECIMAL,
+        holders INTEGER DEFAULT 0,
+        grad_velocity_hours DECIMAL,
+        vol_mcap_ratio DECIMAL DEFAULT 0,
+        liq_mcap_ratio DECIMAL DEFAULT 0,
+        pool_address VARCHAR(64),
+        enriched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        discovered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daily_brief_graduated ON daily_brief_tokens(graduated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_daily_brief_mcap ON daily_brief_tokens(market_cap DESC NULLS LAST);
     `);
 
     await client.query('COMMIT');
@@ -3164,6 +3193,204 @@ async function removeFolioToken(folioId, tokenMint) {
   return result.rowCount > 0;
 }
 
+// ── Daily Brief operations ───────────────────────────────────────────
+
+/**
+ * Upsert a batch of daily brief tokens.
+ * New tokens are inserted; existing tokens have their market data updated.
+ */
+async function upsertDailyBriefTokens(tokens) {
+  if (!pool || tokens.length === 0) return 0;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let count = 0;
+
+    for (const t of tokens) {
+      await client.query(`
+        INSERT INTO daily_brief_tokens (
+          mint_address, name, symbol, logo_uri, created_at, graduated_at,
+          description, website, twitter, telegram,
+          price, price_change_24h, volume_24h, market_cap, liquidity,
+          holders, grad_velocity_hours, vol_mcap_ratio, liq_mcap_ratio,
+          pool_address, enriched_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10,
+          $11, $12, $13, $14, $15,
+          $16, $17, $18, $19,
+          $20, NOW()
+        )
+        ON CONFLICT (mint_address) DO UPDATE SET
+          name = COALESCE(NULLIF(EXCLUDED.name, ''), daily_brief_tokens.name),
+          symbol = COALESCE(NULLIF(EXCLUDED.symbol, ''), daily_brief_tokens.symbol),
+          logo_uri = COALESCE(EXCLUDED.logo_uri, daily_brief_tokens.logo_uri),
+          created_at = COALESCE(EXCLUDED.created_at, daily_brief_tokens.created_at),
+          description = COALESCE(NULLIF(EXCLUDED.description, ''), daily_brief_tokens.description),
+          website = COALESCE(EXCLUDED.website, daily_brief_tokens.website),
+          twitter = COALESCE(EXCLUDED.twitter, daily_brief_tokens.twitter),
+          telegram = COALESCE(EXCLUDED.telegram, daily_brief_tokens.telegram),
+          price = EXCLUDED.price,
+          price_change_24h = EXCLUDED.price_change_24h,
+          volume_24h = EXCLUDED.volume_24h,
+          market_cap = EXCLUDED.market_cap,
+          liquidity = EXCLUDED.liquidity,
+          holders = EXCLUDED.holders,
+          grad_velocity_hours = COALESCE(EXCLUDED.grad_velocity_hours, daily_brief_tokens.grad_velocity_hours),
+          vol_mcap_ratio = EXCLUDED.vol_mcap_ratio,
+          liq_mcap_ratio = EXCLUDED.liq_mcap_ratio,
+          enriched_at = NOW()
+      `, [
+        t.address, t.name || null, t.symbol || null, t.logoUri || null,
+        t.createdAt || null, t.graduatedAt,
+        t.description || null, t.website || null, t.twitter || null, t.telegram || null,
+        t.price || 0, t.priceChange24h || 0, t.volume24h || 0, t.marketCap || 0, t.liquidity || 0,
+        t.holders || 0, t.gradVelocityHours || null, t.volMcapRatio || 0, t.liqMcapRatio || 0,
+        t.poolAddress || null
+      ]);
+      count++;
+    }
+
+    await client.query('COMMIT');
+    return count;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[DB] upsertDailyBriefTokens error:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Get daily brief tokens graduated within the given hours window.
+ * Returns tokens sorted by market_cap descending, limited to `limit`.
+ */
+async function getDailyBriefTokens(hoursAgo = 24, limit = 50) {
+  if (!pool) return [];
+
+  const result = await pool.query(`
+    SELECT
+      mint_address AS address, name, symbol, logo_uri AS "logoUri",
+      created_at AS "createdAt", graduated_at AS "graduatedAt",
+      description, website, twitter, telegram,
+      price, price_change_24h AS "priceChange24h",
+      volume_24h AS "volume24h", market_cap AS "marketCap",
+      liquidity, holders,
+      grad_velocity_hours AS "gradVelocityHours",
+      vol_mcap_ratio AS "volMcapRatio",
+      liq_mcap_ratio AS "liqMcapRatio",
+      pool_address AS "poolAddress"
+    FROM daily_brief_tokens
+    WHERE graduated_at >= NOW() - INTERVAL '1 hour' * $1
+    ORDER BY market_cap DESC NULLS LAST
+    LIMIT $2
+  `, [hoursAgo, limit]);
+
+  return result.rows.map(r => ({
+    ...r,
+    price: parseFloat(r.price) || 0,
+    priceChange24h: parseFloat(r.priceChange24h) || 0,
+    volume24h: parseFloat(r.volume24h) || 0,
+    marketCap: parseFloat(r.marketCap) || 0,
+    liquidity: parseFloat(r.liquidity) || 0,
+    gradVelocityHours: r.gradVelocityHours != null ? parseFloat(r.gradVelocityHours) : null,
+    volMcapRatio: parseFloat(r.volMcapRatio) || 0,
+    liqMcapRatio: parseFloat(r.liqMcapRatio) || 0
+  }));
+}
+
+/**
+ * Count total daily brief tokens graduated within the given hours window.
+ */
+async function getDailyBriefCount(hoursAgo = 24) {
+  if (!pool) return 0;
+
+  const result = await pool.query(`
+    SELECT COUNT(*) AS count FROM daily_brief_tokens
+    WHERE graduated_at >= NOW() - INTERVAL '1 hour' * $1
+  `, [hoursAgo]);
+
+  return parseInt(result.rows[0].count) || 0;
+}
+
+/**
+ * Get mints already in the daily brief table (for deduplication in the worker).
+ */
+async function getDailyBriefExistingMints() {
+  if (!pool) return new Set();
+
+  const result = await pool.query(
+    'SELECT mint_address FROM daily_brief_tokens WHERE graduated_at >= NOW() - INTERVAL \'25 hours\''
+  );
+
+  return new Set(result.rows.map(r => r.mint_address));
+}
+
+/**
+ * Get daily brief tokens that need market data refresh (enriched > staleMinutes ago).
+ * Returns top N by market_cap.
+ */
+async function getDailyBriefStaleTokens(staleMinutes = 5, limit = 10) {
+  if (!pool) return [];
+
+  const result = await pool.query(`
+    SELECT mint_address AS address FROM daily_brief_tokens
+    WHERE enriched_at < NOW() - INTERVAL '1 minute' * $1
+      AND graduated_at >= NOW() - INTERVAL '24 hours'
+    ORDER BY market_cap DESC NULLS LAST
+    LIMIT $2
+  `, [staleMinutes, limit]);
+
+  return result.rows.map(r => r.address);
+}
+
+/**
+ * Delete daily brief tokens older than the given hours window.
+ */
+async function evictStaleDailyBriefTokens(hoursAgo = 24) {
+  if (!pool) return 0;
+
+  const result = await pool.query(
+    'DELETE FROM daily_brief_tokens WHERE graduated_at < NOW() - INTERVAL \'1 hour\' * $1',
+    [hoursAgo]
+  );
+
+  return result.rowCount;
+}
+
+/**
+ * Clear all daily brief tokens.
+ */
+async function clearDailyBriefTokens() {
+  if (!pool) return 0;
+
+  const result = await pool.query('DELETE FROM daily_brief_tokens');
+  return result.rowCount;
+}
+
+/**
+ * Get daily brief store stats for admin.
+ */
+async function getDailyBriefStats() {
+  if (!pool) return { storeSize: 0, lastRefresh: null };
+
+  const result = await pool.query(`
+    SELECT
+      COUNT(*) AS count,
+      MAX(enriched_at) AS last_enriched
+    FROM daily_brief_tokens
+    WHERE graduated_at >= NOW() - INTERVAL '24 hours'
+  `);
+
+  const row = result.rows[0];
+  return {
+    storeSize: parseInt(row.count) || 0,
+    lastRefresh: row.last_enriched ? new Date(row.last_enriched).getTime() : null
+  };
+}
+
 module.exports = {
   get pool() { return pool; },
   initializeDatabase,
@@ -3305,5 +3532,14 @@ module.exports = {
   updateFolio,
   deleteFolio,
   addFolioToken,
-  removeFolioToken
+  removeFolioToken,
+  // Daily Brief operations
+  upsertDailyBriefTokens,
+  getDailyBriefTokens,
+  getDailyBriefCount,
+  getDailyBriefExistingMints,
+  getDailyBriefStaleTokens,
+  evictStaleDailyBriefTokens,
+  clearDailyBriefTokens,
+  getDailyBriefStats
 };

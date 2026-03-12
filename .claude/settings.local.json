@@ -94,7 +94,9 @@
       "Bash(sed -i 's|<a href=\"\"about.html\"\" class=\"\"nav-dropdown-item\"\">About OpenDEX</a>            <a href=\"\"development.html\"\"|<a href=\"\"about.html\"\" class=\"\"nav-dropdown-item\"\">About OpenDEX</a>\\\\n            <a href=\"\"development.html\"\"|' \"$f\")",
       "Bash(done)",
       "Bash(grep -n \"hasSubmissions\\\\|communityUpdates\\\\|submissionCount\\\\|hasContent\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
-      "Bash(find /c/VS/OPENDEX/opendexviewer -type f -name .env* -o -name render.yaml -o -name *.config.js)"
+      "Bash(find /c/VS/OPENDEX/opendexviewer -type f -name .env* -o -name render.yaml -o -name *.config.js)",
+      "Bash(node -e \"require\\(''''./src/services/geckoTerminal''''\\)\")",
+      "Bash(node -e \"require\\(''''./src/services/jobQueue''''\\)\")"
     ]
   }
 }

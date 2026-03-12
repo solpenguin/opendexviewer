@@ -45,6 +45,8 @@ async function initializeJobQueue() {
   if (initialized) {
     // Schedule recurring session cleanup (runs every hour via worker)
     await jobQueue.scheduleSessionCleanup();
+    // Schedule recurring Daily Brief refresh (PumpSwap graduation discovery, every 3 min)
+    await jobQueue.scheduleDailyBriefRefresh();
     console.log('[App] Job queue initialized - background jobs will be handled by worker');
   } else {
     // Fallback: Run cleanup in main process if Redis not available

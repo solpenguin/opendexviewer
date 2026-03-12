@@ -959,27 +959,18 @@ async function getDexPools(dexId, page = 1) {
   }
 }
 
-// Free-tier GeckoTerminal client for endpoints not available on CoinGecko Pro.
-// /new_pools is only on the free API; Pro returns 401.
-const geckoFreeAxios = axios.create({
-  baseURL: 'https://api.geckoterminal.com/api/v2',
-  httpsAgent,
-  timeout: 30000,
-  headers: { 'Accept': 'application/json' }
-});
-
 /**
  * Get new pools filtered by DEX, sorted by creation time (newest first).
  * Uses /networks/{network}/new_pools which returns ALL DEXes' new pools
  * in chronological order, then filters client-side to the target DEX.
  *
- * Always uses the free GeckoTerminal API (not CoinGecko Pro) because
- * /new_pools is not available on all Pro tiers.
+ * Uses CoinGecko Pro API when COINGECKO_API_KEY is configured,
+ * otherwise falls back to free GeckoTerminal API.
  */
 async function getNewPoolsByDex(dexId, page = 1) {
   try {
     const response = await geckoRequest(() =>
-      geckoFreeAxios.get(`/networks/${NETWORK}/new_pools`, {
+      geckoAxios.get(`/networks/${NETWORK}/new_pools`, {
         params: { page }
       }),
       'getNewPoolsByDex'

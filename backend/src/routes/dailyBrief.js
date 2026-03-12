@@ -1,62 +1,20 @@
 /**
- * Daily Brief — Shows tokens that graduated from PumpFun recently.
- * "Graduated" = completed their bonding curve on PumpFun and migrated to PumpSwap.
+ * Daily Brief — Shows tokens that recently graduated to PumpSwap.
  *
- * Discovery strategy:
- *   PumpFun is the SOLE discovery source. We query their /coins endpoint
- *   sorted by last_trade_timestamp descending, filtering for complete=true.
- *   For graduated tokens, last_trade_timestamp = the final bonding curve trade
- *   = the graduation moment.
+ * Discovery is handled by the background worker (src/worker.js) which polls
+ * GeckoTerminal /new_pools filtered to PumpSwap DEX every 3 minutes.
+ * Each new PumpSwap pool = a token that just graduated from PumpFun.
  *
- *   This eliminates GeckoTerminal rate limit issues entirely — no pool
- *   pagination needed. GeckoTerminal is only used for per-token market data
- *   enrichment (individual lookups, not bulk scanning).
- *
- * Architecture: Incremental rolling-window token store.
- *   1. Fetch graduated tokens directly from PumpFun API
- *   2. Admit new tokens not already in the store
- *   3. Enrich with GeckoTerminal (market data) + Jupiter (holders)
- *   4. Periodically re-enrich stale market data
- *   5. Evict tokens older than the configured window
- *
- * API requests read directly from the store — near-instant responses.
+ * This route is a thin read layer — it reads from the daily_brief_tokens
+ * table in PostgreSQL (written by the worker) and serves it to the frontend.
  */
 
 const express = require('express');
 const router = express.Router();
-const geckoService = require('../services/geckoTerminal');
-const jupiterService = require('../services/jupiter');
-const solanaService = require('../services/solana');
-const pumpfunService = require('../services/pumpfun');
+const db = require('../services/database');
+const jobQueue = require('../services/jobQueue');
 const { searchLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../middleware/validation');
-
-// ── Timing constants ─────────────────────────────────────────────────
-const FETCH_INTERVAL_MS  = 3 * 60 * 1000;   // Poll every 3 min
-const ENRICH_STALE_MS    = 5 * 60 * 1000;   // Re-enrich market data every 5 min
-const MAX_WINDOW_MS      = 72 * 60 * 60 * 1000; // Hard eviction at 72h
-const GECKO_BATCH_SIZE   = 10;               // Max Gecko re-enrich calls per cycle
-const HOLDER_BATCH_SIZE  = 10;               // Max parallel Jupiter holder lookups
-const PUMPFUN_MAX_PAGES  = 10;              // Max pages to scan from PumpFun per cycle
-
-// Skip known non-token addresses
-const SKIP_ADDRESSES = new Set([
-  'So11111111111111111111111111111111111111112',   // SOL
-  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' // USDC
-]);
-
-// ── In-memory token store ────────────────────────────────────────────
-const tokenStore = new Map();  // address → enrichedToken
-let _lastFetchCycle = 0;
-let _refreshInFlight = null;
-let _storeReady = false;
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function computeGradVelocity(createdMs, graduatedMs) {
-  if (!createdMs || !graduatedMs || graduatedMs <= createdMs) return null;
-  return (graduatedMs - createdMs) / (1000 * 60 * 60);
-}
 
 function computeAggregateStats(tokens) {
   if (tokens.length === 0) {
@@ -100,289 +58,44 @@ function computeAggregateStats(tokens) {
   };
 }
 
-function computeDerivedFields(token) {
-  const mc = token.marketCap || 0;
-  token.volMcapRatio = mc > 0 ? (token.volume24h || 0) / mc : 0;
-  token.liqMcapRatio = mc > 0 ? (token.liquidity || 0) / mc : 0;
-}
-
-// ── Enrichment helpers ───────────────────────────────────────────────
-
-async function enrichMarketData(token) {
-  try {
-    const overview = await geckoService.getTokenOverview(token.address);
-    if (overview) {
-      token.price = overview.price || overview.priceUsd || 0;
-      token.priceChange24h = overview.priceChange24h || 0;
-      token.volume24h = overview.volume24h || 0;
-      token.marketCap = overview.marketCap || overview.fdv || token.marketCap || 0;
-      token.liquidity = overview.liquidity || 0;
-      if (!token.logoUri && (overview.logoUri || overview.logoURI)) {
-        token.logoUri = overview.logoUri || overview.logoURI;
-      }
-      if (!token.name || token.name === token.symbol) {
-        token.name = overview.name || token.name;
-      }
-      if (!token.symbol) {
-        token.symbol = overview.symbol || token.symbol;
-      }
-    }
-  } catch (_) { /* non-critical */ }
-}
-
-async function enrichWithHolders(token) {
-  try {
-    const count = await jupiterService.getTokenHolderCount(token.address);
-    if (count != null) {
-      token.holders = count;
-    }
-  } catch (_) { /* non-critical */ }
-}
-
-/** Run enrichWithHolders in batches to avoid flooding the Jupiter rate limiter */
-async function enrichHoldersBatched(tokens) {
-  for (let i = 0; i < tokens.length; i += HOLDER_BATCH_SIZE) {
-    await Promise.all(tokens.slice(i, i + HOLDER_BATCH_SIZE).map(enrichWithHolders));
-  }
-}
-
-async function enrichWithHelius(tokens) {
-  if (!solanaService.isHeliusConfigured()) return;
-  const needsMeta = tokens.filter(t => !t.name || !t.logoUri);
-  if (needsMeta.length === 0) return;
-
-  try {
-    const addresses = needsMeta.map(t => t.address);
-    const metadata = await solanaService.getTokenMetadataBatch(addresses);
-    for (const token of needsMeta) {
-      const meta = metadata[token.address];
-      if (meta) {
-        if (!token.name) token.name = meta.name || token.name;
-        if (!token.symbol) token.symbol = meta.symbol || token.symbol;
-        if (!token.logoUri) token.logoUri = meta.logoUri || null;
-      }
-    }
-  } catch (_) { /* non-critical */ }
-}
-
-// ── Store lifecycle ──────────────────────────────────────────────────
-
-function evictStale() {
-  const cutoff = Date.now() - MAX_WINDOW_MS;
-  let evicted = 0;
-  for (const [addr, token] of tokenStore) {
-    if (token._graduatedAtMs < cutoff) {
-      tokenStore.delete(addr);
-      evicted++;
-    }
-  }
-  if (evicted > 0) {
-    console.log(`[DailyBrief] Evicted ${evicted} tokens (store: ${tokenStore.size})`);
-  }
-}
-
-/**
- * Core refresh cycle:
- *  1. Fetch graduated tokens from PumpFun API
- *  2. Admit new tokens to the store
- *  3. Enrich with GeckoTerminal (market data) + Jupiter (holders) + Helius (metadata)
- *  4. Re-enrich stale existing tokens
- *  5. Evict expired tokens
- */
-async function refreshStore() {
-  const cycleStart = Date.now();
-
-  try {
-    // 1. Fetch graduated tokens directly from PumpFun
-    const pfTokens = await pumpfunService.getGraduatedTokens(MAX_WINDOW_MS, PUMPFUN_MAX_PAGES);
-
-    // 2. Admit new tokens not already in the store
-    const newTokens = [];
-
-    for (const pf of pfTokens) {
-      const addr = pf.mint;
-      if (!addr || SKIP_ADDRESSES.has(addr)) continue;
-      if (tokenStore.has(addr)) continue;
-
-      // last_trade_timestamp = graduation time (final bonding curve trade)
-      const graduatedAtMs = pf.last_trade_timestamp || 0;
-      const createdAtMs = pf.created_timestamp || 0;
-
-      const token = {
-        address: addr,
-        name: pf.name || pf.symbol || '',
-        symbol: pf.symbol || '',
-        logoUri: pf.image_uri || null,
-        createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
-        _createdAtMs: createdAtMs,
-        _graduatedAtMs: graduatedAtMs,
-        _enrichedAt: 0,
-        graduatedAt: graduatedAtMs ? new Date(graduatedAtMs).toISOString() : null,
-        description: pf.description || '',
-        website: pf.website || null,
-        twitter: pf.twitter || null,
-        telegram: pf.telegram || null,
-        price: 0,
-        priceChange24h: 0,
-        volume24h: 0,
-        marketCap: pf.usd_market_cap || 0,
-        liquidity: 0,
-        holders: 0,
-        gradVelocityHours: computeGradVelocity(createdAtMs, graduatedAtMs),
-        volMcapRatio: 0,
-        liqMcapRatio: 0
-      };
-
-      newTokens.push(token);
-      tokenStore.set(addr, token);
-    }
-
-    // 3. Enrich new tokens with market data + holders + metadata
-    if (newTokens.length > 0) {
-      console.log(`[DailyBrief] ${newTokens.length} new PumpFun graduates found`);
-
-      // Enrich market data from GeckoTerminal (individual lookups, rate-limited internally)
-      await Promise.all(newTokens.map(enrichMarketData));
-
-      // Enrich holders from Jupiter (batched)
-      await enrichHoldersBatched(newTokens);
-
-      // Enrich metadata from Helius (batch API)
-      await enrichWithHelius(newTokens);
-
-      const now = Date.now();
-      for (const t of newTokens) {
-        t._enrichedAt = now;
-        computeDerivedFields(t);
-      }
-    }
-
-    // 4. Re-enrich STALE existing tokens (market data + holders)
-    const now = Date.now();
-    const staleTokens = [];
-    for (const token of tokenStore.values()) {
-      if (now - token._enrichedAt > ENRICH_STALE_MS) {
-        staleTokens.push(token);
-      }
-    }
-
-    if (staleTokens.length > 0) {
-      staleTokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
-      const refreshBatch = staleTokens.slice(0, GECKO_BATCH_SIZE);
-
-      await Promise.all(refreshBatch.map(enrichMarketData));
-      await enrichHoldersBatched(refreshBatch);
-
-      for (const t of refreshBatch) {
-        t._enrichedAt = Date.now();
-        computeDerivedFields(t);
-      }
-
-      if (staleTokens.length > GECKO_BATCH_SIZE) {
-        console.log(`[DailyBrief] Re-enriched ${refreshBatch.length}/${staleTokens.length} stale tokens (rest next cycle)`);
-      }
-    }
-
-    // 5. Evict expired tokens
-    evictStale();
-
-    _lastFetchCycle = Date.now();
-    _storeReady = true;
-
-    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, from PumpFun: ${pfTokens.length}, new: ${newTokens.length}, store: ${tokenStore.size}`);
-
-  } catch (err) {
-    console.error('[DailyBrief] Refresh error:', err.message);
-    _storeReady = tokenStore.size > 0;
-  }
-}
-
-function triggerRefresh() {
-  if (_refreshInFlight) return _refreshInFlight;
-
-  _refreshInFlight = refreshStore().finally(() => {
-    _refreshInFlight = null;
-  });
-
-  return _refreshInFlight;
-}
-
-/**
- * Read from the store, filtering to the requested time window.
- */
-function readStore(hoursAgo, resultLimit) {
-  const cutoff = Date.now() - (hoursAgo * 60 * 60 * 1000);
-  const tokens = [];
-
-  for (const token of tokenStore.values()) {
-    if (token._graduatedAtMs >= cutoff) {
-      const clean = { ...token };
-      delete clean._graduatedAtMs;
-      delete clean._createdAtMs;
-      delete clean._enrichedAt;
-      tokens.push(clean);
-    }
-  }
-
-  tokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
-
-  return {
-    all: tokens,
-    limited: tokens.slice(0, resultLimit)
-  };
-}
-
-// ── Background refresh interval ──────────────────────────────────────
-triggerRefresh();
-const _refreshTimer = setInterval(() => triggerRefresh(), FETCH_INTERVAL_MS);
-if (_refreshTimer.unref) _refreshTimer.unref();
-
-// ── API endpoint ─────────────────────────────────────────────────────
-
 // GET /api/daily-brief
 router.get('/', searchLimiter, asyncHandler(async (req, res) => {
   const { hours = 24, limit = 50 } = req.query;
-  const hoursAgo = Math.max(1, Math.min(72, parseInt(hours) || 24));
+  const hoursAgo = Math.max(1, Math.min(24, parseInt(hours) || 24));
   const resultLimit = Math.max(1, Math.min(100, parseInt(limit) || 50));
 
-  if (!_storeReady && _refreshInFlight) {
-    await _refreshInFlight;
-  }
+  // Read from database (written by worker)
+  const [tokens, totalGraduated, dbStats] = await Promise.all([
+    db.getDailyBriefTokens(hoursAgo, resultLimit),
+    db.getDailyBriefCount(hoursAgo),
+    db.getDailyBriefStats()
+  ]);
 
-  if (Date.now() - _lastFetchCycle > FETCH_INTERVAL_MS * 2) {
-    triggerRefresh();
-  }
-
-  const { all, limited } = readStore(hoursAgo, resultLimit);
-  const stats = computeAggregateStats(limited);
+  const stats = computeAggregateStats(tokens);
 
   res.json({
-    tokens: limited,
-    totalGraduated: all.length,
+    tokens,
+    totalGraduated,
     hoursAgo,
-    updatedAt: _lastFetchCycle,
+    updatedAt: dbStats.lastRefresh || 0,
     stats
   });
 }));
 
 // ── Admin helpers (used by admin route) ──────────────────────────────
 
-function clearStore() {
-  const storeSize = tokenStore.size;
-  tokenStore.clear();
-  _lastFetchCycle = 0;
-  _storeReady = false;
-  console.log(`[DailyBrief] Admin clear: ${storeSize} tokens`);
-  triggerRefresh();
-  return { tokensCleared: storeSize };
+async function clearStore() {
+  const result = await jobQueue.triggerDailyBriefClear();
+  return { cleared: result };
 }
 
-function getStoreStats() {
+async function getStoreStats() {
+  const stats = await db.getDailyBriefStats();
   return {
-    storeSize: tokenStore.size,
-    lastRefresh: _lastFetchCycle,
-    storeReady: _storeReady,
-    refreshInFlight: !!_refreshInFlight
+    storeSize: stats.storeSize,
+    lastRefresh: stats.lastRefresh,
+    storeReady: stats.storeSize > 0,
+    refreshInFlight: false
   };
 }
 

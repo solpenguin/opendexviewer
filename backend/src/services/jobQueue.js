@@ -183,6 +183,74 @@ async function scheduleSessionCleanup() {
 }
 
 /**
+ * Schedule recurring Daily Brief refresh job
+ * Runs every 3 minutes to discover new PumpSwap graduates
+ */
+async function scheduleDailyBriefRefresh() {
+  if (!isInitialized && !initialize()) return null;
+
+  try {
+    // Remove any existing scheduled job first
+    const existingJobs = await queues[QUEUE_NAMES.MAINTENANCE].getRepeatableJobs();
+    for (const job of existingJobs) {
+      if (job.name === 'refresh-daily-brief') {
+        await queues[QUEUE_NAMES.MAINTENANCE].removeRepeatableByKey(job.key);
+      }
+    }
+
+    // Schedule recurring job every 3 minutes
+    const job = await queues[QUEUE_NAMES.MAINTENANCE].add(
+      'refresh-daily-brief',
+      {},
+      {
+        repeat: {
+          every: 3 * 60 * 1000 // Every 3 minutes
+        },
+        jobId: 'daily-brief-refresh-recurring'
+      }
+    );
+
+    // Also fire one immediately so the store is populated on startup
+    await queues[QUEUE_NAMES.MAINTENANCE].add(
+      'refresh-daily-brief',
+      {},
+      { jobId: 'daily-brief-refresh-initial' }
+    );
+
+    console.log('[JobQueue] Scheduled recurring Daily Brief refresh (every 3 min)');
+    return job;
+  } catch (err) {
+    console.error('[JobQueue] Failed to schedule Daily Brief refresh:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Trigger a one-off Daily Brief store clear + refresh
+ */
+async function triggerDailyBriefClear() {
+  if (!isInitialized && !initialize()) return null;
+
+  try {
+    await queues[QUEUE_NAMES.MAINTENANCE].add(
+      'clear-daily-brief',
+      {},
+      { jobId: `daily-brief-clear-${Date.now()}` }
+    );
+    // Follow up with an immediate refresh
+    await queues[QUEUE_NAMES.MAINTENANCE].add(
+      'refresh-daily-brief',
+      {},
+      { jobId: `daily-brief-refresh-after-clear-${Date.now()}` }
+    );
+    return true;
+  } catch (err) {
+    console.error('[JobQueue] Failed to trigger Daily Brief clear:', err.message);
+    return false;
+  }
+}
+
+/**
  * Batch view count updates
  * Collects view increments and flushes them periodically
  * Buffer is capped to prevent unbounded memory growth
@@ -432,6 +500,8 @@ module.exports = {
   addAnalyticsJob,
   addSearchJob,
   scheduleSessionCleanup,
+  scheduleDailyBriefRefresh,
+  triggerDailyBriefClear,
   incrementViewCount,
   getBufferedViewCounts,
   flushViewCounts,

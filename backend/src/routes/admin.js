@@ -1188,24 +1188,24 @@ const dailyBriefRoute = require('./dailyBrief');
 
 /**
  * GET /admin/daily-brief-cache
- * Get Daily Brief store stats.
+ * Get Daily Brief store stats (reads from Redis cache written by worker).
  */
 router.get('/daily-brief-cache',
   validateAdminSession,
   asyncHandler(async (req, res) => {
-    const stats = dailyBriefRoute.getStoreStats();
+    const stats = await dailyBriefRoute.getStoreStats();
     res.json({ success: true, data: stats });
   })
 );
 
 /**
  * DELETE /admin/daily-brief-cache
- * Clear the entire Daily Brief in-memory store and trigger a fresh scan.
+ * Clear the Daily Brief store and trigger a fresh scan via the worker.
  */
 router.delete('/daily-brief-cache',
   validateAdminSession,
   asyncHandler(async (req, res) => {
-    const result = dailyBriefRoute.clearStore();
+    const result = await dailyBriefRoute.clearStore();
     res.json({ success: true, data: result });
   })
 );

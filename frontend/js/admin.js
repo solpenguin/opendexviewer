@@ -2183,11 +2183,10 @@ const adminPanel = {
 
       container.innerHTML =
         '<div class="stats-grid" style="margin-bottom: 0;">' +
-          '<div class="stat-card"><div class="stat-value">' + (d.storeSize || 0) + '</div><div class="stat-label">Tokens in Store</div></div>' +
-          '<div class="stat-card"><div class="stat-value">' + (d.storeReady ? 'Yes' : 'No') + '</div><div class="stat-label">Store Ready</div></div>' +
-          '<div class="stat-card"><div class="stat-value">' + (d.refreshInFlight ? 'Yes' : 'No') + '</div><div class="stat-label">Refresh Active</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + (d.storeSize || 0) + '</div><div class="stat-label">Tokens in DB</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + (d.storeReady ? 'Yes' : 'No') + '</div><div class="stat-label">Data Available</div></div>' +
         '</div>' +
-        '<p style="margin: 0.75rem 0 0; font-size: 0.8rem; color: var(--text-muted);">Last refresh: ' + lastRefresh + '</p>';
+        '<p style="margin: 0.75rem 0 0; font-size: 0.8rem; color: var(--text-muted);">Last enriched: ' + lastRefresh + '</p>';
     } catch (error) {
       container.innerHTML = '<p style="color: var(--accent-red);">Failed to load: ' + error.message + '</p>';
     }
@@ -2196,12 +2195,11 @@ const adminPanel = {
   async clearDailyBriefCache() {
     this.showConfirmModal(
       'Clear Daily Brief Cache',
-      'This will clear all cached tokens and the rejected-address list, then trigger a full re-scan. The Daily Brief page will be empty until the scan completes (~1-2 min). Continue?',
+      'This will delete all Daily Brief tokens from the database, then trigger a fresh PumpSwap discovery scan. The Daily Brief page will be empty until the scan completes (~1-2 min). Continue?',
       async () => {
         try {
-          var result = await adminApi.clearDailyBriefCache();
-          var d = result.data || {};
-          toast.success('Daily Brief cleared: ' + d.tokensCleared + ' tokens. Re-scan started.');
+          await adminApi.clearDailyBriefCache();
+          toast.success('Daily Brief cleared. Re-scan started.');
           this.loadDailyBriefCache();
         } catch (error) {
           toast.error('Failed to clear: ' + error.message);
