@@ -83,7 +83,15 @@ async function enrichMarketDataBatched(tokens) {
 
 async function enrichWithHolders(token) {
   try {
-    const count = await jupiterService.getTokenHolderCount(token.address);
+    // Prefer Helius DAS (on-chain token accounts) — works for all SPL tokens
+    // Jupiter search often misses recently graduated PumpSwap tokens
+    let count = null;
+    if (solanaService.isHeliusConfigured()) {
+      count = await solanaService.getTokenHolderCount(token.address);
+    }
+    if (count == null) {
+      count = await jupiterService.getTokenHolderCount(token.address);
+    }
     if (count != null) token.holders = count;
   } catch (_) { /* non-critical */ }
 }
@@ -638,8 +646,8 @@ const jobProcessors = {
           computeDerivedFields(t);
         }
 
-        // Write updated market data to DB
-        await db.upsertDailyBriefTokens(staleTokens);
+        // Write updated market data to DB (UPDATE only, no INSERT needed)
+        await db.updateDailyBriefMarketData(staleTokens);
       }
 
       // 5. Evict expired tokens (older than 24h)

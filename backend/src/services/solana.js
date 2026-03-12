@@ -233,8 +233,6 @@ async function getTokenHolderCount(mintAddress) {
   }
 
   try {
-    console.log(`[Solana] Fetching holder count for ${mintAddress}`);
-
     // Use Helius DAS API getTokenAccounts method
     // The 'total' field returns the count of all matching token accounts
     // Using limit: 1 to minimize response size while still getting the total
@@ -264,31 +262,12 @@ async function getTokenHolderCount(mintAddress) {
       return null;
     }
 
-    // The response structure should have:
-    // - total: total number of matching token accounts
-    // - token_accounts: array of account data
-    // - cursor: for pagination
     const total = result.total;
-    const tokenAccountsCount = result.token_accounts?.length || 0;
-
-    console.log(`[Solana] Response fields:`, {
-      total: total,
-      totalType: typeof total,
-      tokenAccountsLength: tokenAccountsCount,
-      hasTokenAccounts: Array.isArray(result.token_accounts),
-      cursor: result.cursor,
-      allKeys: Object.keys(result)
-    });
 
     // If total field exists and is valid, use it
     if (typeof total === 'number' && total >= 0) {
-      console.log(`[Solana] Holder count for ${mintAddress}: ${total}`);
       return total;
     }
-
-    // Fallback: if no total field, we can't get the count without pagination
-    // For now, return null to indicate unavailable
-    console.log('[Solana] Total field not found or invalid in response');
     return null;
   } catch (error) {
     console.error('[Solana] getTokenHolderCount error:', error.message);

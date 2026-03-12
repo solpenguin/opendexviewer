@@ -3243,7 +3243,7 @@ async function upsertDailyBriefTokens(tokens) {
           enriched_at = NOW()
       `, [
         t.address, t.name || null, t.symbol || null, t.logoUri || null,
-        t.createdAt || null, t.graduatedAt,
+        t.createdAt || null, t.graduatedAt || null,
         t.description || null, t.website || null, t.twitter || null, t.telegram || null,
         t.price || 0, t.priceChange24h || 0, t.volume24h || 0, t.marketCap || 0, t.liquidity || 0,
         t.holders || 0, t.gradVelocityHours || null, t.volMcapRatio || 0, t.liqMcapRatio || 0,
@@ -3257,6 +3257,51 @@ async function upsertDailyBriefTokens(tokens) {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[DB] upsertDailyBriefTokens error:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Update only market data columns for existing daily brief tokens.
+ * Used by stale re-enrichment — these tokens already exist in DB so we
+ * don't need to INSERT (which would require graduated_at NOT NULL).
+ */
+async function updateDailyBriefMarketData(tokens) {
+  if (!pool || tokens.length === 0) return 0;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let count = 0;
+
+    for (const t of tokens) {
+      const result = await client.query(`
+        UPDATE daily_brief_tokens SET
+          price = $2,
+          price_change_24h = $3,
+          volume_24h = $4,
+          market_cap = $5,
+          liquidity = $6,
+          holders = $7,
+          vol_mcap_ratio = $8,
+          liq_mcap_ratio = $9,
+          enriched_at = NOW()
+        WHERE mint_address = $1
+      `, [
+        t.address, t.price || 0, t.priceChange24h || 0, t.volume24h || 0,
+        t.marketCap || 0, t.liquidity || 0, t.holders || 0,
+        t.volMcapRatio || 0, t.liqMcapRatio || 0
+      ]);
+      if (result.rowCount > 0) count++;
+    }
+
+    await client.query('COMMIT');
+    return count;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[DB] updateDailyBriefMarketData error:', err.message);
     throw err;
   } finally {
     client.release();
@@ -3536,6 +3581,7 @@ module.exports = {
   removeFolioToken,
   // Daily Brief operations
   upsertDailyBriefTokens,
+  updateDailyBriefMarketData,
   getDailyBriefTokens,
   getDailyBriefCount,
   getDailyBriefExistingMints,
