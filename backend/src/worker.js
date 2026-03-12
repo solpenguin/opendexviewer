@@ -33,7 +33,7 @@ const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
 // Tokens with a `pump_swap_pool` field = PumpSwap graduates.
 // Results are persisted to PostgreSQL for the API route to read.
 
-const DAILY_BRIEF_HOLDER_BATCH_SIZE = 5; // Helius rate limit: keep concurrency low
+const DAILY_BRIEF_HOLDER_BATCH_SIZE = 10;
 const GECKO_MULTI_BATCH_SIZE = 30; // getMultiTokenInfo max per call
 
 const DAILY_BRIEF_SKIP_ADDRESSES = new Set([
@@ -83,15 +83,8 @@ async function enrichMarketDataBatched(tokens) {
 
 async function enrichWithHolders(token) {
   try {
-    // Prefer Helius DAS (on-chain token accounts) — works for all SPL tokens
-    // Jupiter search often misses recently graduated PumpSwap tokens
-    let count = null;
-    if (solanaService.isHeliusConfigured()) {
-      count = await solanaService.getTokenHolderCount(token.address);
-    }
-    if (count == null) {
-      count = await jupiterService.getTokenHolderCount(token.address);
-    }
+    // Jupiter V2 search returns holderCount directly
+    const count = await jupiterService.getTokenHolderCount(token.address);
     if (count != null) token.holders = count;
   } catch (_) { /* non-critical */ }
 }
