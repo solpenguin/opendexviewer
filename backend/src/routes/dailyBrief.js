@@ -21,7 +21,7 @@
  *   2. pool_created_at = graduation timestamp (authoritative)
  *   3. Verify each candidate against PumpFun API (reject non-PumpFun spam)
  *   4. Admit only confirmed PumpFun graduates
- *   5. Enrich with Birdeye (holders) and Helius (metadata)
+ *   5. Enrich with Jupiter (holders) and Helius (metadata)
  *   6. Periodically re-enrich stale market data
  *   7. Evict tokens older than the configured window
  *
@@ -31,7 +31,7 @@
 const express = require('express');
 const router = express.Router();
 const geckoService = require('../services/geckoTerminal');
-const birdeyeService = require('../services/birdeye');
+const jupiterService = require('../services/jupiter');
 const solanaService = require('../services/solana');
 const pumpfunService = require('../services/pumpfun');
 const { searchLimiter } = require('../middleware/rateLimit');
@@ -145,11 +145,11 @@ async function refreshMarketData(token) {
   } catch (_) { /* non-critical */ }
 }
 
-async function enrichWithBirdeye(token) {
+async function enrichWithHolders(token) {
   try {
-    const overview = await birdeyeService.getTokenOverview(token.address);
-    if (overview) {
-      token.holders = overview.holder || 0;
+    const count = await jupiterService.getTokenHolderCount(token.address);
+    if (count != null) {
+      token.holders = count;
     }
   } catch (_) { /* non-critical */ }
 }
@@ -193,7 +193,7 @@ function evictStale() {
  * Core refresh cycle:
  *  1. Fetch PumpSwap pools from GeckoTerminal (DEX-specific endpoint)
  *  2. Verify candidates against PumpFun API (reject non-PumpFun spam)
- *  3. Enrich confirmed tokens with Birdeye + Helius
+ *  3. Enrich confirmed tokens with Jupiter + Helius
  *  4. Re-enrich stale existing tokens
  *  5. Evict expired tokens
  */
@@ -258,8 +258,8 @@ async function refreshStore() {
           name: pfData.name || tokenSymbol,
           symbol: tokenSymbol,
           logoUri: pfData.image_uri || null,
-          createdAt: pfData.created_timestamp ? new Date(pfData.created_timestamp * 1000).toISOString() : null,
-          _createdAtMs: pfData.created_timestamp ? pfData.created_timestamp * 1000 : 0,
+          createdAt: pfData.created_timestamp ? new Date(pfData.created_timestamp).toISOString() : null,
+          _createdAtMs: pfData.created_timestamp || 0,
           _graduatedAtMs: createdMs,
           _enrichedAt: 0,
           graduatedAt: new Date(createdMs).toISOString(),
@@ -274,7 +274,7 @@ async function refreshStore() {
           liquidity: pool.liquidity,
           holders: 0,
           gradVelocityHours: computeGradVelocity(
-            pfData.created_timestamp ? pfData.created_timestamp * 1000 : 0,
+            pfData.created_timestamp || 0,
             createdMs
           ),
           volMcapRatio: 0,
@@ -291,11 +291,11 @@ async function refreshStore() {
       }
     }
 
-    // 3. Enrich new tokens with Birdeye (holders) + Helius (metadata)
+    // 3. Enrich new tokens with Jupiter (holders) + Helius (metadata)
     if (newTokens.length > 0) {
       console.log(`[DailyBrief] ${newTokens.length} new PumpFun graduates found`);
 
-      await Promise.all(newTokens.map(enrichWithBirdeye));
+      await Promise.all(newTokens.map(enrichWithHolders));
       await enrichWithHelius(newTokens);
 
       const now = Date.now();
@@ -318,7 +318,7 @@ async function refreshStore() {
       const refreshBatch = staleTokens.slice(0, GECKO_BATCH_SIZE);
 
       await Promise.all(refreshBatch.map(refreshMarketData));
-      await Promise.all(refreshBatch.map(enrichWithBirdeye));
+      await Promise.all(refreshBatch.map(enrichWithHolders));
 
       for (const t of refreshBatch) {
         t._enrichedAt = Date.now();
