@@ -9,7 +9,7 @@ var dailyBrief = (function() {
   var state = {
     tokens: [],       // All tokens from API
     stats: null,      // Aggregate stats from API
-    sortField: 'marketCap',
+    sortField: 'volMcapRatio',
     sortOrder: 'desc',
     refreshInterval: null,
     loading: false,
@@ -52,7 +52,10 @@ var dailyBrief = (function() {
     els.losers = document.getElementById('brief-losers');
   }
 
-  // --- Dropdown logic (reuses spikes dropdown pattern) ---
+  // --- Dropdown logic ---
+  // Uses click-only (no touchend). The viewport meta tag eliminates the 300ms
+  // mobile click delay, so touchend listeners are unnecessary and cause
+  // double-fire bugs. Each dropdown is self-contained.
 
   function initDropdown(dropdownEl, onSelect) {
     if (!dropdownEl) return;
@@ -60,31 +63,22 @@ var dailyBrief = (function() {
     var menu = dropdownEl.querySelector('.spikes-dropdown-menu');
     var textEl = trigger.querySelector('.spikes-dropdown-text');
 
-    // Debounce: prevent touchend+click from firing the callback twice on mobile.
-    // A tap fires touchend then click ~300ms later; ignore the second event.
-    var lastSelectTime = 0;
-
-    function handleTrigger(e) {
+    trigger.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
+      // Close all other dropdowns first
       var allDropdowns = document.querySelectorAll('.spikes-dropdown.open');
       for (var i = 0; i < allDropdowns.length; i++) {
         if (allDropdowns[i] !== dropdownEl) allDropdowns[i].classList.remove('open');
       }
       dropdownEl.classList.toggle('open');
-    }
-    trigger.addEventListener('click', handleTrigger);
+    });
 
-    function handleItemSelect(e) {
+    menu.addEventListener('click', function(e) {
       var item = e.target.closest('.spikes-dropdown-item');
       if (!item) return;
       e.preventDefault();
       e.stopPropagation();
-
-      // Debounce: skip if same selection fired <400ms ago (touchend→click)
-      var now = Date.now();
-      if (now - lastSelectTime < 400) return;
-      lastSelectTime = now;
 
       var value = item.dataset.value;
       var items = menu.querySelectorAll('.spikes-dropdown-item');
@@ -95,9 +89,7 @@ var dailyBrief = (function() {
       textEl.textContent = item.textContent.trim();
       dropdownEl.classList.remove('open');
       if (onSelect) onSelect(value);
-    }
-    menu.addEventListener('click', handleItemSelect);
-    menu.addEventListener('touchend', handleItemSelect);
+    });
   }
 
   function closeAllDropdowns() {
@@ -124,10 +116,10 @@ var dailyBrief = (function() {
     return tokens.filter(function(t) {
       // MCap filter
       var mc = t.marketCap || 0;
-      if (state.filterMcap === 'micro' && mc >= 100000) return false;
-      if (state.filterMcap === 'small' && (mc < 100000 || mc >= 1000000)) return false;
-      if (state.filterMcap === 'mid' && (mc < 1000000 || mc >= 10000000)) return false;
-      if (state.filterMcap === 'large' && mc < 10000000) return false;
+      if (state.filterMcap === 'micro' && mc >= 50000) return false;
+      if (state.filterMcap === 'small' && (mc < 50000 || mc >= 250000)) return false;
+      if (state.filterMcap === 'mid' && (mc < 250000 || mc >= 1000000)) return false;
+      if (state.filterMcap === 'large' && mc < 1000000) return false;
 
       // Volume filter
       if (state.filterMinVolume > 0 && (t.volume24h || 0) < state.filterMinVolume) return false;
@@ -241,7 +233,7 @@ var dailyBrief = (function() {
       var changeSign = change >= 0 ? '+' : '';
       var logo = t.logoUri || t.logoURI;
       var ratio = parseFloat(t.volMcapRatio) || 0;
-      var ratioClass = ratio > 2 ? 'ratio-extreme' : ratio > 0.5 ? 'ratio-high' : '';
+      var ratioClass = ratio > 2 ? 'ratio-extreme' : ratio > 0.5 ? 'ratio-high' : ratio > 0.1 ? 'ratio-moderate' : '';
 
       html += '<tr class="brief-row" data-navigate="' + escapeAttr(addr) + '">';
       html += '<td class="cell-rank">' + (i + 1) + '</td>';
@@ -449,7 +441,7 @@ var dailyBrief = (function() {
         }
       }
       // Mark default sort
-      var defaultTh = headerRow.querySelector('th[data-sort="marketCap"]');
+      var defaultTh = headerRow.querySelector('th[data-sort="volMcapRatio"]');
       if (defaultTh) defaultTh.classList.add('sort-active', 'sort-desc');
 
       headerRow.addEventListener('click', handleSort);

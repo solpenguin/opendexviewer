@@ -15008,8 +15008,6 @@ body.landscape .hero h1 {
   position: relative;
   text-align: center;
   padding: 3rem 1rem 1.5rem;
-  overflow-x: clip;
-  overflow-y: visible;
 }
 
 .brief-hero-glow {
@@ -15112,9 +15110,13 @@ body.landscape .hero h1 {
 }
 
 @media (max-width: 768px) {
+  /* On mobile, anchor menus to the left edge of their parent dropdown.
+     The parent .spikes-dropdown is position:relative, so left:0 keeps
+     the menu aligned with the trigger button — works for both leftmost
+     and rightmost dropdowns without overflowing either side. */
   .brief-page .spikes-dropdown-menu {
-    left: auto;
-    right: 0;
+    left: 0;
+    right: auto;
     transform: none;
     min-width: 160px;
   }
@@ -15125,6 +15127,7 @@ body.landscape .hero h1 {
     align-items: center;
     padding: 0.5rem 0.875rem;
   }
+
 }
 
 /* Analysis Cards */
@@ -15269,14 +15272,19 @@ body.landscape .hero h1 {
   color: var(--text-secondary);
 }
 
+.ratio-moderate {
+  background: rgba(16, 185, 129, 0.08);
+  color: #34d399;
+}
+
 .ratio-high {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
 }
 
 .ratio-extreme {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: rgba(16, 185, 129, 0.18);
+  color: #059669;
 }
 
 /* Table row hover */

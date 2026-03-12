@@ -920,6 +920,46 @@ async function getTokenPools(mintAddress, options = {}) {
   }
 }
 
+/**
+ * Get raw new pools with DEX info (for filtering by DEX like PumpSwap).
+ * Returns pool-level data including dexId and pool_created_at.
+ * Endpoint: /networks/{network}/new_pools
+ */
+async function getNewPools(page = 1) {
+  try {
+    const response = await geckoRequest(() =>
+      geckoAxios.get(`/networks/${NETWORK}/new_pools`, {
+        params: { page }
+      }),
+      'getNewPools'
+    );
+
+    const pools = response.data.data || [];
+    return pools.map(pool => {
+      const attrs = pool.attributes || {};
+      const baseTokenId = pool.relationships?.base_token?.data?.id;
+      const dexId = (pool.relationships?.dex?.data?.id || '').toLowerCase();
+
+      return {
+        baseAddress: baseTokenId ? baseTokenId.replace('solana_', '') : null,
+        poolAddress: attrs.address || null,
+        dexId,
+        name: attrs.name || '',
+        createdAt: attrs.pool_created_at || null,
+        price: parseFloat(attrs.base_token_price_usd) || 0,
+        priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
+        volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
+        liquidity: parseFloat(attrs.reserve_in_usd) || 0,
+        marketCap: parseFloat(attrs.market_cap_usd) || parseFloat(attrs.fdv_usd) || 0,
+        fdv: parseFloat(attrs.fdv_usd) || 0
+      };
+    });
+  } catch (error) {
+    console.error('[GeckoTerminal] getNewPools error:', error.message);
+    return [];
+  }
+}
+
 module.exports = {
   getTokenInfo,
   getTokenPrice,
@@ -928,6 +968,7 @@ module.exports = {
   getMarketData,
   getTrendingTokens,
   getNewTokens,
+  getNewPools,
   searchTokens,
   getOHLCV,
   getPriceHistory,
