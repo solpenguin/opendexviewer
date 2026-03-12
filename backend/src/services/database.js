@@ -3295,6 +3295,7 @@ async function getDailyBriefTokens(hoursAgo = 24, limit = 50) {
     volume24h: parseFloat(r.volume24h) || 0,
     marketCap: parseFloat(r.marketCap) || 0,
     liquidity: parseFloat(r.liquidity) || 0,
+    holders: parseInt(r.holders) || 0,
     gradVelocityHours: r.gradVelocityHours != null ? parseFloat(r.gradVelocityHours) : null,
     volMcapRatio: parseFloat(r.volMcapRatio) || 0,
     liqMcapRatio: parseFloat(r.liqMcapRatio) || 0

@@ -15325,9 +15325,8 @@ body.landscape .hero h1 {
     flex-wrap: wrap;
   }
 
-  /* Hide least-useful columns first: vol/mcap ratio, grad speed */
-  .brief-table .cell-volratio,
-  .brief-table .cell-velocity {
+  /* Hide least-useful columns on small screens */
+  .brief-table .cell-volratio {
     display: none;
   }
 

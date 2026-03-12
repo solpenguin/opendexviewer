@@ -43,8 +43,6 @@ var dailyBrief = (function() {
     els.analysis = document.getElementById('brief-analysis');
     els.avgMcap = document.getElementById('brief-avg-mcap');
     els.medianMcap = document.getElementById('brief-median-mcap');
-    els.avgVelocity = document.getElementById('brief-avg-velocity');
-    els.medianVelocity = document.getElementById('brief-median-velocity');
     els.avgHolders = document.getElementById('brief-avg-holders');
     els.totalVolume = document.getElementById('brief-total-volume');
     els.avgChange = document.getElementById('brief-avg-change');
@@ -149,14 +147,6 @@ var dailyBrief = (function() {
 
     els.avgMcap.textContent = formatUsd(stats.avgMcap);
     els.medianMcap.textContent = formatUsd(stats.medianMcap);
-
-    if (stats.avgGradVelocity != null) {
-      els.avgVelocity.textContent = formatDuration(stats.avgGradVelocity);
-      els.medianVelocity.textContent = stats.medianGradVelocity != null ? formatDuration(stats.medianGradVelocity) : '--';
-    } else {
-      els.avgVelocity.textContent = '--';
-      els.medianVelocity.textContent = '--';
-    }
 
     els.avgHolders.textContent = stats.avgHolders > 0 ? formatNumber(Math.round(stats.avgHolders)) : '--';
     els.totalVolume.textContent = formatUsd(stats.totalVolume);
@@ -263,17 +253,7 @@ var dailyBrief = (function() {
       html += '<td class="cell-mcap">' + formatUsd(t.marketCap) + '</td>';
 
       // Holders
-      html += '<td class="cell-holders">' + (t.holders ? formatNumber(t.holders) : '--') + '</td>';
-
-      // Graduation velocity
-      html += '<td class="cell-velocity">';
-      if (t.gradVelocityHours != null) {
-        var velClass = t.gradVelocityHours < 1 ? 'velocity-fast' : t.gradVelocityHours < 6 ? 'velocity-med' : 'velocity-slow';
-        html += '<span class="velocity-badge ' + velClass + '">' + formatDuration(t.gradVelocityHours) + '</span>';
-      } else {
-        html += '--';
-      }
-      html += '</td>';
+      html += '<td class="cell-holders">' + (t.holders > 0 ? formatNumber(t.holders) : '--') + '</td>';
 
       // Vol/MCap ratio
       html += '<td class="cell-volratio"><span class="ratio-badge ' + ratioClass + '">' + ratio.toFixed(2) + 'x</span></td>';
@@ -427,7 +407,6 @@ var dailyBrief = (function() {
         'cell-volume': 'volume24h',
         'cell-mcap': 'marketCap',
         'cell-holders': 'holders',
-        'cell-velocity': 'gradVelocityHours',
         'cell-volratio': 'volMcapRatio'
       };
       for (var i = 0; i < headers.length; i++) {
