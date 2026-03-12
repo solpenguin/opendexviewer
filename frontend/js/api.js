@@ -620,6 +620,20 @@ const api = {
     }
   },
 
+  // Daily Brief endpoints
+  dailyBrief: {
+    async get(params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const cacheKey = `daily-brief:${query}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/daily-brief?${query}`),
+        apiCache.TTL.tokenList,
+        true
+      );
+    }
+  },
+
   // OG Finder endpoints
   ogfinder: {
     // Backend fallback search — used by Telegram bot and when direct PumpFun fails

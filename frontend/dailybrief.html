@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Daily Brief - OpenDex</title>
+  <meta name="description" content="Daily Brief: Tokens that graduated from PumpFun in the last 24 hours. Track newly launched Solana tokens with market data.">
+  <meta name="theme-color" content="#07080a">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="OpenDex">
+  <meta property="og:title" content="Daily Brief - OpenDex">
+  <meta property="og:description" content="Track tokens that graduated from PumpFun in the last 24 hours with live market data.">
+  <meta property="og:image" content="https://opendex.online/OpenDexBanner2.png">
+  <meta property="og:url" content="https://opendex.online/dailybrief">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Daily Brief - OpenDex">
+  <meta name="twitter:description" content="Track tokens that graduated from PumpFun in the last 24 hours with live market data.">
+  <meta name="twitter:image" content="https://opendex.online/OpenDexBanner2.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="OpenDEX_Logo.png">
+  <link rel="apple-touch-icon" href="OpenDEX_Logo.png">
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="logo">
+        <img src="OpenDEX_Logo.png" alt="OpenDex Logo" class="logo-img" width="28" height="28">
+        <span class="logo-text">OpenDex</span>
+        <span class="logo-badge">Beta</span>
+      </a>
+
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <svg class="icon-hamburger" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <svg class="icon-close" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <nav class="nav">
+        <a href="/" class="nav-link">Home</a>
+        <a href="tokens.html" class="nav-link">Tokens</a>
+        <a href="submit.html" class="nav-link">Submit</a>
+        <div class="nav-dropdown">
+          <a href="#" class="nav-link nav-dropdown-toggle active">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
+          <div class="nav-dropdown-menu">
+            <a href="community.html" class="nav-dropdown-item">Community</a>
+            <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
+            <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
+            <a href="spikes.html" class="nav-dropdown-item">Spike Detector</a>
+            <a href="dailybrief.html" class="nav-dropdown-item active">Daily Brief</a>
+            <a href="burn.html" class="nav-dropdown-item">Burn Credits</a>
+            <a href="folios.html" class="nav-dropdown-item">Folios</a>
+          </div>
+        </div>
+        <div class="nav-dropdown">
+          <a href="about.html" class="nav-link nav-dropdown-toggle">About <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
+          <div class="nav-dropdown-menu">
+            <a href="about.html" class="nav-dropdown-item">About OpenDEX</a>
+            <a href="development.html" class="nav-dropdown-item">Development</a>
+            <a href="api.html" class="nav-dropdown-item">API</a>
+            <a href="docs.html" class="nav-dropdown-item">Docs</a>
+          </div>
+        </div>
+      </nav>
+
+      <div class="header-actions">
+        <button id="install-app-btn" class="btn btn-ghost btn-sm" style="display:none;" aria-label="Install app">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Install
+        </button>
+        <button id="connect-wallet" class="btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
+          </svg>
+          Connect Wallet
+        </button>
+      </div>
+    </div>
+  </header>
+  <div id="announcement-banner"></div>
+
+  <main class="main brief-page">
+    <!-- Hero -->
+    <section class="brief-hero">
+      <div class="brief-hero-glow"></div>
+      <div class="brief-hero-content">
+        <div class="brief-hero-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <h1 class="brief-title">Daily Brief</h1>
+        <p class="brief-subtitle">Tokens that graduated from PumpFun in the last 24 hours</p>
+
+        <!-- Controls row 1: Time window + Refresh -->
+        <div class="brief-controls">
+          <div class="spikes-dropdown" id="brief-hours-dropdown">
+            <button class="spikes-dropdown-trigger" type="button">
+              <svg class="spikes-dropdown-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span class="spikes-dropdown-text">Last 24 hours</span>
+              <svg class="spikes-dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="spikes-dropdown-menu">
+              <div class="spikes-dropdown-label">Time Window</div>
+              <button class="spikes-dropdown-item" data-value="6">
+                <span class="spikes-dropdown-item-dot"></span>Last 6 hours
+              </button>
+              <button class="spikes-dropdown-item" data-value="12">
+                <span class="spikes-dropdown-item-dot"></span>Last 12 hours
+              </button>
+              <button class="spikes-dropdown-item active" data-value="24">
+                <span class="spikes-dropdown-item-dot"></span>Last 24 hours
+              </button>
+              <button class="spikes-dropdown-item" data-value="48">
+                <span class="spikes-dropdown-item-dot"></span>Last 48 hours
+              </button>
+              <button class="spikes-dropdown-item" data-value="72">
+                <span class="spikes-dropdown-item-dot"></span>Last 72 hours
+              </button>
+            </div>
+          </div>
+
+          <button id="brief-refresh-btn" class="btn btn-accent btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Filter bar — outside hero to avoid overflow-x:clip clipping dropdown menus -->
+    <div class="brief-filters" id="brief-filters">
+      <div class="spikes-dropdown" id="brief-mcap-dropdown">
+        <button class="spikes-dropdown-trigger" type="button">
+          <svg class="spikes-dropdown-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+          </svg>
+          <span class="spikes-dropdown-text">All MCaps</span>
+          <svg class="spikes-dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="spikes-dropdown-menu">
+          <div class="spikes-dropdown-label">Market Cap</div>
+          <button class="spikes-dropdown-item active" data-value="all">
+            <span class="spikes-dropdown-item-dot"></span>All MCaps
+          </button>
+          <button class="spikes-dropdown-item" data-value="micro">
+            <span class="spikes-dropdown-item-dot"></span>Micro (&lt; $100K)
+          </button>
+          <button class="spikes-dropdown-item" data-value="small">
+            <span class="spikes-dropdown-item-dot"></span>Small ($100K - $1M)
+          </button>
+          <button class="spikes-dropdown-item" data-value="mid">
+            <span class="spikes-dropdown-item-dot"></span>Mid ($1M - $10M)
+          </button>
+          <button class="spikes-dropdown-item" data-value="large">
+            <span class="spikes-dropdown-item-dot"></span>Large (&gt; $10M)
+          </button>
+        </div>
+      </div>
+
+      <div class="spikes-dropdown" id="brief-volume-dropdown">
+        <button class="spikes-dropdown-trigger" type="button">
+          <svg class="spikes-dropdown-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
+          </svg>
+          <span class="spikes-dropdown-text">All Volume</span>
+          <svg class="spikes-dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="spikes-dropdown-menu">
+          <div class="spikes-dropdown-label">Min Volume (24h)</div>
+          <button class="spikes-dropdown-item active" data-value="0">
+            <span class="spikes-dropdown-item-dot"></span>All Volume
+          </button>
+          <button class="spikes-dropdown-item" data-value="1000">
+            <span class="spikes-dropdown-item-dot"></span>&gt; $1K
+          </button>
+          <button class="spikes-dropdown-item" data-value="10000">
+            <span class="spikes-dropdown-item-dot"></span>&gt; $10K
+          </button>
+          <button class="spikes-dropdown-item" data-value="50000">
+            <span class="spikes-dropdown-item-dot"></span>&gt; $50K
+          </button>
+          <button class="spikes-dropdown-item" data-value="100000">
+            <span class="spikes-dropdown-item-dot"></span>&gt; $100K
+          </button>
+        </div>
+      </div>
+
+      <div class="spikes-dropdown" id="brief-holders-dropdown">
+        <button class="spikes-dropdown-trigger" type="button">
+          <svg class="spikes-dropdown-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+          <span class="spikes-dropdown-text">All Holders</span>
+          <svg class="spikes-dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="spikes-dropdown-menu">
+          <div class="spikes-dropdown-label">Min Holders</div>
+          <button class="spikes-dropdown-item active" data-value="0">
+            <span class="spikes-dropdown-item-dot"></span>All Holders
+          </button>
+          <button class="spikes-dropdown-item" data-value="50">
+            <span class="spikes-dropdown-item-dot"></span>&gt; 50
+          </button>
+          <button class="spikes-dropdown-item" data-value="100">
+            <span class="spikes-dropdown-item-dot"></span>&gt; 100
+          </button>
+          <button class="spikes-dropdown-item" data-value="500">
+            <span class="spikes-dropdown-item-dot"></span>&gt; 500
+          </button>
+          <button class="spikes-dropdown-item" data-value="1000">
+            <span class="spikes-dropdown-item-dot"></span>&gt; 1,000
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis Cards -->
+    <div class="brief-analysis" id="brief-analysis" style="display: none;">
+      <div class="brief-analysis-card">
+        <div class="brief-analysis-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
+        <div class="brief-analysis-body">
+          <span class="brief-analysis-label">Avg MCap</span>
+          <span class="brief-analysis-value" id="brief-avg-mcap">--</span>
+          <span class="brief-analysis-sub">Median: <span id="brief-median-mcap">--</span></span>
+        </div>
+      </div>
+      <div class="brief-analysis-card">
+        <div class="brief-analysis-icon brief-analysis-icon-velocity">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="brief-analysis-body">
+          <span class="brief-analysis-label">Avg Grad Speed</span>
+          <span class="brief-analysis-value" id="brief-avg-velocity">--</span>
+          <span class="brief-analysis-sub">Median: <span id="brief-median-velocity">--</span></span>
+        </div>
+      </div>
+      <div class="brief-analysis-card">
+        <div class="brief-analysis-icon brief-analysis-icon-holders">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        </div>
+        <div class="brief-analysis-body">
+          <span class="brief-analysis-label">Avg Holders</span>
+          <span class="brief-analysis-value" id="brief-avg-holders">--</span>
+          <span class="brief-analysis-sub">Total Vol: <span id="brief-total-volume">--</span></span>
+        </div>
+      </div>
+      <div class="brief-analysis-card">
+        <div class="brief-analysis-icon brief-analysis-icon-sentiment">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        </div>
+        <div class="brief-analysis-body">
+          <span class="brief-analysis-label">Performance</span>
+          <span class="brief-analysis-value" id="brief-avg-change">--</span>
+          <span class="brief-analysis-sub"><span id="brief-gainers">0</span> gainers / <span id="brief-losers">0</span> losers</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="brief-stats-bar" id="brief-stats" style="display: none;">
+      <div class="spikes-stat">
+        <span class="spikes-stat-label">Graduated</span>
+        <span class="spikes-stat-value" id="brief-total">--</span>
+      </div>
+      <div class="spikes-stat">
+        <span class="spikes-stat-label">Showing</span>
+        <span class="spikes-stat-value" id="brief-displayed">--</span>
+      </div>
+      <div class="spikes-stat">
+        <span class="spikes-stat-label">Updated</span>
+        <span class="spikes-stat-value" id="brief-updated">--</span>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <section id="brief-results" class="community-section" style="display: none;">
+      <div class="community-table-container">
+        <table class="token-table community-table brief-table">
+          <thead>
+            <tr>
+              <th class="cell-rank">#</th>
+              <th class="cell-token">Token</th>
+              <th class="cell-price">Price</th>
+              <th class="cell-change">24h</th>
+              <th class="cell-volume">Volume</th>
+              <th class="cell-mcap">MCap</th>
+              <th class="cell-holders">Holders</th>
+              <th class="cell-velocity">Grad Speed</th>
+              <th class="cell-volratio">Vol/MCap</th>
+              <th class="cell-graduated">Graduated</th>
+            </tr>
+          </thead>
+          <tbody id="brief-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Loading state -->
+    <div id="brief-loading" class="spikes-loading">
+      <div class="spikes-spinner"></div>
+      <p>Fetching graduated tokens from PumpFun...</p>
+    </div>
+
+    <!-- Empty state -->
+    <div id="brief-empty" class="spikes-empty" style="display: none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+      <p>No graduated tokens found in this time window</p>
+      <p class="spikes-empty-hint">Try expanding the time window or check back later</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="brief-error" class="spikes-error" style="display: none;">
+      <p id="brief-error-msg">Failed to load graduated tokens</p>
+      <button class="btn btn-ghost btn-sm" onclick="dailyBrief.load()">Try Again</button>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-left">
+        <p>&copy; 2026 OpenDex - Open Source Token Viewer</p>
+        <p class="footer-tagline">Community-powered Solana analytics</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          GitHub
+        </a>
+        <span class="separator">|</span>
+        <a href="submit.html">Submit Content</a>
+        <span class="separator">|</span>
+        <a href="docs.html">Docs</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/bugReport.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/announcements.js"></script>
+  <script src="js/dailybrief.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    (function() {
+      var deferredPrompt;
+      var installBtn = document.getElementById('install-app-btn');
+      if (!installBtn) return;
+      if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        installBtn.style.display = '';
+        installBtn.addEventListener('click', function() {
+          if (typeof toast !== 'undefined') {
+            toast.info('Tap the Share button then "Add to Home Screen" to install');
+          } else {
+            alert('Tap the Share button then "Add to Home Screen" to install');
+          }
+        });
+        return;
+      }
+
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = '';
+      });
+      installBtn.addEventListener('click', function() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
+      });
+      window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
+    })();
+  </script>
+</body>
+</html>
