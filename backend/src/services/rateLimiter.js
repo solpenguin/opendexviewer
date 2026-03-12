@@ -56,15 +56,15 @@ const RATE_LIMITS = {
     burstWindow: 1000    // Within 1 second
   },
   geckoTerminal: {
-    // GeckoTerminal free tier: 30 requests/minute = 1 request every 2 seconds
-    // Use 2s minimum to stay under limit while keeping response times reasonable
-    minInterval: 2000,   // Minimum 2s between requests (30/min max)
-    maxJitter: 300,      // Add up to 300ms random jitter
-    burstLimit: 2,       // Allow small bursts for parallel requests
-    burstWindow: 4000,   // 4 second window
+    // CoinGecko paid plan: 250 requests/minute ≈ 1 request every 240ms
+    // Use 250ms minimum with modest safety margin
+    minInterval: 250,    // Minimum 250ms between requests (~240/min max)
+    maxJitter: 50,       // Add up to 50ms random jitter
+    burstLimit: 10,      // Allow bursts for parallel enrichment
+    burstWindow: 3000,   // 3 second window
     useQueue: true,      // Force queue-based processing
-    maxQueueSize: 2000,  // Large queue for high concurrency
-    queueTimeout: 45000  // 45s timeout before failing
+    maxQueueSize: 500,   // Queue for concurrency
+    queueTimeout: 15000  // 15s timeout — requests should flow fast now
   },
   raydium: {
     minInterval: 334,    // ~3 requests/sec
