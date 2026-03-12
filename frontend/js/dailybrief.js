@@ -48,6 +48,8 @@ var dailyBrief = (function() {
     els.avgChange = document.getElementById('brief-avg-change');
     els.gainers = document.getElementById('brief-gainers');
     els.losers = document.getElementById('brief-losers');
+    els.avgVolRatio = document.getElementById('brief-avg-volratio');
+    els.topVolRatio = document.getElementById('brief-top-volratio');
   }
 
   // --- Dropdown logic ---
@@ -158,6 +160,11 @@ var dailyBrief = (function() {
 
     els.gainers.textContent = stats.gainersCount || 0;
     els.losers.textContent = stats.losersCount || 0;
+
+    var avgRatio = stats.avgVolMcapRatio || 0;
+    var topRatio = stats.topVolMcapRatio || 0;
+    els.avgVolRatio.textContent = avgRatio > 0 ? avgRatio.toFixed(2) + 'x' : '--';
+    els.topVolRatio.textContent = topRatio > 0 ? topRatio.toFixed(2) + 'x' : '--';
   }
 
   // --- Data loading ---

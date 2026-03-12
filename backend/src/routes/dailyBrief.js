@@ -29,7 +29,7 @@ function computeAggregateStats(tokens) {
   const mcaps = tokens.map(t => t.marketCap || 0).filter(v => v > 0).sort((a, b) => a - b);
   const velocities = tokens.map(t => t.gradVelocityHours).filter(v => v != null && v > 0).sort((a, b) => a - b);
   const holders = tokens.map(t => t.holders || 0).filter(v => v > 0);
-  const volRatios = tokens.map(t => t.volMcapRatio || 0).filter(v => v > 0);
+  const volRatios = tokens.map(t => t.volMcapRatio || 0).filter(v => v > 0).sort((a, b) => a - b);
   const liqRatios = tokens.map(t => t.liqMcapRatio || 0).filter(v => v > 0);
   // Only include tokens with actual price change data (non-zero = has data)
   const changes = tokens.map(t => t.priceChange24h || 0).filter(c => c !== 0);
@@ -52,6 +52,7 @@ function computeAggregateStats(tokens) {
     medianGradVelocity: velocities.length > 0 ? median(velocities) : null,
     avgHolders: avg(holders),
     avgVolMcapRatio: avg(volRatios),
+    topVolMcapRatio: volRatios.length > 0 ? volRatios[volRatios.length - 1] : 0,
     avgLiqMcapRatio: avg(liqRatios),
     gainersCount: changes.filter(c => c > 0).length,
     losersCount: changes.filter(c => c < 0).length,

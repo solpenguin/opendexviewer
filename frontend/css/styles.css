@@ -15181,6 +15181,11 @@ body.landscape .hero h1 {
   color: #ec4899;
 }
 
+.brief-analysis-icon-volratio {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
 .brief-analysis-body {
   display: flex;
   flex-direction: column;
