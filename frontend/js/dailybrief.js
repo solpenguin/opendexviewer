@@ -286,8 +286,8 @@ var dailyBrief = (function() {
       // Vol/MCap ratio
       html += '<td class="cell-volratio"><span class="ratio-badge ' + ratioClass + '">' + ratio.toFixed(2) + 'x</span></td>';
 
-      // Graduated (time ago)
-      var gradTime = t.lastTradeAt || t.createdAt;
+      // Graduated (time ago) — graduatedAt is the PumpSwap pool creation time
+      var gradTime = t.graduatedAt || t.lastTradeAt || t.createdAt;
       html += '<td class="cell-graduated">';
       html += '<span class="graduated-badge">';
       html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> ';

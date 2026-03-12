@@ -1,19 +1,32 @@
 /**
  * Daily Brief — Shows tokens that graduated from PumpFun in the last 24 hours.
- * "Graduated" = completed their bonding curve on PumpFun and migrated to Raydium.
+ * "Graduated" = completed their bonding curve on PumpFun and migrated to PumpSwap.
  *
- * Data flow:
- * 1. Fetch recently graduated tokens from PumpFun frontend API
- * 2. Enrich with market data (price, volume, mcap) from GeckoTerminal
- * 3. Enrich with holder counts from Birdeye
- * 4. Enrich with metadata (name, symbol, logo) from Helius if available
- * 5. Compute analysis: graduation velocity, volume trend, aggregate stats
- * 6. Cache result for 5 minutes to avoid hammering upstream APIs
+ * Graduation detection:
+ *   PumpFun's API does NOT expose a graduation timestamp. It only has
+ *   `complete: true` and `last_trade_timestamp` (which is just the last trade,
+ *   NOT when the bonding curve completed). A token that graduated months ago
+ *   but had a recent trade would appear "recent" if we relied on that.
+ *
+ *   Instead, we use GeckoTerminal's `pairCreatedAt` (= `pool_created_at`),
+ *   which is when the PumpSwap liquidity pool was created. That IS the graduation
+ *   moment — when the bonding curve completes, PumpFun migrates liquidity to
+ *   PumpSwap and creates the pool. GeckoTerminal indexes PumpSwap pools, so
+ *   `pool_created_at` is the authoritative graduation timestamp.
+ *
+ * Architecture: Incremental rolling-window token store.
+ *   1. Fetch candidate graduates from PumpFun (complete: true)
+ *   2. Enrich with GeckoTerminal to get real graduation time (pairCreatedAt)
+ *   3. Only admit tokens whose PumpSwap pool was created within the window
+ *   4. Enrich admitted tokens with Birdeye/Helius
+ *   5. Periodically re-enrich stale market data
+ *   6. Evict tokens older than the configured window
+ *
+ * API requests read directly from the store — near-instant responses.
  */
 
 const express = require('express');
 const router = express.Router();
-const { cache, TTL } = require('../services/cache');
 const geckoService = require('../services/geckoTerminal');
 const birdeyeService = require('../services/birdeye');
 const solanaService = require('../services/solana');
@@ -22,9 +35,28 @@ const { asyncHandler } = require('../middleware/validation');
 
 const PUMPFUN_BASE_URL = 'https://frontend-api-v3.pump.fun';
 
-// Throttle PumpFun calls — shared with the pumpfun service
+// ── Timing constants ─────────────────────────────────────────────────
+const PUMP_MIN_GAP_MS   = 1500;            // Throttle between PumpFun calls
+const FETCH_INTERVAL_MS = 2 * 60 * 1000;   // Poll PumpFun every 2 min
+const ENRICH_STALE_MS   = 5 * 60 * 1000;   // Re-enrich market data every 5 min
+const MAX_WINDOW_MS     = 72 * 60 * 60 * 1000; // Hard eviction at 72h (max query)
+const GECKO_BATCH_SIZE  = 25;               // Max parallel Gecko calls per cycle
+const BIRDEYE_BATCH_SIZE = 10;              // Max parallel Birdeye calls per cycle
+
+// ── In-memory token store ────────────────────────────────────────────
+// Map<address, enrichedToken> — survives across requests, not across restarts
+const tokenStore = new Map();
+// Set of addresses we've already checked via Gecko and rejected (no pool or too old)
+// Prevents re-checking the same token every cycle
+const rejectedAddresses = new Set();
+const REJECTED_MAX_SIZE = 5000; // Cap to prevent unbounded growth
+
 let _lastPumpCall = 0;
-const PUMP_MIN_GAP_MS = 1500;
+let _lastFetchCycle = 0;
+let _refreshInFlight = null;  // Stampede guard — one refresh at a time
+let _storeReady = false;
+
+// ── PumpFun throttled fetch ──────────────────────────────────────────
 
 async function throttledPumpFetch(url) {
   const now = Date.now();
@@ -51,10 +83,8 @@ async function throttledPumpFetch(url) {
   return response.json();
 }
 
-/**
- * Fetch recently graduated tokens from PumpFun.
- * Uses the /coins endpoint sorted by last_trade_timestamp desc, filtered to complete=true.
- */
+// ── Fetch graduated tokens from PumpFun ──────────────────────────────
+
 async function fetchGraduatedTokens(limit = 50) {
   const params = new URLSearchParams({
     offset: '0',
@@ -77,69 +107,49 @@ async function fetchGraduatedTokens(limit = 50) {
     return [];
   }
 
-  // Keep only PumpFun-native graduated tokens
   return coins.filter(t => (!t.program || t.program === 'pump') && t.complete === true);
 }
 
-/**
- * Filter to tokens that graduated in the last N hours.
- */
-function filterByRecency(tokens, hoursAgo = 24) {
-  const cutoff = Date.now() - (hoursAgo * 60 * 60 * 1000);
-  return tokens.filter(t => {
-    const ts = t.last_trade_timestamp || t.created_timestamp;
-    if (!ts) return false;
-    return ts > cutoff;
-  });
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function computeGradVelocity(createdMs, graduatedMs) {
+  if (!createdMs || !graduatedMs || graduatedMs <= createdMs) return null;
+  return (graduatedMs - createdMs) / (1000 * 60 * 60);
 }
 
 /**
- * Compute graduation velocity: hours from creation to bonding curve completion.
- * PumpFun tokens have created_timestamp (ms epoch). The last_trade_timestamp
- * approximates when the bonding curve completed.
- */
-function computeGradVelocity(created, lastTrade) {
-  if (!created || !lastTrade || lastTrade <= created) return null;
-  return (lastTrade - created) / (1000 * 60 * 60); // hours
-}
-
-/**
- * Normalize PumpFun token to a standard shape with analysis fields.
+ * Normalize PumpFun token to a standard shape.
+ * _graduatedAtMs is set later from GeckoTerminal's pairCreatedAt.
  */
 function normalizePumpToken(t) {
   const created = t.created_timestamp || 0;
-  const lastTrade = t.last_trade_timestamp || 0;
-  const gradVelocityHours = computeGradVelocity(created, lastTrade);
 
   return {
     address: t.mint || '',
     name: t.name || '',
     symbol: t.symbol || '',
     logoUri: t.image_uri || t.imageUri || null,
-    pumpfunMcap: t.usd_market_cap || t.market_cap || 0,
     createdAt: created ? new Date(created).toISOString() : null,
-    lastTradeAt: lastTrade ? new Date(lastTrade).toISOString() : null,
+    _createdAtMs: created,                   // internal: creation time for grad velocity
+    _graduatedAtMs: 0,                       // internal: set from Gecko pairCreatedAt
+    _enrichedAt: 0,                          // internal: last enrichment timestamp
+    graduatedAt: null,                       // public: ISO string of graduation time
     description: t.description || '',
     website: t.website || null,
     twitter: t.twitter || null,
     telegram: t.telegram || null,
-    // Market data — enriched from GeckoTerminal
     price: 0,
     priceChange24h: 0,
     volume24h: 0,
     marketCap: t.usd_market_cap || 0,
     liquidity: 0,
-    // Analysis fields
     holders: 0,
-    gradVelocityHours: gradVelocityHours,
-    volMcapRatio: 0, // volume trend proxy
-    liqMcapRatio: 0  // rug risk indicator
+    gradVelocityHours: null,                 // computed after we know real graduation time
+    volMcapRatio: 0,
+    liqMcapRatio: 0
   };
 }
 
-/**
- * Compute aggregate stats for the analysis panel.
- */
 function computeAggregateStats(tokens) {
   if (tokens.length === 0) {
     return {
@@ -162,7 +172,6 @@ function computeAggregateStats(tokens) {
     const mid = Math.floor(arr.length / 2);
     return arr.length % 2 !== 0 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
   }
-
   function avg(arr) {
     return arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
   }
@@ -183,127 +192,318 @@ function computeAggregateStats(tokens) {
   };
 }
 
+// ── Enrichment helpers ───────────────────────────────────────────────
+
+/**
+ * Enrich with GeckoTerminal. Returns the pairCreatedAt ISO string (or null).
+ * This is the authoritative graduation timestamp.
+ */
+async function enrichWithGecko(token) {
+  try {
+    const overview = await geckoService.getTokenOverview(token.address);
+    if (overview) {
+      token.price = overview.price || overview.priceUsd || 0;
+      token.priceChange24h = overview.priceChange24h || 0;
+      token.volume24h = overview.volume24h || 0;
+      token.marketCap = overview.marketCap || overview.fdv || token.marketCap || 0;
+      token.liquidity = overview.liquidity || 0;
+      if (!token.logoUri && (overview.logoUri || overview.logoURI)) {
+        token.logoUri = overview.logoUri || overview.logoURI;
+      }
+      if (!token.name || token.name === token.symbol) {
+        token.name = overview.name || token.name;
+      }
+      if (!token.symbol) {
+        token.symbol = overview.symbol || token.symbol;
+      }
+      return overview.pairCreatedAt || null;
+    }
+  } catch (_) { /* non-critical */ }
+  return null;
+}
+
+/**
+ * Enrich with GeckoTerminal for market data refresh only (no pairCreatedAt needed).
+ */
+async function refreshWithGecko(token) {
+  try {
+    const overview = await geckoService.getTokenOverview(token.address);
+    if (overview) {
+      token.price = overview.price || overview.priceUsd || 0;
+      token.priceChange24h = overview.priceChange24h || 0;
+      token.volume24h = overview.volume24h || 0;
+      token.marketCap = overview.marketCap || overview.fdv || token.marketCap || 0;
+      token.liquidity = overview.liquidity || 0;
+    }
+  } catch (_) { /* non-critical */ }
+}
+
+async function enrichWithBirdeye(token) {
+  try {
+    const overview = await birdeyeService.getTokenOverview(token.address);
+    if (overview) {
+      token.holders = overview.holder || 0;
+    }
+  } catch (_) { /* non-critical */ }
+}
+
+async function enrichWithHelius(tokens) {
+  if (!solanaService.isHeliusConfigured()) return;
+  const needsMeta = tokens.filter(t => !t.name || !t.logoUri);
+  if (needsMeta.length === 0) return;
+
+  try {
+    const addresses = needsMeta.map(t => t.address);
+    const metadata = await solanaService.getTokenMetadataBatch(addresses);
+    for (const token of needsMeta) {
+      const meta = metadata[token.address];
+      if (meta) {
+        if (!token.name) token.name = meta.name || token.name;
+        if (!token.symbol) token.symbol = meta.symbol || token.symbol;
+        if (!token.logoUri) token.logoUri = meta.logoUri || null;
+      }
+    }
+  } catch (_) { /* non-critical */ }
+}
+
+function computeDerivedFields(token) {
+  const mc = token.marketCap || 0;
+  token.volMcapRatio = mc > 0 ? (token.volume24h || 0) / mc : 0;
+  token.liqMcapRatio = mc > 0 ? (token.liquidity || 0) / mc : 0;
+}
+
+// ── Store lifecycle ──────────────────────────────────────────────────
+
+/**
+ * Evict tokens whose graduation time exceeds the max window.
+ */
+function evictStale() {
+  const cutoff = Date.now() - MAX_WINDOW_MS;
+  let evicted = 0;
+  for (const [addr, token] of tokenStore) {
+    if (token._graduatedAtMs < cutoff) {
+      tokenStore.delete(addr);
+      evicted++;
+    }
+  }
+  if (evicted > 0) {
+    console.log(`[DailyBrief] Evicted ${evicted} tokens older than ${MAX_WINDOW_MS / 3600000}h (store size: ${tokenStore.size})`);
+  }
+
+  // Trim rejected set if it's too large (clear oldest by just resetting)
+  if (rejectedAddresses.size > REJECTED_MAX_SIZE) {
+    rejectedAddresses.clear();
+    console.log('[DailyBrief] Reset rejected addresses cache');
+  }
+}
+
+/**
+ * Core refresh cycle:
+ *  1. Fetch candidates from PumpFun
+ *  2. Enrich new candidates with Gecko to get pairCreatedAt (graduation time)
+ *  3. Admit only tokens that graduated within the window
+ *  4. Enrich admitted tokens with Birdeye/Helius
+ *  5. Re-enrich stale existing tokens
+ *  6. Evict expired tokens
+ */
+async function refreshStore() {
+  const cycleStart = Date.now();
+  const windowCutoff = Date.now() - MAX_WINDOW_MS;
+
+  try {
+    // 1. Fetch candidate graduates from PumpFun
+    const rawTokens = await fetchGraduatedTokens(100);
+
+    // 2. Identify candidates not already in store or rejected
+    const candidates = [];
+    for (const raw of rawTokens) {
+      const addr = raw.mint || '';
+      if (addr && !tokenStore.has(addr) && !rejectedAddresses.has(addr)) {
+        candidates.push(raw);
+      }
+    }
+
+    // 3. Enrich candidates with Gecko to discover graduation time
+    let admitted = 0;
+    let rejected = 0;
+
+    if (candidates.length > 0) {
+      console.log(`[DailyBrief] ${candidates.length} new candidates, checking graduation time via Gecko...`);
+
+      // Normalize first
+      const normalized = candidates.slice(0, GECKO_BATCH_SIZE).map(normalizePumpToken);
+
+      // Gecko enrichment — returns pairCreatedAt for each
+      const geckoResults = await Promise.all(
+        normalized.map(async (token) => {
+          const pairCreatedAt = await enrichWithGecko(token);
+          return { token, pairCreatedAt };
+        })
+      );
+
+      // Filter: only admit tokens with a confirmed graduation time within the window
+      const admittedTokens = [];
+      for (const { token, pairCreatedAt } of geckoResults) {
+        if (!pairCreatedAt) {
+          // No pool found on Gecko — can't confirm graduation, reject
+          rejectedAddresses.add(token.address);
+          rejected++;
+          continue;
+        }
+
+        const graduatedMs = new Date(pairCreatedAt).getTime();
+        if (isNaN(graduatedMs) || graduatedMs < windowCutoff) {
+          // Graduated too long ago — reject
+          rejectedAddresses.add(token.address);
+          rejected++;
+          continue;
+        }
+
+        // Admitted — set real graduation time
+        token._graduatedAtMs = graduatedMs;
+        token.graduatedAt = new Date(graduatedMs).toISOString();
+        token.gradVelocityHours = computeGradVelocity(token._createdAtMs, graduatedMs);
+        admittedTokens.push(token);
+        tokenStore.set(token.address, token);
+        admitted++;
+      }
+
+      // 4. Enrich admitted tokens with Birdeye + Helius
+      if (admittedTokens.length > 0) {
+        const birdeyeTargets = admittedTokens
+          .slice().sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+          .slice(0, BIRDEYE_BATCH_SIZE);
+        await Promise.all(birdeyeTargets.map(enrichWithBirdeye));
+
+        await enrichWithHelius(admittedTokens);
+
+        const now = Date.now();
+        for (const t of admittedTokens) {
+          t._enrichedAt = now;
+          computeDerivedFields(t);
+        }
+      }
+
+      if (candidates.length > 0) {
+        console.log(`[DailyBrief] Candidates: ${candidates.length}, admitted: ${admitted}, rejected: ${rejected} (old or no pool)`);
+      }
+    }
+
+    // 5. Re-enrich STALE existing tokens (market data refresh)
+    const now = Date.now();
+    const staleTokens = [];
+    for (const token of tokenStore.values()) {
+      if (now - token._enrichedAt > ENRICH_STALE_MS) {
+        staleTokens.push(token);
+      }
+    }
+
+    if (staleTokens.length > 0) {
+      staleTokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+      const refreshBatch = staleTokens.slice(0, GECKO_BATCH_SIZE);
+
+      // Use refreshWithGecko (market data only, no need to re-check pairCreatedAt)
+      await Promise.all(refreshBatch.map(refreshWithGecko));
+
+      const birdeyeRefresh = refreshBatch.slice(0, BIRDEYE_BATCH_SIZE);
+      await Promise.all(birdeyeRefresh.map(enrichWithBirdeye));
+
+      for (const t of refreshBatch) {
+        t._enrichedAt = Date.now();
+        computeDerivedFields(t);
+      }
+
+      if (staleTokens.length > GECKO_BATCH_SIZE) {
+        console.log(`[DailyBrief] Re-enriched ${refreshBatch.length}/${staleTokens.length} stale tokens (rest next cycle)`);
+      }
+    }
+
+    // 6. Evict expired tokens
+    evictStale();
+
+    _lastFetchCycle = Date.now();
+    _storeReady = true;
+
+    console.log(`[DailyBrief] Refresh: ${Date.now() - cycleStart}ms, store: ${tokenStore.size}, admitted: ${admitted}, rejected: ${rejected}`);
+
+  } catch (err) {
+    console.error('[DailyBrief] Refresh error:', err.message);
+    _storeReady = tokenStore.size > 0;
+  }
+}
+
+/**
+ * Trigger a refresh cycle with stampede prevention.
+ */
+function triggerRefresh() {
+  if (_refreshInFlight) return _refreshInFlight;
+
+  _refreshInFlight = refreshStore().finally(() => {
+    _refreshInFlight = null;
+  });
+
+  return _refreshInFlight;
+}
+
+/**
+ * Read from the store, filtering to the requested time window.
+ * Returns a clean copy (no internal fields) sorted by mcap desc.
+ */
+function readStore(hoursAgo, resultLimit) {
+  const cutoff = Date.now() - (hoursAgo * 60 * 60 * 1000);
+  const tokens = [];
+
+  for (const token of tokenStore.values()) {
+    if (token._graduatedAtMs >= cutoff) {
+      const clean = { ...token };
+      delete clean._graduatedAtMs;
+      delete clean._createdAtMs;
+      delete clean._enrichedAt;
+      tokens.push(clean);
+    }
+  }
+
+  tokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+
+  return {
+    all: tokens,
+    limited: tokens.slice(0, resultLimit)
+  };
+}
+
+// ── Background refresh interval ──────────────────────────────────────
+triggerRefresh();
+const _refreshTimer = setInterval(() => triggerRefresh(), FETCH_INTERVAL_MS);
+if (_refreshTimer.unref) _refreshTimer.unref();
+
+// ── API endpoint ─────────────────────────────────────────────────────
+
 // GET /api/daily-brief
 router.get('/', searchLimiter, asyncHandler(async (req, res) => {
   const { hours = 24, limit = 50 } = req.query;
   const hoursAgo = Math.max(1, Math.min(72, parseInt(hours) || 24));
   const resultLimit = Math.max(1, Math.min(100, parseInt(limit) || 50));
 
-  const cacheKey = `daily-brief:${hoursAgo}:${resultLimit}`;
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
+  // If store isn't ready yet (first load), wait for the initial fetch
+  if (!_storeReady && _refreshInFlight) {
+    await _refreshInFlight;
   }
 
-  try {
-    // Step 1: Fetch graduated tokens from PumpFun
-    const rawTokens = await fetchGraduatedTokens(Math.min(resultLimit * 2, 200));
-
-    // Step 2: Filter to last N hours
-    const recentTokens = filterByRecency(rawTokens, hoursAgo);
-
-    if (recentTokens.length === 0) {
-      const result = {
-        tokens: [], totalGraduated: 0, hoursAgo, updatedAt: Date.now(),
-        stats: computeAggregateStats([])
-      };
-      await cache.set(cacheKey, result, TTL.MEDIUM);
-      return res.json(result);
-    }
-
-    // Step 3: Normalize
-    let tokens = recentTokens.slice(0, resultLimit).map(normalizePumpToken);
-
-    // Step 4: Enrich with GeckoTerminal market data (batch, up to 25)
-    const enrichBatch = tokens.slice(0, 25);
-    const enrichPromises = enrichBatch.map(async (token) => {
-      try {
-        const overview = await geckoService.getTokenOverview(token.address);
-        if (overview) {
-          token.price = overview.price || overview.priceUsd || 0;
-          token.priceChange24h = overview.priceChange24h || 0;
-          token.volume24h = overview.volume24h || 0;
-          token.marketCap = overview.marketCap || overview.fdv || token.pumpfunMcap || 0;
-          token.liquidity = overview.liquidity || 0;
-          if (!token.logoUri && (overview.logoUri || overview.logoURI)) {
-            token.logoUri = overview.logoUri || overview.logoURI;
-          }
-          if (!token.name || token.name === token.symbol) {
-            token.name = overview.name || token.name;
-          }
-          if (!token.symbol) {
-            token.symbol = overview.symbol || token.symbol;
-          }
-        }
-      } catch (_) { /* non-critical */ }
-    });
-    await Promise.all(enrichPromises);
-
-    // Step 5: Enrich with Birdeye holder counts (top 10 by mcap to limit API calls)
-    try {
-      const topByMcap = tokens.slice().sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)).slice(0, 10);
-      const holderPromises = topByMcap.map(async (token) => {
-        try {
-          const overview = await birdeyeService.getTokenOverview(token.address);
-          if (overview) {
-            token.holders = overview.holder || 0;
-          }
-        } catch (_) { /* non-critical */ }
-      });
-      await Promise.all(holderPromises);
-    } catch (_) { /* non-critical — Birdeye may be unavailable */ }
-
-    // Step 6: Enrich with Helius metadata for tokens missing name/logo
-    if (solanaService.isHeliusConfigured()) {
-      const needsMeta = tokens.filter(t => !t.name || !t.logoUri);
-      if (needsMeta.length > 0) {
-        try {
-          const addresses = needsMeta.map(t => t.address);
-          const metadata = await solanaService.getTokenMetadataBatch(addresses);
-          for (const token of needsMeta) {
-            const meta = metadata[token.address];
-            if (meta) {
-              if (!token.name) token.name = meta.name || token.name;
-              if (!token.symbol) token.symbol = meta.symbol || token.symbol;
-              if (!token.logoUri) token.logoUri = meta.logoUri || null;
-            }
-          }
-        } catch (_) { /* non-critical */ }
-      }
-    }
-
-    // Step 7: Compute derived analysis fields
-    for (const token of tokens) {
-      const mc = token.marketCap || 0;
-      token.volMcapRatio = mc > 0 ? (token.volume24h || 0) / mc : 0;
-      token.liqMcapRatio = mc > 0 ? (token.liquidity || 0) / mc : 0;
-    }
-
-    // Sort by market cap descending
-    tokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
-
-    // Clean up internal field
-    tokens.forEach(t => delete t.pumpfunMcap);
-
-    // Step 8: Compute aggregate stats for comparison panel
-    const stats = computeAggregateStats(tokens);
-
-    const result = {
-      tokens,
-      totalGraduated: recentTokens.length,
-      hoursAgo,
-      updatedAt: Date.now(),
-      stats
-    };
-
-    // Cache for 5 minutes
-    await cache.set(cacheKey, result, TTL.LONG);
-    res.json(result);
-
-  } catch (err) {
-    console.error('[DailyBrief] Error:', err.message);
-    throw err;
+  // If a refresh is overdue, trigger one in the background
+  if (Date.now() - _lastFetchCycle > FETCH_INTERVAL_MS * 2) {
+    triggerRefresh();
   }
+
+  const { all, limited } = readStore(hoursAgo, resultLimit);
+  const stats = computeAggregateStats(limited);
+
+  res.json({
+    tokens: limited,
+    totalGraduated: all.length,
+    hoursAgo,
+    updatedAt: _lastFetchCycle,
+    stats
+  });
 }));
 
 module.exports = router;
