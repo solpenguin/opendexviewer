@@ -1180,6 +1180,36 @@ router.post('/diamond-hands/reset',
   })
 );
 
+// ==========================================
+// Daily Brief Cache Management
+// ==========================================
+
+const dailyBriefRoute = require('./dailyBrief');
+
+/**
+ * GET /admin/daily-brief-cache
+ * Get Daily Brief store stats.
+ */
+router.get('/daily-brief-cache',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    const stats = dailyBriefRoute.getStoreStats();
+    res.json({ success: true, data: stats });
+  })
+);
+
+/**
+ * DELETE /admin/daily-brief-cache
+ * Clear the entire Daily Brief in-memory store and trigger a fresh scan.
+ */
+router.delete('/daily-brief-cache',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    const result = dailyBriefRoute.clearStore();
+    res.json({ success: true, data: result });
+  })
+);
+
 // Export both the router and adminSettings for use by other routes
 module.exports = router;
 module.exports.adminSettings = adminSettings;

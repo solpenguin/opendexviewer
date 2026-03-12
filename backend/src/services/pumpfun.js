@@ -103,10 +103,16 @@ async function searchTokens(searchTerm, limit = 50) {
   });
 }
 
+// Sentinel: returned when PumpFun gives a transient error (429/5xx/network).
+// Callers must NOT permanently reject tokens that return TRANSIENT.
+const TRANSIENT = Symbol('transient');
+
 /**
  * Verify a single token exists on PumpFun by mint address.
- * Returns the coin object if found (with `complete`, `mint`, etc.), or null.
- * Uses a lightweight direct fetch (no throttle queue — these are simple GETs).
+ * Returns:
+ *   - coin object  → confirmed PumpFun token
+ *   - null         → definitively NOT a PumpFun token (404)
+ *   - TRANSIENT    → inconclusive (rate limited / network error) — retry later
  */
 async function getToken(mint) {
   try {
@@ -120,26 +126,30 @@ async function getToken(mint) {
       signal: AbortSignal.timeout(10000)
     });
 
-    if (!response.ok) return null; // 404 or error = not a PumpFun token
+    if (response.status === 404) return null; // Definitively not a PumpFun token
+    if (!response.ok) return TRANSIENT;       // 429, 5xx — don't permanently reject
 
     const data = await response.json();
     if (!data || !data.mint) return null;
 
     return data;
   } catch (_) {
-    return null; // Network error — treat as unverified
+    return TRANSIENT; // Network error — retry next cycle
   }
 }
 
 /**
  * Verify multiple tokens against PumpFun in parallel (with concurrency limit).
- * Returns a Set of mint addresses that are confirmed PumpFun tokens.
+ * Returns:
+ *   - confirmed: Set of mint addresses that are confirmed PumpFun tokens
+ *   - pumpFunData: { [mint]: coinObject } for confirmed tokens
+ *   - inconclusive: Set of mints that got transient errors (should NOT be rejected)
  */
-async function verifyPumpFunBatch(mints, concurrency = 5) {
+async function verifyPumpFunBatch(mints, concurrency = 10) {
   const confirmed = new Set();
   const pumpFunData = {};
+  const inconclusive = new Set();
 
-  // Process in chunks to limit concurrency
   for (let i = 0; i < mints.length; i += concurrency) {
     const chunk = mints.slice(i, i + concurrency);
     const results = await Promise.all(chunk.map(async (mint) => {
@@ -148,14 +158,17 @@ async function verifyPumpFunBatch(mints, concurrency = 5) {
     }));
 
     for (const { mint, data } of results) {
-      if (data) {
+      if (data === TRANSIENT) {
+        inconclusive.add(mint);
+      } else if (data) {
         confirmed.add(mint);
         pumpFunData[mint] = data;
       }
+      // data === null → definitively not PumpFun, caller can reject
     }
   }
 
-  return { confirmed, pumpFunData };
+  return { confirmed, pumpFunData, inconclusive };
 }
 
 module.exports = { searchTokens, getToken, verifyPumpFunBatch };

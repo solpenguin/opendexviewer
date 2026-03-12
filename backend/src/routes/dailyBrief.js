@@ -37,15 +37,17 @@ const { searchLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../middleware/validation');
 
 // ── Timing constants ─────────────────────────────────────────────────
-const FETCH_INTERVAL_MS  = 2 * 60 * 1000;   // Poll every 2 min
+const FETCH_INTERVAL_MS  = 3 * 60 * 1000;   // Poll every 3 min (was 2 — breathe room for Gecko budget)
 const ENRICH_STALE_MS    = 5 * 60 * 1000;   // Re-enrich market data every 5 min
 const MAX_WINDOW_MS      = 72 * 60 * 60 * 1000; // Hard eviction at 72h
-const GECKO_BATCH_SIZE   = 25;               // Max parallel Gecko calls for re-enrichment
+const GECKO_BATCH_SIZE   = 10;               // Max Gecko re-enrich calls per cycle (was 25)
+const HOLDER_BATCH_SIZE  = 10;               // Max parallel Jupiter holder lookups
 
 // Discovery uses /new_pools (sorted by creation time, newest first).
 // We paginate until all pools on a page are older than our window.
 // MAX_DISCOVERY_PAGES is a safety cap to avoid runaway pagination.
 const MAX_DISCOVERY_PAGES = 40;
+const PUMPFUN_VERIFY_CONCURRENCY = 10;       // Parallel PumpFun verification calls
 
 const PUMPSWAP_DEX_ID = 'pumpswap';
 
@@ -150,6 +152,13 @@ async function enrichWithHolders(token) {
   } catch (_) { /* non-critical */ }
 }
 
+/** Run enrichWithHolders in batches to avoid flooding the Jupiter rate limiter */
+async function enrichHoldersBatched(tokens) {
+  for (let i = 0; i < tokens.length; i += HOLDER_BATCH_SIZE) {
+    await Promise.all(tokens.slice(i, i + HOLDER_BATCH_SIZE).map(enrichWithHolders));
+  }
+}
+
 async function enrichWithHelius(tokens) {
   if (!solanaService.isHeliusConfigured()) return;
   const needsMeta = tokens.filter(t => !t.name || !t.logoUri);
@@ -243,13 +252,18 @@ async function refreshStore() {
     // 2. Verify candidates against PumpFun API — only admit real PumpFun tokens
     if (candidates.length > 0) {
       const mintsToVerify = candidates.map(c => c.addr);
-      const { confirmed, pumpFunData } = await pumpfunService.verifyPumpFunBatch(mintsToVerify, 5);
+      const { confirmed, pumpFunData, inconclusive } =
+        await pumpfunService.verifyPumpFunBatch(mintsToVerify, PUMPFUN_VERIFY_CONCURRENCY);
 
       let rejected = 0;
       for (const { pool, addr, createdMs } of candidates) {
         if (!confirmed.has(addr)) {
-          _rejectedAddresses.add(addr);
-          rejected++;
+          // Only permanently reject if we got a definitive 404.
+          // Transient errors (429/network) are retried next cycle.
+          if (!inconclusive.has(addr)) {
+            _rejectedAddresses.add(addr);
+            rejected++;
+          }
           continue;
         }
 
@@ -289,8 +303,8 @@ async function refreshStore() {
         tokenStore.set(addr, token);
       }
 
-      if (rejected > 0) {
-        console.log(`[DailyBrief] Rejected ${rejected} non-PumpFun tokens`);
+      if (rejected > 0 || inconclusive.size > 0) {
+        console.log(`[DailyBrief] Verified: ${confirmed.size} confirmed, ${rejected} rejected, ${inconclusive.size} inconclusive (retry next cycle)`);
       }
     }
 
@@ -298,7 +312,7 @@ async function refreshStore() {
     if (newTokens.length > 0) {
       console.log(`[DailyBrief] ${newTokens.length} new PumpFun graduates found`);
 
-      await Promise.all(newTokens.map(enrichWithHolders));
+      await enrichHoldersBatched(newTokens);
       await enrichWithHelius(newTokens);
 
       const now = Date.now();
@@ -320,8 +334,10 @@ async function refreshStore() {
       staleTokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
       const refreshBatch = staleTokens.slice(0, GECKO_BATCH_SIZE);
 
+      // refreshMarketData calls go through the Gecko rate limiter (2s each)
+      // so parallel is fine — they serialize internally
       await Promise.all(refreshBatch.map(refreshMarketData));
-      await Promise.all(refreshBatch.map(enrichWithHolders));
+      await enrichHoldersBatched(refreshBatch);
 
       for (const t of refreshBatch) {
         t._enrichedAt = Date.now();
@@ -415,4 +431,40 @@ router.get('/', searchLimiter, asyncHandler(async (req, res) => {
   });
 }));
 
+// ── Admin helpers (used by admin route) ──────────────────────────────
+
+/**
+ * Clear the entire in-memory store, rejected cache, and trigger a fresh scan.
+ * Returns stats about what was cleared.
+ */
+function clearStore() {
+  const storeSize = tokenStore.size;
+  const rejectedSize = _rejectedAddresses.size;
+
+  tokenStore.clear();
+  _rejectedAddresses.clear();
+  _lastFetchCycle = 0;
+  _storeReady = false;
+
+  console.log(`[DailyBrief] Admin clear: ${storeSize} tokens + ${rejectedSize} rejected entries`);
+
+  // Trigger immediate re-scan
+  triggerRefresh();
+
+  return { tokensCleared: storeSize, rejectedCleared: rejectedSize };
+}
+
+/** Return store stats for admin dashboard */
+function getStoreStats() {
+  return {
+    storeSize: tokenStore.size,
+    rejectedSize: _rejectedAddresses.size,
+    lastRefresh: _lastFetchCycle,
+    storeReady: _storeReady,
+    refreshInFlight: !!_refreshInFlight
+  };
+}
+
 module.exports = router;
+module.exports.clearStore = clearStore;
+module.exports.getStoreStats = getStoreStats;

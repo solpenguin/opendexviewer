@@ -290,6 +290,14 @@ const adminApi = {
       method: 'POST',
       body: JSON.stringify({ mint })
     });
+  },
+
+  // Daily Brief cache
+  async getDailyBriefCache() {
+    return this.request('/admin/daily-brief-cache');
+  },
+  async clearDailyBriefCache() {
+    return this.request('/admin/daily-brief-cache', { method: 'DELETE' });
   }
 };
 
@@ -444,6 +452,10 @@ const adminPanel = {
     document.getElementById('refresh-ai-cache-btn')?.addEventListener('click', () => this.loadAICache());
     document.getElementById('clear-all-ai-cache-btn')?.addEventListener('click', () => this.clearAllAICache());
     document.getElementById('reset-diamond-hands-btn')?.addEventListener('click', () => this.resetDiamondHandsCache());
+
+    // Daily Brief cache
+    document.getElementById('refresh-daily-brief-btn')?.addEventListener('click', () => this.loadDailyBriefCache());
+    document.getElementById('clear-daily-brief-btn')?.addEventListener('click', () => this.clearDailyBriefCache());
     document.getElementById('ai-cache-table')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
@@ -591,6 +603,9 @@ const adminPanel = {
         break;
       case 'ai-cache':
         this.loadAICache();
+        break;
+      case 'daily-brief':
+        this.loadDailyBriefCache();
         break;
     }
   },
@@ -2149,6 +2164,51 @@ const adminPanel = {
       status.textContent = `Failed: ${error.message}`;
       toast.error(`Failed: ${error.message}`);
     }
+  },
+
+  // ==========================================
+  // Daily Brief Cache
+  // ==========================================
+
+  async loadDailyBriefCache() {
+    var container = document.getElementById('daily-brief-stats');
+    if (!container) return;
+
+    container.innerHTML = '<p style="color: var(--text-muted);">Loading...</p>';
+
+    try {
+      var result = await adminApi.getDailyBriefCache();
+      var d = result.data || {};
+      var lastRefresh = d.lastRefresh ? new Date(d.lastRefresh).toLocaleString() : 'Never';
+
+      container.innerHTML =
+        '<div class="stats-grid" style="margin-bottom: 0;">' +
+          '<div class="stat-card"><div class="stat-value">' + (d.storeSize || 0) + '</div><div class="stat-label">Tokens in Store</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + (d.rejectedSize || 0) + '</div><div class="stat-label">Rejected (non-PF)</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + (d.storeReady ? 'Yes' : 'No') + '</div><div class="stat-label">Store Ready</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + (d.refreshInFlight ? 'Yes' : 'No') + '</div><div class="stat-label">Refresh Active</div></div>' +
+        '</div>' +
+        '<p style="margin: 0.75rem 0 0; font-size: 0.8rem; color: var(--text-muted);">Last refresh: ' + lastRefresh + '</p>';
+    } catch (error) {
+      container.innerHTML = '<p style="color: var(--accent-red);">Failed to load: ' + error.message + '</p>';
+    }
+  },
+
+  async clearDailyBriefCache() {
+    this.showConfirmModal(
+      'Clear Daily Brief Cache',
+      'This will clear all cached tokens and the rejected-address list, then trigger a full re-scan. The Daily Brief page will be empty until the scan completes (~1-2 min). Continue?',
+      async () => {
+        try {
+          var result = await adminApi.clearDailyBriefCache();
+          var d = result.data || {};
+          toast.success('Daily Brief cleared: ' + d.tokensCleared + ' tokens, ' + d.rejectedCleared + ' rejected entries. Re-scan started.');
+          this.loadDailyBriefCache();
+        } catch (error) {
+          toast.error('Failed to clear: ' + error.message);
+        }
+      }
+    );
   },
 
 };
