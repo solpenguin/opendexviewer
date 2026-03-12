@@ -28,13 +28,11 @@ const { cache, TTL, keys } = require('./services/cache');
 const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
 
 // ── Daily Brief: PumpSwap graduation discovery ─────────────────────
-// The worker discovers NEW tokens that graduated to PumpSwap by polling
-// GeckoTerminal's /new_pools endpoint filtered to the PumpSwap DEX.
-// Each new pool = a token that just graduated from PumpFun to PumpSwap.
+// The worker discovers NEW tokens that graduated from PumpFun to PumpSwap
+// by polling PumpFun's API with complete=true (server-side filter).
+// Tokens with a `pump_swap_pool` field = PumpSwap graduates.
 // Results are persisted to PostgreSQL for the API route to read.
 
-const DAILY_BRIEF_PUMPSWAP_DEX_ID = 'pumpswap';
-const DAILY_BRIEF_MAX_PAGES = 10;
 const DAILY_BRIEF_HOLDER_BATCH_SIZE = 10;
 
 const DAILY_BRIEF_SKIP_ADDRESSES = new Set([
@@ -547,16 +545,16 @@ const jobProcessors = {
   /**
    * Refresh Daily Brief — discover NEW PumpSwap graduates.
    *
-   * Discovery: Poll GeckoTerminal /new_pools filtered to PumpSwap DEX.
-   * Each new PumpSwap pool = a token that just graduated from PumpFun.
-   * pool_created_at = the actual graduation timestamp.
+   * Discovery: Poll PumpFun /coins with complete=true (server-side filter),
+   * sorted by created_timestamp desc.  Only tokens with a pump_swap_pool
+   * field are PumpSwap graduates.  Deduplication against DB ensures we
+   * only process genuinely new graduations.
    *
    * Enrichment: GeckoTerminal (market data) + Jupiter (holders) + Helius (metadata)
    * Storage: Persisted to PostgreSQL daily_brief_tokens table.
    */
   'refresh-daily-brief': async (job) => {
     const cycleStart = Date.now();
-    const cutoffMs = Date.now() - (24 * 60 * 60 * 1000);
     const GECKO_BATCH_SIZE = 10;
 
     if (!db.isReady()) {
@@ -567,58 +565,50 @@ const jobProcessors = {
       // 1. Get existing mints from DB for deduplication
       const existingMints = await db.getDailyBriefExistingMints();
 
-      // 2. Discover new PumpSwap pools (graduated tokens)
+      // 2. Discover new PumpSwap graduates via PumpFun API
+      //    Uses complete=true server-side filter + pump_swap_pool check
+      //    72h creation window catches tokens that take time to graduate
+      const pumpfunService = require('./services/pumpfun');
+      const allGraduated = await pumpfunService.getGraduatedTokens(72 * 60 * 60 * 1000, 20);
+
       let totalDiscovered = 0;
       const newTokens = [];
 
-      for (let page = 1; page <= DAILY_BRIEF_MAX_PAGES; page++) {
-        const { filtered, totalOnPage, oldestOnPageMs } = await geckoService.getNewPoolsByDex(
-          DAILY_BRIEF_PUMPSWAP_DEX_ID, page
-        );
+      for (const coin of allGraduated) {
+        const addr = coin.mint;
+        if (!addr || DAILY_BRIEF_SKIP_ADDRESSES.has(addr)) continue;
+        if (existingMints.has(addr)) continue;
 
-        for (const pool of filtered) {
-          const addr = pool.baseAddress;
-          if (!addr || DAILY_BRIEF_SKIP_ADDRESSES.has(addr)) continue;
-          if (existingMints.has(addr)) continue;
+        const createdMs = coin.created_timestamp || 0;
+        const graduatedAtMs = createdMs;
 
-          const graduatedAtMs = pool.createdAt ? new Date(pool.createdAt).getTime() : 0;
-          if (isNaN(graduatedAtMs) || graduatedAtMs < cutoffMs) continue;
+        const token = {
+          address: addr,
+          name: coin.name || coin.symbol || '',
+          symbol: coin.symbol || '',
+          logoUri: coin.image_uri || null,
+          createdAt: createdMs ? new Date(createdMs).toISOString() : null,
+          graduatedAt: graduatedAtMs ? new Date(graduatedAtMs).toISOString() : null,
+          _graduatedAtMs: graduatedAtMs,
+          description: coin.description || '',
+          website: coin.website || null,
+          twitter: coin.twitter || null,
+          telegram: coin.telegram || null,
+          price: 0,
+          priceChange24h: 0,
+          volume24h: 0,
+          marketCap: coin.usd_market_cap || 0,
+          liquidity: 0,
+          holders: 0,
+          gradVelocityHours: computeGradVelocity(createdMs, graduatedAtMs),
+          volMcapRatio: 0,
+          liqMcapRatio: 0,
+          poolAddress: coin.pump_swap_pool || coin.pool_address || null
+        };
 
-          const poolName = pool.name || '';
-          const symbol = poolName.split(' / ')[0] || '';
-
-          const token = {
-            address: addr,
-            name: symbol || '',
-            symbol: symbol || '',
-            logoUri: null,
-            createdAt: null,
-            graduatedAt: pool.createdAt || null,
-            _graduatedAtMs: graduatedAtMs,
-            description: '',
-            website: null,
-            twitter: null,
-            telegram: null,
-            price: pool.price || 0,
-            priceChange24h: pool.priceChange24h || 0,
-            volume24h: pool.volume24h || 0,
-            marketCap: pool.marketCap || 0,
-            liquidity: pool.liquidity || 0,
-            holders: 0,
-            gradVelocityHours: null,
-            volMcapRatio: 0,
-            liqMcapRatio: 0,
-            poolAddress: pool.poolAddress || null
-          };
-
-          newTokens.push(token);
-          existingMints.add(addr); // Prevent duplicates within same cycle
-          totalDiscovered++;
-        }
-
-        // Stop if we've passed the 24h window or no more pages
-        if (totalOnPage === 0) break;
-        if (oldestOnPageMs && oldestOnPageMs < cutoffMs) break;
+        newTokens.push(token);
+        existingMints.add(addr);
+        totalDiscovered++;
       }
 
       // 3. Enrich new tokens with market data + holders + metadata
@@ -628,25 +618,6 @@ const jobProcessors = {
         await Promise.all(newTokens.map(enrichMarketData));
         await enrichHoldersBatched(newTokens);
         await enrichWithHelius(newTokens);
-
-        // Try to get PumpFun metadata (creation time, socials) for new tokens
-        const pumpfunService = require('./services/pumpfun');
-        for (const token of newTokens) {
-          try {
-            const pfData = await pumpfunService.getToken(token.address);
-            if (pfData && pfData !== 'transient') {
-              const createdMs = pfData.created_timestamp || 0;
-              token.createdAt = createdMs ? new Date(createdMs).toISOString() : null;
-              token.gradVelocityHours = computeGradVelocity(createdMs, token._graduatedAtMs);
-              if (pfData.description) token.description = pfData.description;
-              if (pfData.website) token.website = pfData.website;
-              if (pfData.twitter) token.twitter = pfData.twitter;
-              if (pfData.telegram) token.telegram = pfData.telegram;
-              if (pfData.image_uri && !token.logoUri) token.logoUri = pfData.image_uri;
-              if (pfData.name && (!token.name || token.name === token.symbol)) token.name = pfData.name;
-            }
-          } catch (_) { /* non-critical */ }
-        }
 
         for (const t of newTokens) {
           computeDerivedFields(t);

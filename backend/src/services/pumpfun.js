@@ -63,20 +63,21 @@ async function searchTokens(searchTerm, limit = 50) {
 }
 
 /**
- * Get recently graduated PumpFun tokens.
+ * Get recently graduated PumpFun tokens that migrated to PumpSwap.
  *
- * Strategy: query /coins sorted by last_trade_timestamp descending.
- * For graduated tokens (`complete: true`), last_trade_timestamp is the
- * final bonding curve trade ≈ graduation time.
+ * Strategy: query /coins with `complete=true` (server-side filter) sorted
+ * by `created_timestamp` descending.  Since most PumpFun tokens graduate
+ * within minutes/hours of creation, recently-created graduated tokens ≈
+ * recently-graduated tokens.
  *
- * We paginate through multiple pages, collecting graduated tokens
- * until we've passed the time window cutoff.
+ * Only tokens with a `pump_swap_pool` field are returned — this excludes
+ * older tokens that graduated to Raydium (which have `raydium_pool`).
  *
- * @param {number} windowMs - How far back to look (e.g. 72h in ms)
+ * @param {number} windowMs - How far back to look by creation time (default 72h)
  * @param {number} maxPages - Safety cap on pagination
- * @returns {Promise<Array>} Array of graduated token objects
+ * @returns {Promise<Array>} Array of graduated PumpSwap token objects
  */
-async function getGraduatedTokens(windowMs = 24 * 60 * 60 * 1000, maxPages = 10) {
+async function getGraduatedTokens(windowMs = 72 * 60 * 60 * 1000, maxPages = 20) {
   const cutoffMs = Date.now() - windowMs;
   const graduated = [];
   const PAGE_SIZE = 50;
@@ -84,11 +85,12 @@ async function getGraduatedTokens(windowMs = 24 * 60 * 60 * 1000, maxPages = 10)
   for (let page = 0; page < maxPages; page++) {
     try {
       const params = new URLSearchParams({
-        sort: 'last_trade_timestamp',
+        sort: 'created_timestamp',
         order: 'desc',
         limit: String(PAGE_SIZE),
         offset: String(page * PAGE_SIZE),
-        includeNsfw: 'false'
+        includeNsfw: 'false',
+        complete: 'true'
       });
 
       const response = await pumpfunFetch(`${PUMPFUN_BASE_URL}/coins?${params}`);
@@ -107,21 +109,21 @@ async function getGraduatedTokens(windowMs = 24 * 60 * 60 * 1000, maxPages = 10)
 
       if (coins.length === 0) break;
 
-      // Track the oldest timestamp on this page for stop condition
+      // Track the oldest created_timestamp on this page for stop condition
       let oldestOnPage = Infinity;
 
       for (const coin of coins) {
         // Only PumpFun-native tokens
         if (coin.program && coin.program !== 'pump') continue;
 
-        // Only graduated tokens
-        if (!coin.complete) continue;
+        // Only PumpSwap graduates (not old Raydium graduates)
+        if (!coin.pump_swap_pool) continue;
 
-        const ts = coin.last_trade_timestamp || 0;
-        if (ts < oldestOnPage) oldestOnPage = ts;
+        const createdTs = coin.created_timestamp || 0;
+        if (createdTs < oldestOnPage) oldestOnPage = createdTs;
 
-        // Within our time window?
-        if (ts >= cutoffMs) {
+        // Within our creation-time window?
+        if (createdTs >= cutoffMs) {
           graduated.push(coin);
         }
       }
@@ -138,7 +140,7 @@ async function getGraduatedTokens(windowMs = 24 * 60 * 60 * 1000, maxPages = 10)
     }
   }
 
-  console.log(`[PumpFun] Found ${graduated.length} graduated tokens within window`);
+  console.log(`[PumpFun] Found ${graduated.length} PumpSwap graduates within window`);
   return graduated;
 }
 
