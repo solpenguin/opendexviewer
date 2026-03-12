@@ -3236,7 +3236,7 @@ async function upsertDailyBriefTokens(tokens) {
           volume_24h = EXCLUDED.volume_24h,
           market_cap = EXCLUDED.market_cap,
           liquidity = EXCLUDED.liquidity,
-          holders = EXCLUDED.holders,
+          holders = CASE WHEN EXCLUDED.holders > 0 THEN EXCLUDED.holders ELSE daily_brief_tokens.holders END,
           grad_velocity_hours = COALESCE(EXCLUDED.grad_velocity_hours, daily_brief_tokens.grad_velocity_hours),
           vol_mcap_ratio = EXCLUDED.vol_mcap_ratio,
           liq_mcap_ratio = EXCLUDED.liq_mcap_ratio,
@@ -3284,7 +3284,7 @@ async function updateDailyBriefMarketData(tokens) {
           volume_24h = $4,
           market_cap = $5,
           liquidity = $6,
-          holders = $7,
+          holders = CASE WHEN $7::int > 0 THEN $7::int ELSE holders END,
           vol_mcap_ratio = $8,
           liq_mcap_ratio = $9,
           enriched_at = NOW()
