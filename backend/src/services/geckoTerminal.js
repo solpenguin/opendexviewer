@@ -921,29 +921,28 @@ async function getTokenPools(mintAddress, options = {}) {
 }
 
 /**
- * Get raw new pools with DEX info (for filtering by DEX like PumpSwap).
- * Returns pool-level data including dexId and pool_created_at.
- * Endpoint: /networks/{network}/new_pools
+ * Get pools for a specific DEX.
+ * Endpoint: /networks/{network}/dexes/{dex}/pools
+ * Returns pools sorted by volume desc. Each pool includes pool_created_at.
+ * Paginate and check pool_created_at to find recently created pools.
  */
-async function getNewPools(page = 1) {
+async function getDexPools(dexId, page = 1) {
   try {
     const response = await geckoRequest(() =>
-      geckoAxios.get(`/networks/${NETWORK}/new_pools`, {
+      geckoAxios.get(`/networks/${NETWORK}/dexes/${dexId}/pools`, {
         params: { page }
       }),
-      'getNewPools'
+      'getDexPools'
     );
 
     const pools = response.data.data || [];
     return pools.map(pool => {
       const attrs = pool.attributes || {};
       const baseTokenId = pool.relationships?.base_token?.data?.id;
-      const dexId = (pool.relationships?.dex?.data?.id || '').toLowerCase();
 
       return {
         baseAddress: baseTokenId ? baseTokenId.replace('solana_', '') : null,
         poolAddress: attrs.address || null,
-        dexId,
         name: attrs.name || '',
         createdAt: attrs.pool_created_at || null,
         price: parseFloat(attrs.base_token_price_usd) || 0,
@@ -955,7 +954,7 @@ async function getNewPools(page = 1) {
       };
     });
   } catch (error) {
-    console.error('[GeckoTerminal] getNewPools error:', error.message);
+    console.error('[GeckoTerminal] getDexPools error:', error.message);
     return [];
   }
 }
@@ -968,7 +967,7 @@ module.exports = {
   getMarketData,
   getTrendingTokens,
   getNewTokens,
-  getNewPools,
+  getDexPools,
   searchTokens,
   getOHLCV,
   getPriceHistory,
