@@ -73,8 +73,8 @@ async function rpcCall(method, params = [], retryCount = 0) {
   const MAX_RETRIES = 2;
 
   try {
-    // Use circuit breaker for each individual RPC attempt
-    return await circuitBreakers.solanaRpc.execute(async () => {
+    // Use rate limiter + circuit breaker for each individual RPC attempt
+    return await rateLimitedRequest('solana', () => circuitBreakers.solanaRpc.execute(async () => {
       const rpcUrl = getCurrentRpcUrl();
 
       try {
@@ -111,7 +111,7 @@ async function rpcCall(method, params = [], retryCount = 0) {
 
         throw error;
       }
-    });
+    }));
   } catch (error) {
     // Handle connection errors with failover OUTSIDE circuit breaker
     // to prevent double-counting failures on retry
@@ -305,21 +305,23 @@ async function getTokenMetadata(mintAddress) {
   try {
     console.log(`[Solana] Fetching token metadata for ${mintAddress}`);
 
-    const response = await axios.post(HELIUS_DAS_URL, {
-      jsonrpc: '2.0',
-      id: 'token-metadata',
-      method: 'getAsset',
-      params: {
-        id: mintAddress,
-        displayOptions: {
-          showFungible: true
+    const response = await rateLimitedRequest('helius', () =>
+      axios.post(HELIUS_DAS_URL, {
+        jsonrpc: '2.0',
+        id: 'token-metadata',
+        method: 'getAsset',
+        params: {
+          id: mintAddress,
+          displayOptions: {
+            showFungible: true
+          }
         }
-      }
-    }, {
-      timeout: 10000,
-      headers: HELIUS_HEADERS,
-      httpsAgent
-    });
+      }, {
+        timeout: 10000,
+        headers: HELIUS_HEADERS,
+        httpsAgent
+      })
+    );
 
     if (response.data.error) {
       console.error('[Solana] Helius getAsset error:', response.data.error.message);
@@ -405,21 +407,23 @@ async function getTokenMetadataBatch(mintAddresses) {
     if (addresses.length === 0) return {};
     console.log(`[Solana] Fetching batch token metadata for ${addresses.length} tokens`);
 
-    const response = await axios.post(HELIUS_DAS_URL, {
-      jsonrpc: '2.0',
-      id: 'token-metadata-batch',
-      method: 'getAssetBatch',
-      params: {
-        ids: addresses,
-        displayOptions: {
-          showFungible: true
+    const response = await rateLimitedRequest('helius', () =>
+      axios.post(HELIUS_DAS_URL, {
+        jsonrpc: '2.0',
+        id: 'token-metadata-batch',
+        method: 'getAssetBatch',
+        params: {
+          ids: addresses,
+          displayOptions: {
+            showFungible: true
+          }
         }
-      }
-    }, {
-      timeout: 15000,
-      headers: HELIUS_HEADERS,
-      httpsAgent
-    });
+      }, {
+        timeout: 15000,
+        headers: HELIUS_HEADERS,
+        httpsAgent
+      })
+    );
 
     if (response.data.error) {
       console.error('[Solana] Helius getAssetBatch error:', response.data.error.message);
@@ -509,21 +513,23 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
   if (!HELIUS_DAS_URL) return null;
 
   try {
-    const response = await axios.post(HELIUS_DAS_URL, {
-      jsonrpc: '2.0',
-      id: 'largest-holders',
-      method: 'getTokenAccounts',
-      params: {
-        mint: mintAddress,
-        page: 1,
-        limit: 20,
-        options: { showZeroBalance: false }
-      }
-    }, {
-      timeout: 15000,
-      headers: HELIUS_HEADERS,
-      httpsAgent
-    });
+    const response = await rateLimitedRequest('helius', () =>
+      axios.post(HELIUS_DAS_URL, {
+        jsonrpc: '2.0',
+        id: 'largest-holders',
+        method: 'getTokenAccounts',
+        params: {
+          mint: mintAddress,
+          page: 1,
+          limit: 20,
+          options: { showZeroBalance: false }
+        }
+      }, {
+        timeout: 15000,
+        headers: HELIUS_HEADERS,
+        httpsAgent
+      })
+    );
 
     if (response.data.error) {
       console.error('[Solana] DAS getTokenAccounts error:', response.data.error.message);
@@ -566,21 +572,23 @@ async function getTokenHolderSample(mintAddress, count = 250, excludeAddresses =
   if (!HELIUS_DAS_URL) return null;
 
   try {
-    const response = await axios.post(HELIUS_DAS_URL, {
-      jsonrpc: '2.0',
-      id: 'holder-sample',
-      method: 'getTokenAccounts',
-      params: {
-        mint: mintAddress,
-        page: 1,
-        limit: 1000,
-        options: { showZeroBalance: false }
-      }
-    }, {
-      timeout: 20000,
-      headers: HELIUS_HEADERS,
-      httpsAgent
-    });
+    const response = await rateLimitedRequest('helius', () =>
+      axios.post(HELIUS_DAS_URL, {
+        jsonrpc: '2.0',
+        id: 'holder-sample',
+        method: 'getTokenAccounts',
+        params: {
+          mint: mintAddress,
+          page: 1,
+          limit: 1000,
+          options: { showZeroBalance: false }
+        }
+      }, {
+        timeout: 20000,
+        headers: HELIUS_HEADERS,
+        httpsAgent
+      })
+    );
 
     if (response.data.error) {
       console.error('[Solana] getTokenHolderSample DAS error:', response.data.error.message);
@@ -620,12 +628,14 @@ async function getTokenHolderSample(mintAddress, count = 250, excludeAddresses =
 async function getTokenAuthorities(mintAddress) {
   if (!HELIUS_DAS_URL) return null;
   try {
-    const response = await axios.post(HELIUS_DAS_URL, {
-      jsonrpc: '2.0',
-      id: 'token-auth',
-      method: 'getAsset',
-      params: { id: mintAddress }
-    }, { timeout: 8000, headers: HELIUS_HEADERS, httpsAgent });
+    const response = await rateLimitedRequest('helius', () =>
+      axios.post(HELIUS_DAS_URL, {
+        jsonrpc: '2.0',
+        id: 'token-auth',
+        method: 'getAsset',
+        params: { id: mintAddress }
+      }, { timeout: 8000, headers: HELIUS_HEADERS, httpsAgent })
+    );
 
     if (response.data.error || !response.data.result) return null;
     const asset = response.data.result;
@@ -659,9 +669,11 @@ async function getTransactionsForAddress(walletAddress, { limit = 100, type } = 
     const params = { 'api-key': HELIUS_API_KEY, limit };
     if (type) params.type = type;
 
-    const response = await axios.get(
-      `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions`,
-      { params, timeout: 10000, httpsAgent }
+    const response = await rateLimitedRequest('helius', () =>
+      axios.get(
+        `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions`,
+        { params, timeout: 10000, httpsAgent }
+      )
     );
 
     if (!response.data || !Array.isArray(response.data)) {
@@ -828,11 +840,11 @@ async function getStreamflowLockedAmount(mintAddress, decimals = 0) {
       const data = Buffer.from(account.account.data[0], 'base64');
       // Skip closed streams
       if (data.length > CLOSED_OFFSET && data[CLOSED_OFFSET] !== 0) continue;
-      const withdrawn = Number(data.readBigUInt64LE(WITHDRAWN_OFFSET));
-      const deposited = Number(data.readBigUInt64LE(NET_DEPOSITED_OFFSET));
+      const withdrawn = data.readBigUInt64LE(WITHDRAWN_OFFSET);
+      const deposited = data.readBigUInt64LE(NET_DEPOSITED_OFFSET);
       const remaining = deposited - withdrawn;
-      if (remaining > 0) {
-        totalLocked += remaining / divisor;
+      if (remaining > 0n) {
+        totalLocked += Number(remaining) / divisor;
       }
     }
 

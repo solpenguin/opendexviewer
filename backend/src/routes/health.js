@@ -7,6 +7,7 @@ const { cache } = require('../services/cache');
 const { getAllStatuses: getCircuitBreakerStatuses } = require('../services/circuitBreaker');
 const { getQueueMetrics } = require('../services/rateLimiter');
 const jobQueue = require('../services/jobQueue');
+const { asyncHandler } = require('../middleware/validation');
 
 // GET /health - Basic health check
 router.get('/', async (req, res) => {
@@ -18,7 +19,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /health/detailed - Detailed health check with dependencies (admin-only)
-router.get('/detailed', require('../middleware/validation').validateAdminSession, async (req, res) => {
+router.get('/detailed', require('../middleware/validation').validateAdminSession, asyncHandler(async (req, res) => {
   const health = {
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -182,11 +183,11 @@ router.get('/detailed', require('../middleware/validation').validateAdminSession
   // Set status code based on health
   const statusCode = health.status === 'ok' ? 200 : 503;
   res.status(statusCode).json(health);
-});
+}));
 
 // GET /health/ready - Readiness probe (for k8s/render)
 // Returns ready if core services work, even if database is still connecting
-router.get('/ready', async (req, res) => {
+router.get('/ready', asyncHandler(async (req, res) => {
   try {
     // Check if database is configured but not ready yet (still connecting)
     if (process.env.DATABASE_URL && !db.isReady()) {
@@ -209,7 +210,7 @@ router.get('/ready', async (req, res) => {
   } catch (error) {
     res.status(503).json({ ready: false, reason: error.message });
   }
-});
+}));
 
 // GET /health/live - Liveness probe (for k8s/render)
 router.get('/live', (req, res) => {
@@ -217,7 +218,7 @@ router.get('/live', (req, res) => {
 });
 
 // GET /api/stats - Public API statistics (stripped of internal pool details)
-router.get('/stats', async (req, res) => {
+router.get('/stats', asyncHandler(async (req, res) => {
   try {
     const dbHealth = await db.checkHealth();
     const cacheStats = await cache.getStats();
@@ -240,6 +241,6 @@ router.get('/stats', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
-});
+}));
 
 module.exports = router;

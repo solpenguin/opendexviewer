@@ -82,7 +82,6 @@ var spikeDetector = (function() {
       if (onSelect) onSelect(value);
     }
     menu.addEventListener('click', handleItemSelect);
-    menu.addEventListener('touchend', handleItemSelect);
   }
 
   function closeAllDropdowns() {
@@ -118,7 +117,7 @@ var spikeDetector = (function() {
       els.scanned.textContent = data.totalScanned || '--';
       els.established.textContent = data.totalEstablished || '--';
       els.spiking.textContent = data.tokens.length;
-      els.updated.textContent = data.updatedAt ? formatTimeAgo(data.updatedAt) : '--';
+      els.updated.textContent = data.updatedAt ? formatTimeAgo(new Date(data.updatedAt).getTime()) : '--';
 
       // Apply client-side filter
       var filtered = applyFilter(state.tokens);

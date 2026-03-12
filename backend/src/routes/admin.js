@@ -676,13 +676,17 @@ router.patch('/settings',
       }
     }
 
-    // Reload current values
-    let currentBurnConfig = { conversionRate: 1000, aiAnalysisCost: 25, aiAdvancedAnalysisCost: 75 };
+    // Reload current values, falling back to the just-applied request values
+    let currentBurnConfig = {
+      conversionRate: burnConfig?.conversionRate ?? 1000,
+      aiAnalysisCost: burnConfig?.aiAnalysisCost ?? 25,
+      aiAdvancedAnalysisCost: burnConfig?.aiAdvancedAnalysisCost ?? 75
+    };
     try {
       currentBurnConfig.conversionRate = await db.getBurnConversionRate();
       currentBurnConfig.aiAnalysisCost = await db.getAIAnalysisCost();
       currentBurnConfig.aiAdvancedAnalysisCost = await db.getAdvancedAIAnalysisCost();
-    } catch (e) { /* use defaults */ }
+    } catch (e) { /* use values from request body */ }
 
     res.json({
       success: true,

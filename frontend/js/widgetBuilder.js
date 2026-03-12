@@ -203,7 +203,7 @@ const widgetBuilder = {
   escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   },
 
   formatNumber(num) {
@@ -484,7 +484,7 @@ const widgetBuilder = {
 
   // Build the embeddable <script> tag code
   buildEmbedCode(cfg) {
-    const apiKey = apiKeyManager.currentKey || 'YOUR_API_KEY';
+    const apiKey = (typeof apiKeyManager !== 'undefined' && apiKeyManager.currentKey) || 'YOUR_API_KEY';
 
     const showList = Object.entries(cfg.show)
       .filter(([, v]) => v)

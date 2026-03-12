@@ -242,11 +242,13 @@
         e.preventDefault();
         deferredPrompt = e;
         installBtn.style.display = '';
-        installBtn.addEventListener('click', function() {
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
-        });
       });
+      installBtn.addEventListener('click', function() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function() { deferredPrompt = null; installBtn.style.display = 'none'; });
+      });
+      window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
     })();
   </script>
 </body>

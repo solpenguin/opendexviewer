@@ -505,20 +505,20 @@ function analyzeBurnTransaction(tx, expectedWallet) {
     // Verify the authority is the expected wallet
     if (info.authority !== expectedWallet && info.multisigAuthority !== expectedWallet) continue;
 
-    // Extract the UI amount (human-readable, decimal-adjusted)
-    // burnChecked: info.tokenAmount.uiAmount is always present
-    // plain burn: only info.amount (raw integer) — convert using OD decimals (6)
-    let uiAmount;
-    if (info.tokenAmount?.uiAmount !== undefined) {
-      uiAmount = parseFloat(info.tokenAmount.uiAmount);
+    // Extract the raw integer amount for precision
+    // burnChecked: info.tokenAmount.amount is the raw integer string
+    // plain burn: info.amount is the raw integer string
+    let rawAmount;
+    if (info.tokenAmount?.amount !== undefined) {
+      rawAmount = parseInt(info.tokenAmount.amount, 10);
     } else if (info.amount) {
-      uiAmount = parseFloat(info.amount) / 1e6; // OD_DECIMALS = 6
+      rawAmount = parseInt(info.amount, 10);
     } else {
       continue;
     }
 
-    if (uiAmount > 0) {
-      totalBurnAmount += uiAmount;
+    if (rawAmount > 0) {
+      totalBurnAmount += rawAmount;
     }
   }
 
@@ -530,7 +530,8 @@ function analyzeBurnTransaction(tx, expectedWallet) {
     };
   }
 
-  return { valid: true, amount: totalBurnAmount };
+  // Convert raw integer total to UI amount (divide once at the end to avoid float precision loss)
+  return { valid: true, amount: totalBurnAmount / 1e6 };
 }
 
 module.exports = router;

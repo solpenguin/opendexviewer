@@ -466,7 +466,7 @@ async function initializeDatabase() {
         symbol VARCHAR(50),
         logo_uri TEXT,
         created_at TIMESTAMP WITH TIME ZONE,
-        graduated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        graduated_at TIMESTAMP WITH TIME ZONE,
         description TEXT,
         website TEXT,
         twitter TEXT,
@@ -2191,17 +2191,27 @@ async function deleteUserData(walletAddress) {
       [walletAddress]
     );
 
-    // Update vote tallies for affected submissions
-    for (const subId of submissionIds) {
+    // Update vote tallies for affected submissions in bulk
+    if (submissionIds.length > 0) {
       await client.query(
-        `UPDATE vote_tallies SET
-           upvotes = (SELECT COUNT(*) FROM votes WHERE submission_id = $1 AND vote_type = 'up'),
-           downvotes = (SELECT COUNT(*) FROM votes WHERE submission_id = $1 AND vote_type = 'down'),
-           score = (SELECT COUNT(*) FILTER (WHERE vote_type = 'up') - COUNT(*) FILTER (WHERE vote_type = 'down') FROM votes WHERE submission_id = $1),
-           weighted_score = (SELECT COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0) FROM votes WHERE submission_id = $1),
+        `UPDATE vote_tallies vt SET
+           upvotes = COALESCE(s.up_count, 0),
+           downvotes = COALESCE(s.down_count, 0),
+           score = COALESCE(s.up_count, 0) - COALESCE(s.down_count, 0),
+           weighted_score = COALESCE(s.w_score, 0),
            updated_at = NOW()
-         WHERE submission_id = $1`,
-        [subId]
+         FROM (
+           SELECT
+             u.id AS submission_id,
+             COUNT(*) FILTER (WHERE v.vote_type = 'up') AS up_count,
+             COUNT(*) FILTER (WHERE v.vote_type = 'down') AS down_count,
+             COALESCE(SUM(CASE WHEN v.vote_type = 'up' THEN v.vote_weight ELSE -v.vote_weight END), 0) AS w_score
+           FROM unnest($1::uuid[]) AS u(id)
+           LEFT JOIN votes v ON v.submission_id = u.id
+           GROUP BY u.id
+         ) s
+         WHERE vt.submission_id = s.submission_id`,
+        [submissionIds]
       );
     }
 
@@ -2481,7 +2491,7 @@ async function repairDatabaseSchema() {
               for (const col of issue.columns) {
                 if (col === 'voter_balance') {
                   await pool.query(`
-                    ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_balance DECIMAL(30,0) DEFAULT 0
+                    ALTER TABLE votes ADD COLUMN IF NOT EXISTS voter_balance DECIMAL(30,10) DEFAULT 0
                   `);
                   repairs.push({ type: 'column_added', table: 'votes', column: 'voter_balance' });
                 }
@@ -3205,52 +3215,54 @@ async function upsertDailyBriefTokens(tokens) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    let count = 0;
 
-    for (const t of tokens) {
-      await client.query(`
-        INSERT INTO daily_brief_tokens (
-          mint_address, name, symbol, logo_uri, created_at, graduated_at,
-          description, website, twitter, telegram,
-          price, price_change_24h, volume_24h, market_cap, liquidity,
-          holders, grad_velocity_hours, vol_mcap_ratio, liq_mcap_ratio,
-          pool_address, enriched_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10,
-          $11, $12, $13, $14, $15,
-          $16, $17, $18, $19,
-          $20, NOW()
-        )
-        ON CONFLICT (mint_address) DO UPDATE SET
-          name = COALESCE(NULLIF(EXCLUDED.name, ''), daily_brief_tokens.name),
-          symbol = COALESCE(NULLIF(EXCLUDED.symbol, ''), daily_brief_tokens.symbol),
-          logo_uri = COALESCE(EXCLUDED.logo_uri, daily_brief_tokens.logo_uri),
-          created_at = COALESCE(EXCLUDED.created_at, daily_brief_tokens.created_at),
-          description = COALESCE(NULLIF(EXCLUDED.description, ''), daily_brief_tokens.description),
-          website = COALESCE(EXCLUDED.website, daily_brief_tokens.website),
-          twitter = COALESCE(EXCLUDED.twitter, daily_brief_tokens.twitter),
-          telegram = COALESCE(EXCLUDED.telegram, daily_brief_tokens.telegram),
-          price = EXCLUDED.price,
-          price_change_24h = EXCLUDED.price_change_24h,
-          volume_24h = EXCLUDED.volume_24h,
-          market_cap = EXCLUDED.market_cap,
-          liquidity = EXCLUDED.liquidity,
-          holders = CASE WHEN EXCLUDED.holders > 0 THEN EXCLUDED.holders ELSE daily_brief_tokens.holders END,
-          grad_velocity_hours = COALESCE(EXCLUDED.grad_velocity_hours, daily_brief_tokens.grad_velocity_hours),
-          vol_mcap_ratio = EXCLUDED.vol_mcap_ratio,
-          liq_mcap_ratio = EXCLUDED.liq_mcap_ratio,
-          enriched_at = NOW()
-      `, [
+    // Batch all inserts into a single multi-row VALUES clause
+    const COLS_PER_ROW = 20;
+    const values = [];
+    const placeholders = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      const offset = i * COLS_PER_ROW;
+      placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6}, $${offset+7}, $${offset+8}, $${offset+9}, $${offset+10}, $${offset+11}, $${offset+12}, $${offset+13}, $${offset+14}, $${offset+15}, $${offset+16}, $${offset+17}, $${offset+18}, $${offset+19}, $${offset+20}, NOW())`);
+      values.push(
         t.address, t.name || null, t.symbol || null, t.logoUri || null,
         t.createdAt || null, t.graduatedAt || null,
         t.description || null, t.website || null, t.twitter || null, t.telegram || null,
         t.price || 0, t.priceChange24h || 0, t.volume24h || 0, t.marketCap || 0, t.liquidity || 0,
         t.holders || 0, t.gradVelocityHours || null, t.volMcapRatio || 0, t.liqMcapRatio || 0,
         t.poolAddress || null
-      ]);
-      count++;
+      );
     }
+
+    await client.query(`
+      INSERT INTO daily_brief_tokens (
+        mint_address, name, symbol, logo_uri, created_at, graduated_at,
+        description, website, twitter, telegram,
+        price, price_change_24h, volume_24h, market_cap, liquidity,
+        holders, grad_velocity_hours, vol_mcap_ratio, liq_mcap_ratio,
+        pool_address, enriched_at
+      ) VALUES ${placeholders.join(', ')}
+      ON CONFLICT (mint_address) DO UPDATE SET
+        name = COALESCE(NULLIF(EXCLUDED.name, ''), daily_brief_tokens.name),
+        symbol = COALESCE(NULLIF(EXCLUDED.symbol, ''), daily_brief_tokens.symbol),
+        logo_uri = COALESCE(EXCLUDED.logo_uri, daily_brief_tokens.logo_uri),
+        created_at = COALESCE(EXCLUDED.created_at, daily_brief_tokens.created_at),
+        description = COALESCE(NULLIF(EXCLUDED.description, ''), daily_brief_tokens.description),
+        website = COALESCE(EXCLUDED.website, daily_brief_tokens.website),
+        twitter = COALESCE(EXCLUDED.twitter, daily_brief_tokens.twitter),
+        telegram = COALESCE(EXCLUDED.telegram, daily_brief_tokens.telegram),
+        price = EXCLUDED.price,
+        price_change_24h = EXCLUDED.price_change_24h,
+        volume_24h = EXCLUDED.volume_24h,
+        market_cap = EXCLUDED.market_cap,
+        liquidity = EXCLUDED.liquidity,
+        holders = CASE WHEN EXCLUDED.holders > 0 THEN EXCLUDED.holders ELSE daily_brief_tokens.holders END,
+        grad_velocity_hours = COALESCE(EXCLUDED.grad_velocity_hours, daily_brief_tokens.grad_velocity_hours),
+        vol_mcap_ratio = EXCLUDED.vol_mcap_ratio,
+        liq_mcap_ratio = EXCLUDED.liq_mcap_ratio,
+        enriched_at = NOW()
+    `, values);
+    const count = tokens.length;
 
     await client.query('COMMIT');
     return count;

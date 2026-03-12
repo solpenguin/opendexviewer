@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/validation');
+const { searchLimiter } = require('../middleware/rateLimit');
 const { cache, TTL } = require('../services/cache');
 const db = require('../services/database');
 const solanaService = require('../services/solana');
@@ -14,7 +15,7 @@ const pumpfunService = require('../services/pumpfun');
  * GET /api/ogfinder/search?q=QUERY
  * Returns PumpFun tokens matching the query, sorted by mint date (oldest first).
  */
-router.get('/search', asyncHandler(async (req, res) => {
+router.get('/search', searchLimiter, asyncHandler(async (req, res) => {
   const query = (req.query.q || '').trim();
 
   if (!query || query.length < 1) {
@@ -106,7 +107,7 @@ router.get('/search', asyncHandler(async (req, res) => {
  * Called by the frontend after fetching raw token data directly from PumpFun,
  * keeping API keys server-side while distributing PumpFun rate limits across users.
  */
-router.post('/enrich', asyncHandler(async (req, res) => {
+router.post('/enrich', searchLimiter, asyncHandler(async (req, res) => {
   const mints = req.body && Array.isArray(req.body.mints) ? req.body.mints : [];
 
   // Validate and cap batch size

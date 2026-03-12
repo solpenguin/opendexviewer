@@ -210,4 +210,8 @@ databases:
 #    - Source: /development -> Destination: /development.html (Rewrite)
 #    - Source: /docs       -> Destination: /docs.html (Rewrite)
 #    - Source: /spikes     -> Destination: /spikes.html (Rewrite)
+#    - Source: /folios     -> Destination: /folios.html (Rewrite)
+#    - Source: /dailybrief -> Destination: /dailybrief.html (Rewrite)
+#    - Source: /link       -> Destination: /link.html (Rewrite)
+#    - Source: /admin      -> Destination: /admin.html (Rewrite)
 # =====================================================

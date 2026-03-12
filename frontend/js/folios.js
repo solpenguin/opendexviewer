@@ -18,6 +18,14 @@ const foliosPage = {
       }
     });
 
+    // Delegated click handler for token rows in folio detail
+    document.getElementById('folio-tokens-body')?.addEventListener('click', (e) => {
+      const row = e.target.closest('.token-row[data-mint]');
+      if (row) {
+        window.location.href = 'token.html?mint=' + encodeURIComponent(row.dataset.mint);
+      }
+    });
+
     // Load AI analysis cost from config
     api.burnCredits.getConfig().then(config => {
       if (config?.folioAIAnalysisCost) this.aiAnalysisCost = config.folioAIAnalysisCost;
@@ -130,7 +138,7 @@ const foliosPage = {
       const initial = handle[0]?.toUpperCase() || '?';
       const tokenCount = parseInt(folio.token_count, 10) || 0;
       const avatar = folio.twitter_avatar
-        ? `<img src="${this.esc(folio.twitter_avatar)}" alt="${handle}" class="folio-card-avatar" width="40" height="40" onerror="this.outerHTML='<div class=\\'folio-card-avatar folio-card-avatar-placeholder\\'>${initial}</div>'">`
+        ? `<img src="${this.esc(folio.twitter_avatar)}" alt="${handle}" class="folio-card-avatar" width="40" height="40" data-initial="${initial}">`
         : `<div class="folio-card-avatar folio-card-avatar-placeholder">${initial}</div>`;
 
       return `
@@ -155,6 +163,17 @@ const foliosPage = {
         </div>
       `;
     }).join('');
+
+    // Attach onerror handlers via JS to avoid inline event handlers (CSP)
+    grid.querySelectorAll('img.folio-card-avatar').forEach(img => {
+      img.onerror = function() {
+        const initial = this.dataset.initial || '?';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'folio-card-avatar folio-card-avatar-placeholder';
+        placeholder.textContent = initial;
+        this.replaceWith(placeholder);
+      };
+    });
   },
 
   renderDetail() {
@@ -224,7 +243,7 @@ const foliosPage = {
       const holders = t.holders ? utils.formatNumber(t.holders, '') : '--';
 
       return `
-        <tr class="token-row clickable" data-mint="${t.token_mint}" onclick="window.location.href='token.html?mint=${t.token_mint}'">
+        <tr class="token-row clickable" data-mint="${this.esc(t.token_mint)}">
           <td class="cell-rank">${i + 1}</td>
           <td class="cell-token">
             <div class="token-identity">
@@ -305,7 +324,7 @@ const foliosPage = {
       let errorMsg = 'AI analysis temporarily unavailable. Please try again.';
 
       if (err?.code === 'INSUFFICIENT_BC') {
-        errorMsg = `${err.message} <a href="burn.html" class="folio-ai-burn-link">Get more BC</a>`;
+        errorMsg = `${this.esc(err.message)} <a href="burn.html" class="folio-ai-burn-link">Get more BC</a>`;
       } else if (err?.code === 'WALLET_REQUIRED') {
         errorMsg = 'Please connect your wallet to use AI analysis.';
       } else if (err?.message) {

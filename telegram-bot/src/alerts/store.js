@@ -57,9 +57,14 @@ async function _persistToDisk() {
 function _pruneOldAlerts() {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const before = data.alerts.length;
-  data.alerts = data.alerts.filter(a =>
-    a.is_active === 1 || !a.triggered_at || new Date(a.triggered_at).getTime() > cutoff
-  );
+  data.alerts = data.alerts.filter(a => {
+    // Always keep active alerts
+    if (a.is_active === 1) return true;
+    // Prune inactive alerts older than 7 days (by triggered_at or created_at)
+    const ts = a.triggered_at || a.created_at;
+    if (!ts) return false;
+    return new Date(ts).getTime() > cutoff;
+  });
   const pruned = before - data.alerts.length;
   if (pruned > 0) {
     console.log(`[Store] Pruned ${pruned} old triggered alerts`);

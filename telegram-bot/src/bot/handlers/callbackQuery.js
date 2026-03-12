@@ -38,6 +38,7 @@ module.exports = (bot) => {
         link_preview_options: { is_disabled: true }
       });
     } catch (error) {
+      await ctx.answerCallbackQuery();
       await ctx.reply('Failed to load token details.');
     }
   });

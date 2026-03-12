@@ -47,8 +47,8 @@ const tokenDetail = {
     // Chart data is fetched directly from GeckoTerminal (no backend fallback) so the
     // backend's shared rate-limit budget is reserved for other endpoints.
     this._chartPreload = (typeof directGecko !== 'undefined')
-      ? directGecko.getOHLCV(this.mint, '1h')
-      : Promise.reject(new Error('GeckoTerminal client not available'));
+      ? directGecko.getOHLCV(this.mint, '1h').catch(() => null)
+      : Promise.resolve(null);
 
     this.bindEvents();
 
@@ -1618,16 +1618,16 @@ const tokenDetail = {
 
   async _loadAIAnalysisCost() {
     try {
-      const config = await api.burnCredits.getConfig();
-      if (config && typeof config.aiAnalysisCost === 'number') {
-        this._aiAnalysisCost = config.aiAnalysisCost;
+      const bcConfig = await api.burnCredits.getConfig();
+      if (bcConfig && typeof bcConfig.aiAnalysisCost === 'number') {
+        this._aiAnalysisCost = bcConfig.aiAnalysisCost;
         const btn = document.getElementById('ai-analysis-btn');
         if (btn) btn.title = `AI-powered holder analysis — costs ${this._aiAnalysisCost} Burn Credits`;
         const costBadge = btn && btn.querySelector('.ai-analysis-btn-cost');
         if (costBadge) costBadge.textContent = `${this._aiAnalysisCost} BC`;
       }
-      if (config && typeof config.aiAdvancedAnalysisCost === 'number') {
-        this._advancedAIAnalysisCost = config.aiAdvancedAnalysisCost;
+      if (bcConfig && typeof bcConfig.aiAdvancedAnalysisCost === 'number') {
+        this._advancedAIAnalysisCost = bcConfig.aiAdvancedAnalysisCost;
         const advBtn = document.getElementById('ai-advanced-btn');
         if (advBtn) advBtn.title = `Advanced AI analysis with custom prompt — costs ${this._advancedAIAnalysisCost} Burn Credits`;
         const advCostBadge = advBtn && advBtn.querySelector('.ai-advanced-cost');
@@ -1947,7 +1947,14 @@ const tokenDetail = {
       } else {
         const msg = this.escapeHtml(err.message || 'Analysis unavailable. Try again later.');
         errorEl.innerHTML = '<span>' + msg + '</span>' +
-          '<button class="ai-retry-btn" onclick="document.getElementById(\'ai-advanced-prompt-phase\').style.display=\'block\';this.parentElement.style.display=\'none\';">Try Again</button>';
+          '<button class="ai-retry-btn">Try Again</button>';
+        const retryBtn = errorEl.querySelector('.ai-retry-btn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', () => {
+            document.getElementById('ai-advanced-prompt-phase').style.display = 'block';
+            errorEl.style.display = 'none';
+          });
+        }
       }
     }
   },

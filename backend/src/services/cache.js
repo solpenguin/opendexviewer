@@ -308,8 +308,9 @@ class RedisCache {
     let size = 0;
 
     try {
-      // Use DBSIZE for a fast key count approximation instead of scanning all keys
-      size = await this.client.dbsize();
+      // Count only keys with our cache prefix to exclude non-cache keys (e.g. BullMQ)
+      const cacheKeys = await this._scanKeys(this._prefixKey('*'));
+      size = cacheKeys.length;
     } catch (err) {
       console.error('[Redis] Stats error:', err.message);
     }

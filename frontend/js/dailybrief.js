@@ -186,7 +186,7 @@ var dailyBrief = (function() {
 
       // Update stats bar
       els.total.textContent = data.totalGraduated || '--';
-      els.updated.textContent = data.updatedAt ? formatTimeAgo(data.updatedAt) : '--';
+      els.updated.textContent = data.updatedAt ? formatTimeAgo(new Date(data.updatedAt).getTime()) : '--';
 
       // Render analysis cards
       renderAnalysis(state.stats);

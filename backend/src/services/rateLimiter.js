@@ -87,6 +87,12 @@ const RATE_LIMITS = {
     burstLimit: 10,
     burstWindow: 1000
   },
+  solana: {
+    minInterval: 50,     // Minimum 50ms between requests (20 req/sec max)
+    maxJitter: 25,
+    burstLimit: 10,
+    burstWindow: 1000
+  },
   default: {
     minInterval: 100,
     maxJitter: 50,
@@ -254,17 +260,21 @@ async function queueRequest(apiName, requestFn) {
     }
 
     // Set up timeout for this request
+    const item = { requestFn, resolve, reject, timeoutId: null, timedOut: false, queuedAt: Date.now() };
     const timeoutId = setTimeout(() => {
+      // Mark as timed out so processQueue skips it if already dequeued
+      item.timedOut = true;
       // Find and remove this request from queue if still pending
-      const index = queue.findIndex(item => item.timeoutId === timeoutId);
+      const index = queue.indexOf(item);
       if (index !== -1) {
         queue.splice(index, 1);
-        console.warn(`[RateLimiter] ${apiName} request timed out after ${queueTimeout}ms in queue`);
-        reject(new Error(`Request timed out waiting in queue`));
       }
+      console.warn(`[RateLimiter] ${apiName} request timed out after ${queueTimeout}ms in queue`);
+      reject(new Error(`Request timed out waiting in queue`));
     }, queueTimeout);
+    item.timeoutId = timeoutId;
 
-    queue.push({ requestFn, resolve, reject, timeoutId, queuedAt: Date.now() });
+    queue.push(item);
 
     // Log queue stats periodically
     if (queue.length % 50 === 0) {
@@ -289,7 +299,12 @@ async function processQueue(apiName) {
 
   while (queue && queue.length > 0) {
     const item = queue.shift();
-    const { requestFn, resolve, reject, timeoutId, queuedAt } = item;
+    const { requestFn, resolve, reject, timeoutId, timedOut, queuedAt } = item;
+
+    // Skip if the request was already rejected by the timeout handler
+    if (timedOut) {
+      continue;
+    }
 
     try {
       // Clear the timeout since we're processing this request now

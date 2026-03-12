@@ -114,7 +114,7 @@ setInterval(() => {
   const now = Date.now();
   // Clean pool address cache
   for (const [key, entry] of poolAddressCache) {
-    if (now - entry.timestamp > POOL_CACHE_TTL) {
+    if (now > entry.expiry) {
       poolAddressCache.delete(key);
     }
   }

@@ -22,6 +22,12 @@ function isPrivateIP(ip) {
   }
   // IPv6 loopback and link-local
   if (ip === '::1' || ip.startsWith('fe80:') || ip.startsWith('fc00:') || ip.startsWith('fd00:')) return true;
+  // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) — extract and check the embedded IPv4
+  if (ip.startsWith('::ffff:')) {
+    const embedded = ip.slice(7);
+    const embeddedParts = embedded.split('.').map(Number);
+    if (embeddedParts.length === 4) return isPrivateIP(embedded);
+  }
   return false;
 }
 
@@ -38,16 +44,24 @@ async function downloadImage(url) {
   }
 
   // Resolve hostname and check for private IPs
-  const { address } = await dnsLookup(parsed.hostname);
+  const { address, family } = await dnsLookup(parsed.hostname);
   if (isPrivateIP(address)) {
     throw new Error('URLs pointing to private/internal addresses are not allowed');
   }
 
-  const response = await axios.get(url, {
+  // Use the resolved IP directly to prevent DNS rebinding (TOCTOU)
+  const resolvedUrl = new URL(url);
+  const originalHostname = resolvedUrl.hostname;
+  resolvedUrl.hostname = address;
+
+  const response = await axios.get(resolvedUrl.toString(), {
     responseType: 'arraybuffer',
     timeout: 10000,
     maxContentLength: 5 * 1024 * 1024, // 5MB limit
-    headers: { 'User-Agent': 'OpenDEX-Bot/1.0' }
+    headers: {
+      'User-Agent': 'OpenDEX-Bot/1.0',
+      'Host': originalHostname
+    }
   });
   const buffer = Buffer.from(response.data);
   return new InputFile(buffer, 'banner.jpg');

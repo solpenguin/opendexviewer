@@ -560,7 +560,9 @@ const jobProcessors = {
         if (existingMints.has(addr)) continue;
 
         const createdMs = coin.created_timestamp || 0;
-        const graduatedAtMs = createdMs;
+        // PumpFun API doesn't provide graduation timestamp, so we can't
+        // compute grad velocity. Set to null to make this explicit.
+        const graduatedAtMs = null;
 
         const token = {
           address: addr,

@@ -1111,6 +1111,9 @@ const adminPanel = {
 
   hideModal() {
     document.getElementById('confirm-modal').style.display = 'none';
+    // Always restore Cancel button visibility in case it was hidden by viewBugReport
+    const cancelBtn = document.getElementById('confirm-cancel');
+    if (cancelBtn) cancelBtn.style.display = '';
   },
 
   // Utility functions
@@ -1847,7 +1850,7 @@ const adminPanel = {
       this._folios = result.data || [];
       this.renderFoliosTable();
     } catch (error) {
-      tbody.innerHTML = `<tr><td colspan="7" class="error-state">Failed to load folios: ${error.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="error-state">Failed to load folios: ${this.escapeHtml(error.message)}</td></tr>`;
     }
   },
 
@@ -2003,7 +2006,7 @@ const adminPanel = {
         </tr>
       `).join('');
     } catch (error) {
-      tbody.innerHTML = `<tr><td colspan="5" class="error-state">Failed to load: ${error.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="error-state">Failed to load: ${this.escapeHtml(error.message)}</td></tr>`;
     }
   },
 
@@ -2188,7 +2191,7 @@ const adminPanel = {
         '</div>' +
         '<p style="margin: 0.75rem 0 0; font-size: 0.8rem; color: var(--text-muted);">Last enriched: ' + lastRefresh + '</p>';
     } catch (error) {
-      container.innerHTML = '<p style="color: var(--accent-red);">Failed to load: ' + error.message + '</p>';
+      container.innerHTML = '<p style="color: var(--accent-red);">Failed to load: ' + this.escapeHtml(error.message) + '</p>';
     }
   },
 

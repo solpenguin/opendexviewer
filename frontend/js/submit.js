@@ -683,7 +683,7 @@ const submitPage = {
       logoEl.src = token.logoUri || token.logoURI || token.logo || utils.getDefaultLogo();
       logoEl.onerror = function() { this.src = utils.getDefaultLogo(); };
 
-      const tAddr = token.address || token.mintAddress || mintInput.value || '';
+      const tAddr = token.address || token.mintAddress || mint || '';
       document.getElementById('preview-name').textContent = token.name || (tAddr ? `${tAddr.slice(0, 4)}...${tAddr.slice(-4)}` : '...');
       document.getElementById('preview-symbol').textContent = token.symbol || (tAddr ? tAddr.slice(0, 5).toUpperCase() : '...');
 

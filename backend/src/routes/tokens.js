@@ -578,6 +578,7 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
       }
 
       // Combine all sources and cache results
+      const cachePromises = [];
       for (const mint of uncachedMints) {
         let tokenData = null;
         const mintShort = `${mint.slice(0, 4)}...${mint.slice(-4)}`;
@@ -639,10 +640,11 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
         // Cache the result
         if (tokenData) {
           const cacheKey = keys.tokenInfo(mint);
-          await cache.setWithTimestamp(cacheKey, tokenData, TTL.PRICE_DATA);
+          cachePromises.push(cache.setWithTimestamp(cacheKey, tokenData, TTL.PRICE_DATA));
           results.push({ mint, data: tokenData, cached: false });
         }
       }
+      await Promise.all(cachePromises);
     }
 
     // Get view counts, sentiment scores, and community flags for all tokens
@@ -654,8 +656,9 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
     const viewCounts = mergeViewCounts(dbViewCounts, validMints);
 
     // Build final response array in original order
+    const resultMap = new Map(results.map(r => [r.mint, r]));
     const response = validMints.map(mint => {
-      const result = results.find(r => r.mint === mint);
+      const result = resultMap.get(mint);
       if (result && result.data) {
         const s = sentimentScores[mint];
         return {
@@ -1265,7 +1268,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
 
       // If holder count not cached, try sources sequentially with early return
       // Priority: Jupiter (fastest, includes holderCount in search) > Helius > Birdeye
-      if (holders === undefined) {
+      if (holders == null) {
         fetchPromises.push(
           (async () => {
             const jupiterCount = await jupiterService.getTokenHolderCount(mint).catch(() => null);
@@ -2369,16 +2372,15 @@ router.post('/:mint/holders/ai-analysis', validateMint, veryStrictLimiter, async
     return res.status(400).json({ error: 'Wallet connection required to use AI analysis', code: 'WALLET_REQUIRED' });
   }
 
-  // Charge Burn Credits (cost configurable via admin panel)
+  // Check Burn Credits balance (charge after successful API call)
   const aiAnalysisCost = await db.getAIAnalysisCost();
-  const charged = await db.spendBurnCredits(walletAddress, aiAnalysisCost, 'ai_holder_analysis', { mint });
-  if (!charged) {
-    const balance = await db.getBurnCreditBalance(walletAddress);
+  const preBalance = await db.getBurnCreditBalance(walletAddress);
+  if (preBalance.balance < aiAnalysisCost) {
     return res.status(402).json({
       error: `Insufficient Burn Credits. This analysis costs ${aiAnalysisCost} BC.`,
       code: 'INSUFFICIENT_BC',
       required: aiAnalysisCost,
-      balance: balance.balance
+      balance: preBalance.balance
     });
   }
 
@@ -2423,6 +2425,9 @@ Risk level: ${safe(m.riskLevel)}`;
     });
 
     const text = response.content[0]?.text || '';
+
+    // Charge Burn Credits after successful API call
+    await db.spendBurnCredits(walletAddress, aiAnalysisCost, 'ai_holder_analysis', { mint });
 
     // Parse score from response
     const scoreMatch = text.match(/SCORE:\s*(\d+)/);
@@ -2510,16 +2515,15 @@ router.post('/:mint/ai-advanced-analysis', validateMint, veryStrictLimiter, asyn
     return res.status(400).json({ error: 'Wallet connection required', code: 'WALLET_REQUIRED' });
   }
 
-  // Charge Burn Credits
+  // Check Burn Credits balance (charge after successful API call)
   const advancedCost = await db.getAdvancedAIAnalysisCost();
-  const charged = await db.spendBurnCredits(walletAddress, advancedCost, 'ai_advanced_analysis', { mint, promptHash });
-  if (!charged) {
-    const balance = await db.getBurnCreditBalance(walletAddress);
+  const preBalance = await db.getBurnCreditBalance(walletAddress);
+  if (preBalance.balance < advancedCost) {
     return res.status(402).json({
       error: `Insufficient Burn Credits. Advanced analysis costs ${advancedCost} BC.`,
       code: 'INSUFFICIENT_BC',
       required: advancedCost,
-      balance: balance.balance
+      balance: preBalance.balance
     });
   }
 
@@ -2576,6 +2580,9 @@ Analyze the token data above to answer the user's question. Stay strictly within
     });
 
     const analysis = response.content[0]?.text || '';
+
+    // Charge Burn Credits after successful API call
+    await db.spendBurnCredits(walletAddress, advancedCost, 'ai_advanced_analysis', { mint, promptHash });
 
     // Secondary output filter — strip anything that looks like leaked system instructions
     const filteredAnalysis = analysis

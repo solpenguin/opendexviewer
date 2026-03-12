@@ -291,6 +291,26 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
     }
   }
 
+  // Deduplicate market cap fetches: one fetch per unique token mint
+  const marketCapMap = new Map();
+  const uniqueMarketCapMints = [...new Set([...submissionMap.values()].map(s => s.token_mint))];
+  await Promise.all(uniqueMarketCapMints.map(async (mint) => {
+    try {
+      const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(mint));
+      const tokenInfo = tokenInfoMeta?.value ?? null;
+      if (tokenInfo && tokenInfo.marketCap) {
+        marketCapMap.set(mint, tokenInfo.marketCap);
+      } else {
+        const marketData = await geckoTerminal.getMarketData(mint);
+        if (marketData && marketData.marketCap) {
+          marketCapMap.set(mint, marketData.marketCap);
+        }
+      }
+    } catch (err) {
+      // Continue with null market cap (will use lowest threshold)
+    }
+  }));
+
   // Process votes with limited concurrency (max 5 at a time) to avoid
   // overwhelming the DB connection pool when batch sizes are large
   const BATCH_CONCURRENCY = 5;
@@ -334,17 +354,8 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
         voterBalance = holderData.balance || 0;
       }
 
-      // Fetch market cap for tiered approval thresholds
-      let marketCap = null;
-      try {
-        const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint));
-        const tokenInfo = tokenInfoMeta?.value ?? null;
-        if (tokenInfo && tokenInfo.marketCap) {
-          marketCap = tokenInfo.marketCap;
-        }
-      } catch (err) {
-        // Continue with null market cap (will use lowest threshold)
-      }
+      // Use pre-fetched market cap (deduplicated by token mint)
+      const marketCap = marketCapMap.get(submission.token_mint) || null;
 
       const existingVote = await db.getVote(submissionId, voterWallet);
 
@@ -376,10 +387,8 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
 
       tokensToInvalidate.add(submission.token_mint);
 
-      const [tally, updatedSubmission] = await Promise.all([
-        db.getVoteTally(submissionId),
-        db.getSubmission(submissionId)
-      ]);
+      // Tally must be fresh (vote just changed); reuse submission from pre-fetched submissionMap
+      const tally = await db.getVoteTally(submissionId);
 
       return {
         submissionId, success: true, ...result,
@@ -389,7 +398,7 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
           score: tally?.score || 0,
           weightedScore: parseFloat(tally?.weighted_score) || 0
         },
-        submissionStatus: updatedSubmission?.status || 'unknown'
+        submissionStatus: submission?.status || 'unknown'
       };
     } catch (error) {
       return {
@@ -563,9 +572,10 @@ router.post('/bulk-check', walletLimiter, asyncHandler(async (req, res) => {
   const votes = await db.getVotesBatch(parsedIds, wallet);
 
   // Build results map
+  const voteMap = new Map(votes.map(v => [v.submission_id, v]));
   const results = {};
   for (const id of parsedIds) {
-    const vote = votes.find(v => v.submission_id === id);
+    const vote = voteMap.get(id);
     results[id] = {
       hasVoted: !!vote,
       voteType: vote?.vote_type || null

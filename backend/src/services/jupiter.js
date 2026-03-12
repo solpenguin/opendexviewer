@@ -46,6 +46,9 @@ function createClient() {
   });
 }
 
+// Shared client instance (created once at module load)
+const client = createClient();
+
 /**
  * In-flight request deduplication
  * Prevents multiple concurrent requests for the same resource
@@ -115,7 +118,7 @@ setInterval(() => {
  * Uses Jupiter V2 search endpoint
  */
 async function searchTokens(query) {
-  const client = createClient();
+
 
   console.log(`[Jupiter] searchTokens: query="${query}"`);
 
@@ -168,7 +171,7 @@ async function searchTokens(query) {
  * Get token info by mint address
  */
 async function getTokenInfo(mintAddress) {
-  const client = createClient();
+
 
   try {
     // Search for specific mint address
@@ -240,7 +243,7 @@ async function getVerifiedTokens() {
     return cache.verifiedTokens;
   }
 
-  const client = createClient();
+
 
   try {
     // Tag endpoint uses query param
@@ -268,7 +271,7 @@ async function getVerifiedTokens() {
  * Valid intervals: 5m, 1h, 6h, 24h
  */
 async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, offset = 0, interval = '24h' }) {
-  const client = createClient();
+
 
   console.log(`[Jupiter] Fetching trending tokens: interval=${interval}, limit=${limit}, offset=${offset}`);
 
@@ -363,7 +366,7 @@ async function getTrendingTokens({ sort = 'volume', order = 'desc', limit = 50, 
  * Get recently created tokens
  */
 async function getNewTokens(limit = 50) {
-  const client = createClient();
+
 
   console.log(`[Jupiter] getNewTokens: limit=${limit}`);
 
@@ -414,7 +417,7 @@ async function getTokenPrice(mintAddress) {
     return cached.data;
   }
 
-  const client = createClient();
+
 
   try {
     const response = await jupiterRequest(() =>
@@ -455,7 +458,7 @@ async function getTokenPrices(mintAddresses) {
     return {};
   }
 
-  const client = createClient();
+
 
   try {
     // Jupiter allows comma-separated mint addresses (max 50)
@@ -522,7 +525,7 @@ async function getPriceHistory(mintAddress, { interval = '1h', limit = 100 }) {
 async function getTokenHolderCount(mintAddress) {
   if (!isConfigured()) return null;
 
-  const client = createClient();
+
 
   console.log(`[Jupiter] Getting holder count for ${mintAddress}`);
 
@@ -567,7 +570,7 @@ async function getTokenHolderCount(mintAddress) {
 async function getTokenMetrics(mintAddress) {
   if (!isConfigured()) return null;
 
-  const client = createClient();
+
 
   try {
     const response = await jupiterRequest(() =>
@@ -636,7 +639,7 @@ async function checkHealth() {
     };
   }
 
-  const client = createClient();
+
 
   try {
     const start = Date.now();

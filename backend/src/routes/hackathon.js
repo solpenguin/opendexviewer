@@ -136,10 +136,10 @@ router.get('/tokens', requireDatabase, asyncHandler(async (req, res) => {
       if (result.status === 'fulfilled' && result.value) {
         for (const [mint, info] of Object.entries(result.value)) {
           marketMap.set(mint, {
-            price: info.price || 0,
-            priceChange24h: info.priceChange24h || 0,
-            marketCap: info.marketCap || info.fdv || 0,
-            volume24h: info.volume24h || 0
+            price: info.price ?? null,
+            priceChange24h: info.priceChange24h ?? null,
+            marketCap: info.marketCap || info.fdv || null,
+            volume24h: info.volume24h ?? null
           });
         }
       }
@@ -150,13 +150,13 @@ router.get('/tokens', requireDatabase, asyncHandler(async (req, res) => {
       const meta = metadataMap.get(mint);
       const market = marketMap.get(mint);
 
-      const price = market ? market.price : 0;
+      const price = market ? market.price : null;
 
       // Market cap fallback chain:
       // 1. GeckoTerminal market_cap_usd (from token endpoint)
       // 2. GeckoTerminal fdv_usd (fully diluted valuation)
       // 3. Computed: current price × on-chain supply (from Helius)
-      let marketCap = market ? market.marketCap : 0;
+      let marketCap = market ? market.marketCap : null;
       if (!marketCap && price && meta.supply) {
         marketCap = price * meta.supply;
       }
@@ -169,9 +169,9 @@ router.get('/tokens', requireDatabase, asyncHandler(async (req, res) => {
         decimals: meta.decimals,
         logoUri: meta.logoUri,
         price,
-        priceChange24h: market ? market.priceChange24h : 0,
+        priceChange24h: market ? market.priceChange24h : null,
         marketCap,
-        volume24h: market ? market.volume24h : 0
+        volume24h: market ? market.volume24h : null
       };
     });
 

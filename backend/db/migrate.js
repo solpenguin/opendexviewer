@@ -105,12 +105,28 @@ async function resetDatabase() {
     log('\nResetting database (dropping all tables)...', 'red');
 
     await client.query(`
-      DROP TABLE IF EXISTS vote_tallies CASCADE;
-      DROP TABLE IF EXISTS votes CASCADE;
-      DROP TABLE IF EXISTS submissions CASCADE;
-      DROP TABLE IF EXISTS tokens CASCADE;
       DROP VIEW IF EXISTS submissions_with_votes CASCADE;
       DROP VIEW IF EXISTS approved_content CASCADE;
+      DROP TABLE IF EXISTS daily_brief_tokens CASCADE;
+      DROP TABLE IF EXISTS folio_tokens CASCADE;
+      DROP TABLE IF EXISTS folios CASCADE;
+      DROP TABLE IF EXISTS burn_credit_spends CASCADE;
+      DROP TABLE IF EXISTS burn_credits CASCADE;
+      DROP TABLE IF EXISTS burn_config CASCADE;
+      DROP TABLE IF EXISTS bug_reports CASCADE;
+      DROP TABLE IF EXISTS token_calls CASCADE;
+      DROP TABLE IF EXISTS vote_tallies CASCADE;
+      DROP TABLE IF EXISTS votes CASCADE;
+      DROP TABLE IF EXISTS sentiment_votes CASCADE;
+      DROP TABLE IF EXISTS sentiment_tallies CASCADE;
+      DROP TABLE IF EXISTS token_views CASCADE;
+      DROP TABLE IF EXISTS announcements CASCADE;
+      DROP TABLE IF EXISTS device_sessions CASCADE;
+      DROP TABLE IF EXISTS admin_sessions CASCADE;
+      DROP TABLE IF EXISTS api_keys CASCADE;
+      DROP TABLE IF EXISTS watchlist CASCADE;
+      DROP TABLE IF EXISTS submissions CASCADE;
+      DROP TABLE IF EXISTS tokens CASCADE;
       DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
       DROP FUNCTION IF EXISTS recalculate_vote_tally CASCADE;
       DROP FUNCTION IF EXISTS auto_moderate_submission CASCADE;

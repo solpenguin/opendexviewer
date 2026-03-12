@@ -5,6 +5,20 @@ const config = require('../../config');
 
 const PAGE_SIZE = 10;
 
+// In-memory cache for highlights (avoids 3 API calls on every page change)
+let highlightsCache = { text: null, fetchedAt: 0 };
+const HIGHLIGHTS_TTL_MS = 60 * 1000; // 60 seconds
+
+async function getCachedHighlights() {
+  const now = Date.now();
+  if (highlightsCache.text && (now - highlightsCache.fetchedAt) < HIGHLIGHTS_TTL_MS) {
+    return highlightsCache.text;
+  }
+  const text = await formatHighlights();
+  highlightsCache = { text, fetchedAt: now };
+  return text;
+}
+
 // Format the top-3 highlight cards (top called, top sentiment, most watched)
 async function formatHighlights() {
   const [calls, sentiment, watchlist] = await Promise.allSettled([
@@ -147,7 +161,7 @@ module.exports = (bot) => {
 
     try {
       const [highlights, leaderboard] = await Promise.all([
-        formatHighlights(),
+        getCachedHighlights(),
         tokensApi.leaderboardWatchlist({ limit: PAGE_SIZE, offset: 0 }),
       ]);
 
@@ -183,8 +197,6 @@ module.exports = (bot) => {
       return;
     }
 
-    await ctx.answerCallbackQuery({ text: 'Loading...' });
-
     try {
       const offset = (page - 1) * PAGE_SIZE;
       let result;
@@ -196,13 +208,14 @@ module.exports = (bot) => {
       } else if (tab === 'calls') {
         result = await tokensApi.leaderboardCalls({ limit: PAGE_SIZE, offset });
       } else {
+        await ctx.answerCallbackQuery();
         return;
       }
 
       const tokens = result.tokens || [];
       const total = result.total || 0;
 
-      const highlights = await formatHighlights();
+      const highlights = await getCachedHighlights();
       const boardText = formatLeaderboard(tab, tokens, total, page);
       const text = highlights + '\n' + boardText;
       const keyboard = buildKeyboard(tab, page, total);
@@ -212,6 +225,8 @@ module.exports = (bot) => {
         reply_markup: keyboard,
         link_preview_options: { is_disabled: true },
       });
+
+      await ctx.answerCallbackQuery();
     } catch (error) {
       // If message didn't change (same page clicked), Telegram throws — silently ignore
       if (error.description?.includes('message is not modified')) return;

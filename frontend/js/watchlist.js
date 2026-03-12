@@ -223,7 +223,7 @@ const watchlist = {
           this.items.set(mint, { mint });
         }
       });
-      return response.watchlist;
+      return response?.watchlist || {};
     } catch (error) {
       console.error('Failed to batch check watchlist:', error);
       return {};

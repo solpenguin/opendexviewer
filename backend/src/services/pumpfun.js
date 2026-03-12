@@ -119,7 +119,9 @@ async function getGraduatedTokens(windowMs = 72 * 60 * 60 * 1000, maxPages = 20)
         // Only PumpSwap graduates (not old Raydium graduates)
         if (!coin.pump_swap_pool) continue;
 
-        const createdTs = coin.created_timestamp || 0;
+        let createdTs = coin.created_timestamp || 0;
+        // Normalize to milliseconds if API returns seconds (< 1e12 threshold)
+        if (createdTs > 0 && createdTs < 1e12) createdTs *= 1000;
         if (createdTs < oldestOnPage) oldestOnPage = createdTs;
 
         // Within our creation-time window?

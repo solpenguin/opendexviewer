@@ -323,16 +323,15 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
   // Enrich unknown tokens first
   await enrichUnknownTokens(folio.tokens);
 
-  // Charge Burn Credits
+  // Check Burn Credits balance (charge after successful API call)
   const cost = await db.getFolioAIAnalysisCost();
-  const charged = await db.spendBurnCredits(walletAddress, cost, 'folio_ai_analysis', { folioId: id });
-  if (!charged) {
-    const balance = await db.getBurnCreditBalance(walletAddress);
+  const preBalance = await db.getBurnCreditBalance(walletAddress);
+  if (preBalance.balance < cost) {
     return res.status(402).json({
       error: `Insufficient Burn Credits. Folio analysis costs ${cost} BC.`,
       code: 'INSUFFICIENT_BC',
       required: cost,
-      balance: balance.balance
+      balance: preBalance.balance
     });
   }
 
@@ -437,6 +436,10 @@ ${tokenLines}`;
     });
 
     const analysis = (response.content[0]?.text || '').trim();
+
+    // Charge Burn Credits after successful API call
+    await db.spendBurnCredits(walletAddress, cost, 'folio_ai_analysis', { folioId: id });
+
     const result = { analysis, cached: false, folioId: id, folioName: folio.name, tokenCount: folio.tokens.length };
 
     // Cache for 3 hours

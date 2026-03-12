@@ -45,7 +45,7 @@ module.exports = (bot) => {
 
     try {
       const result = await tokensApi.ogfinderSearch(query);
-      const tokens = (result.data && result.data.tokens) || [];
+      const tokens = result.tokens || result.data?.tokens || [];
 
       if (!tokens.length) {
         return ctx.api.editMessageText(

@@ -59,7 +59,11 @@ CREATE TABLE IF NOT EXISTS votes (
     submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
     voter_wallet VARCHAR(44) NOT NULL,
     vote_type VARCHAR(10) NOT NULL CHECK (vote_type IN ('up', 'down')),
+    vote_weight DECIMAL(5,2) DEFAULT 1.0,
+    voter_balance DECIMAL(30,10) DEFAULT 0,
+    voter_percentage DECIMAL(12,6) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(submission_id, voter_wallet)
 );
 
@@ -82,6 +86,7 @@ CREATE TABLE IF NOT EXISTS vote_tallies (
     upvotes INTEGER DEFAULT 0,
     downvotes INTEGER DEFAULT 0,
     score INTEGER DEFAULT 0,
+    weighted_score DECIMAL(10,2) DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -121,12 +126,13 @@ CREATE TRIGGER update_vote_tallies_updated_at
 CREATE OR REPLACE FUNCTION recalculate_vote_tally(p_submission_id INTEGER)
 RETURNS void AS $$
 BEGIN
-    INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, updated_at)
+    INSERT INTO vote_tallies (submission_id, upvotes, downvotes, score, weighted_score, updated_at)
     SELECT
         p_submission_id,
         COALESCE(COUNT(*) FILTER (WHERE vote_type = 'up'), 0),
         COALESCE(COUNT(*) FILTER (WHERE vote_type = 'down'), 0),
         COALESCE(COUNT(*) FILTER (WHERE vote_type = 'up'), 0) - COALESCE(COUNT(*) FILTER (WHERE vote_type = 'down'), 0),
+        COALESCE(SUM(CASE WHEN vote_type = 'up' THEN vote_weight ELSE -vote_weight END), 0),
         NOW()
     FROM votes
     WHERE submission_id = p_submission_id
@@ -134,6 +140,7 @@ BEGIN
         upvotes = EXCLUDED.upvotes,
         downvotes = EXCLUDED.downvotes,
         score = EXCLUDED.score,
+        weighted_score = EXCLUDED.weighted_score,
         updated_at = NOW();
 END;
 $$ LANGUAGE plpgsql;

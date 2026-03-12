@@ -20,12 +20,12 @@ async function enrichWithPrice(token) {
     if (priceData) {
       return {
         ...token,
-        price: priceData.price || token.price || 0,
-        marketCap: priceData.marketCap || token.marketCap || 0,
-        fdv: priceData.fdv || token.fdv || 0,
-        volume24h: priceData.volume24h || token.volume24h || 0,
+        price: priceData.price ?? token.price ?? 0,
+        marketCap: priceData.marketCap ?? token.marketCap ?? 0,
+        fdv: priceData.fdv ?? token.fdv ?? 0,
+        volume24h: priceData.volume24h ?? token.volume24h ?? 0,
         priceChange24h: priceData.priceChange24h ?? token.priceChange24h ?? 0,
-        liquidity: priceData.liquidity || token.liquidity || 0
+        liquidity: priceData.liquidity ?? token.liquidity ?? 0
       };
     }
   } catch (err) {

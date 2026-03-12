@@ -725,7 +725,7 @@ const communityPage = {
         e.stopPropagation();
         const card = btn.closest('.your-call-card');
         const callId = parseInt(card.dataset.callId);
-        const callData = this.yourCalls.find(c => c.id === callId);
+        const callData = this.yourCalls.find(c => c.id == callId);
         if (callData) this.exportCallGraphic(callData);
       });
     });
