@@ -4,27 +4,27 @@ const store = require('../../alerts/store');
 const { escapeHtml, formatNumber, formatChange, formatPrice } = require('../../utils/format');
 const config = require('../../config');
 
-// ── Filter / frequency labels ────────────────────────────────────────
+// ── Filter / frequency labels (HTML-safe — used in parse_mode HTML) ──
 const MCAP_LABELS = {
   all: 'All',
-  micro: '< $50K',
-  small: '$50K–$250K',
-  mid: '$250K–$1M',
-  large: '> $1M',
+  micro: '&lt; $50K',
+  small: '$50K\u2013$250K',
+  mid: '$250K\u2013$1M',
+  large: '&gt; $1M',
 };
 const VOL_LABELS = {
   '0': 'Any',
-  '1000': '> $1K',
-  '10000': '> $10K',
-  '50000': '> $50K',
-  '100000': '> $100K',
+  '1000': '&gt; $1K',
+  '10000': '&gt; $10K',
+  '50000': '&gt; $50K',
+  '100000': '&gt; $100K',
 };
 const RATIO_LABELS = {
   '0': 'Any',
-  '0.5': '>= 0.5x',
-  '1': '>= 1x',
-  '2': '>= 2x',
-  '5': '>= 5x',
+  '0.5': '&gt;= 0.5x',
+  '1': '&gt;= 1x',
+  '2': '&gt;= 2x',
+  '5': '&gt;= 5x',
 };
 const FREQ_LABELS = {
   '3': 'Every 3h',
