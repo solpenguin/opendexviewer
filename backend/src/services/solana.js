@@ -360,67 +360,31 @@ async function getTokenMetadata(mintAddress) {
       logoUri = content.json_uri;
     }
 
-    // Extract social/default links from metadata.
-    // Links can come from three sources (checked in priority order):
-    //   1. Off-chain JSON metadata (json_uri) — most tokens store links here
-    //      (pump.fun, Metaplex standard). Fields: twitter, telegram, website, discord
-    //   2. content.links.external_url — set by some token creators on-chain
-    //   3. metadata.extensions — legacy on-chain extensions (rarely used)
-    const defaultLinks = {};
+    // On-chain fallback links (content.links and metadata.extensions).
+    // The primary source — off-chain JSON at json_uri — is fetched separately
+    // via fetchOffchainLinks() so it can run in parallel with other work.
+    const onchainLinks = {};
     try {
-      // 1. Fetch off-chain JSON metadata (where most tokens store social links)
-      if (typeof content.json_uri === 'string' && content.json_uri) {
-        try {
-          const jsonRes = await axios.get(content.json_uri, { timeout: 5000, httpsAgent });
-          const offchain = jsonRes.data;
-          if (offchain && typeof offchain === 'object') {
-            if (typeof offchain.twitter === 'string' && offchain.twitter) {
-              defaultLinks.twitter = offchain.twitter.startsWith('http') ? offchain.twitter : `https://x.com/${offchain.twitter.replace(/^@/, '')}`;
-            }
-            if (typeof offchain.telegram === 'string' && offchain.telegram) {
-              defaultLinks.telegram = offchain.telegram.startsWith('http') ? offchain.telegram : `https://t.me/${offchain.telegram.replace(/^@/, '')}`;
-            }
-            if (typeof offchain.discord === 'string' && offchain.discord) {
-              defaultLinks.discord = offchain.discord.startsWith('http') ? offchain.discord : `https://discord.gg/${offchain.discord}`;
-            }
-            if (typeof offchain.website === 'string' && offchain.website) {
-              defaultLinks.website = offchain.website.startsWith('http') ? offchain.website : `https://${offchain.website}`;
-            }
-            // Some tokens use "external_url" in their JSON metadata
-            if (!defaultLinks.website && typeof offchain.external_url === 'string' && offchain.external_url) {
-              defaultLinks.website = offchain.external_url.startsWith('http') ? offchain.external_url : `https://${offchain.external_url}`;
-            }
-          }
-        } catch (jsonErr) {
-          // Non-critical: off-chain metadata may be unavailable (IPFS down, etc.)
-          console.warn(`[Solana] Failed to fetch json_uri for ${mintAddress}: ${jsonErr.message}`);
-        }
+      if (typeof content.links?.external_url === 'string' && content.links.external_url) {
+        onchainLinks.website = content.links.external_url;
       }
-
-      // 2. content.links.external_url (on-chain, fallback for website)
-      if (!defaultLinks.website && typeof content.links?.external_url === 'string' && content.links.external_url) {
-        defaultLinks.website = content.links.external_url;
-      }
-
-      // 3. metadata.extensions (legacy on-chain extensions, rarely populated)
       const ext = metadata.extensions;
       if (ext && typeof ext === 'object') {
-        if (!defaultLinks.twitter && typeof ext.twitter === 'string' && ext.twitter) {
-          defaultLinks.twitter = ext.twitter.startsWith('http') ? ext.twitter : `https://x.com/${ext.twitter.replace(/^@/, '')}`;
+        if (typeof ext.twitter === 'string' && ext.twitter) {
+          onchainLinks.twitter = ext.twitter.startsWith('http') ? ext.twitter : `https://x.com/${ext.twitter.replace(/^@/, '')}`;
         }
-        if (!defaultLinks.telegram && typeof ext.telegram === 'string' && ext.telegram) {
-          defaultLinks.telegram = ext.telegram.startsWith('http') ? ext.telegram : `https://t.me/${ext.telegram.replace(/^@/, '')}`;
+        if (typeof ext.telegram === 'string' && ext.telegram) {
+          onchainLinks.telegram = ext.telegram.startsWith('http') ? ext.telegram : `https://t.me/${ext.telegram.replace(/^@/, '')}`;
         }
-        if (!defaultLinks.discord && typeof ext.discord === 'string' && ext.discord) {
-          defaultLinks.discord = ext.discord.startsWith('http') ? ext.discord : `https://discord.gg/${ext.discord}`;
+        if (typeof ext.discord === 'string' && ext.discord) {
+          onchainLinks.discord = ext.discord.startsWith('http') ? ext.discord : `https://discord.gg/${ext.discord}`;
         }
-        if (!defaultLinks.website && typeof ext.website === 'string' && ext.website) {
-          defaultLinks.website = ext.website.startsWith('http') ? ext.website : `https://${ext.website}`;
+        if (!onchainLinks.website && typeof ext.website === 'string' && ext.website) {
+          onchainLinks.website = ext.website.startsWith('http') ? ext.website : `https://${ext.website}`;
         }
       }
     } catch (e) {
-      // Non-critical: don't let link extraction break metadata response
-      console.error('[Solana] defaultLinks extraction error:', e.message);
+      console.error('[Solana] onchainLinks extraction error:', e.message);
     }
 
     const result = {
@@ -435,8 +399,10 @@ async function getTokenMetadata(mintAddress) {
       hasPriceData: price !== null,
       // Logo from content if available (checked multiple locations)
       logoUri: logoUri,
-      // Social links from on-chain metadata
-      defaultLinks: Object.keys(defaultLinks).length > 0 ? defaultLinks : null
+      // json_uri for off-chain metadata fetch (social links live here)
+      jsonUri: (typeof content.json_uri === 'string' && content.json_uri) ? content.json_uri : null,
+      // On-chain fallback links (extensions / content.links)
+      onchainLinks: Object.keys(onchainLinks).length > 0 ? onchainLinks : null
     };
 
     console.log(`[Solana] Token metadata for ${mintAddress}:`, {
@@ -449,6 +415,48 @@ async function getTokenMetadata(mintAddress) {
     return result;
   } catch (error) {
     console.error('[Solana] getTokenMetadata error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch off-chain JSON metadata and extract social links.
+ * Most Solana tokens (pump.fun, Metaplex standard) store twitter/telegram/
+ * website/discord in the JSON file pointed to by json_uri.
+ * Designed to run in parallel with other work — call this with the jsonUri
+ * returned by getTokenMetadata().
+ *
+ * @param {string} jsonUri - URL to off-chain JSON metadata
+ * @returns {Promise<Object|null>} - { twitter, telegram, website, discord } or null
+ */
+async function fetchOffchainLinks(jsonUri) {
+  if (!jsonUri) return null;
+
+  try {
+    const jsonRes = await axios.get(jsonUri, { timeout: 5000, httpsAgent });
+    const offchain = jsonRes.data;
+    if (!offchain || typeof offchain !== 'object') return null;
+
+    const links = {};
+    if (typeof offchain.twitter === 'string' && offchain.twitter) {
+      links.twitter = offchain.twitter.startsWith('http') ? offchain.twitter : `https://x.com/${offchain.twitter.replace(/^@/, '')}`;
+    }
+    if (typeof offchain.telegram === 'string' && offchain.telegram) {
+      links.telegram = offchain.telegram.startsWith('http') ? offchain.telegram : `https://t.me/${offchain.telegram.replace(/^@/, '')}`;
+    }
+    if (typeof offchain.discord === 'string' && offchain.discord) {
+      links.discord = offchain.discord.startsWith('http') ? offchain.discord : `https://discord.gg/${offchain.discord}`;
+    }
+    if (typeof offchain.website === 'string' && offchain.website) {
+      links.website = offchain.website.startsWith('http') ? offchain.website : `https://${offchain.website}`;
+    }
+    if (!links.website && typeof offchain.external_url === 'string' && offchain.external_url) {
+      links.website = offchain.external_url.startsWith('http') ? offchain.external_url : `https://${offchain.external_url}`;
+    }
+
+    return Object.keys(links).length > 0 ? links : null;
+  } catch (err) {
+    console.warn(`[Solana] Failed to fetch json_uri ${jsonUri}: ${err.message}`);
     return null;
   }
 }
@@ -936,6 +944,7 @@ module.exports = {
   getTokenLargestAccountsDAS,
   getTokenHolderSample,
   getTokenMetadata,
+  fetchOffchainLinks,
   getTokenMetadataBatch,
   getStreamflowLockedAmount,
   getTokenAuthorities,

@@ -1328,19 +1328,34 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         circulatingSupply = supply;
       }
 
-      // Second pass: Jupiter fallback for name if needed
+      // Second pass: fetch off-chain metadata links + Jupiter name fallback in parallel.
+      // Off-chain JSON (json_uri) is where most tokens store social links (pump.fun, etc.).
+      // Links are cached separately for 24h since they rarely change — avoids re-fetching
+      // json_uri on every price refresh (which happens every 1-10 minutes).
       const coingeckoId = (geckoTokenInfo || {}).coingeckoId || null;
-      let jupiterMeta = null;
-      if (!helius.name && !gecko.name) {
-        jupiterMeta = await jupiterService.getTokenInfo(mint).catch(() => null);
-      }
+      const linksCacheKey = `default-links:${mint}`;
+      const [cachedLinks, jupiterMeta] = await Promise.all([
+        cache.get(linksCacheKey),
+        (!helius.name && !gecko.name)
+          ? jupiterService.getTokenInfo(mint).catch(() => null)
+          : Promise.resolve(null)
+      ]);
       const jup = jupiterMeta || {};
 
-      // Default social links: sourced from on-chain token metadata (Helius DAS)
-      const mergedDefaultLinks = {};
-      const heliusLinks = helius.defaultLinks || {};
-      for (const key of ['website', 'twitter', 'telegram', 'discord']) {
-        if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
+      // Resolve default links: use 24h cache if available, otherwise fetch + merge + cache
+      let mergedDefaultLinks = {};
+      if (cachedLinks) {
+        mergedDefaultLinks = cachedLinks;
+      } else {
+        const offchainLinks = await solanaService.fetchOffchainLinks(helius.jsonUri).catch(() => null);
+        const onchain = helius.onchainLinks || {};
+        for (const key of ['website', 'twitter', 'telegram', 'discord']) {
+          if (offchainLinks && offchainLinks[key]) mergedDefaultLinks[key] = offchainLinks[key];
+          else if (onchain[key]) mergedDefaultLinks[key] = onchain[key];
+        }
+        // Cache for 24h — social links rarely change. Cache even empty result
+        // to avoid re-fetching json_uri for tokens that have no links.
+        await cache.set(linksCacheKey, Object.keys(mergedDefaultLinks).length > 0 ? mergedDefaultLinks : {}, TTL.DAY);
       }
 
       const tokenResult = {
