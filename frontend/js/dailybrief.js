@@ -16,7 +16,8 @@ var dailyBrief = (function() {
     hours: '24',
     // Filters (client-side)
     filterMcap: 'all',
-    filterMinVolume: 0
+    filterMinVolume: 0,
+    filterMinVolRatio: 1
   };
 
   // DOM element cache
@@ -36,6 +37,7 @@ var dailyBrief = (function() {
     els.hoursDropdown = document.getElementById('brief-hours-dropdown');
     els.mcapDropdown = document.getElementById('brief-mcap-dropdown');
     els.volumeDropdown = document.getElementById('brief-volume-dropdown');
+    els.volratioDropdown = document.getElementById('brief-volratio-dropdown');
     els.refreshBtn = document.getElementById('brief-refresh-btn');
     // Analysis panel
     els.analysis = document.getElementById('brief-analysis');
@@ -48,6 +50,7 @@ var dailyBrief = (function() {
     els.avgVolRatio = document.getElementById('brief-avg-volratio');
     els.topVolRatio = document.getElementById('brief-top-volratio');
     // AI KOL
+    els.kolAction = document.getElementById('brief-kol-action');
     els.kolBtn = document.getElementById('brief-kol-btn');
     els.kolPanel = document.getElementById('brief-kol-panel');
     els.kolContent = document.getElementById('brief-kol-content');
@@ -110,6 +113,9 @@ var dailyBrief = (function() {
     if (els.analysis) {
       els.analysis.style.display = (which === 'results' || which === 'empty') ? '' : 'none';
     }
+    if (els.kolAction) {
+      els.kolAction.style.display = which === 'results' ? '' : 'none';
+    }
   }
 
   // --- Client-side filtering ---
@@ -125,6 +131,9 @@ var dailyBrief = (function() {
 
       // Volume filter
       if (state.filterMinVolume > 0 && (t.volume24h || 0) < state.filterMinVolume) return false;
+
+      // Vol/MCap ratio filter
+      if (state.filterMinVolRatio > 0 && (t.volMcapRatio || 0) < state.filterMinVolRatio) return false;
 
       return true;
     });
@@ -497,6 +506,11 @@ var dailyBrief = (function() {
 
     initDropdown(els.volumeDropdown, function(value) {
       state.filterMinVolume = parseInt(value) || 0;
+      if (state.tokens.length > 0) applyFiltersAndRender();
+    });
+
+    initDropdown(els.volratioDropdown, function(value) {
+      state.filterMinVolRatio = parseFloat(value) || 0;
       if (state.tokens.length > 0) applyFiltersAndRender();
     });
 

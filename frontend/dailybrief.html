@@ -210,15 +210,33 @@
         </div>
       </div>
 
-      <button id="brief-kol-btn" class="btn btn-accent btn-sm brief-kol-btn" type="button">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93"/><path d="M8.24 9.93A4 4 0 0112 2"/>
-          <path d="M2 19c0-3.87 3.13-7 7-7h6c3.87 0 7 3.13 7 7"/>
-          <circle cx="12" cy="14" r="3"/>
-        </svg>
-        AI KOL
-        <span class="brief-kol-cost">100 BC</span>
-      </button>
+      <div class="spikes-dropdown" id="brief-volratio-dropdown">
+        <button class="spikes-dropdown-trigger" type="button">
+          <svg class="spikes-dropdown-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span class="spikes-dropdown-text">Vol/MCap &ge; 1x</span>
+          <svg class="spikes-dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="spikes-dropdown-menu">
+          <div class="spikes-dropdown-label">Min Vol/MCap Ratio</div>
+          <button class="spikes-dropdown-item" data-value="0">
+            <span class="spikes-dropdown-item-dot"></span>All Ratios
+          </button>
+          <button class="spikes-dropdown-item" data-value="0.5">
+            <span class="spikes-dropdown-item-dot"></span>&ge; 0.5x
+          </button>
+          <button class="spikes-dropdown-item active" data-value="1">
+            <span class="spikes-dropdown-item-dot"></span>&ge; 1x
+          </button>
+          <button class="spikes-dropdown-item" data-value="2">
+            <span class="spikes-dropdown-item-dot"></span>&ge; 2x
+          </button>
+          <button class="spikes-dropdown-item" data-value="5">
+            <span class="spikes-dropdown-item-dot"></span>&ge; 5x
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- AI KOL Result Panel -->
@@ -296,6 +314,17 @@
         <span class="spikes-stat-label">Updated</span>
         <span class="spikes-stat-value" id="brief-updated">--</span>
       </div>
+    </div>
+
+    <!-- AI KOL Action -->
+    <div class="brief-kol-action" id="brief-kol-action" style="display: none;">
+      <button id="brief-kol-btn" class="brief-kol-btn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        <span class="brief-kol-label">AI KOL Analysis</span>
+        <span class="brief-kol-cost">100 BC</span>
+      </button>
     </div>
 
     <!-- Results -->
