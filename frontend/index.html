@@ -275,8 +275,8 @@
     })();
     /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
 
-    // Platform token preview
-    (function() {
+    // Platform token preview — must wait for deferred api.js to load
+    document.addEventListener('DOMContentLoaded', function() {
       var PLATFORM_MINT = '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump';
       var card = document.getElementById('platform-token-card');
       if (!card) return;
@@ -357,7 +357,7 @@
       }).catch(function() {
         card.innerHTML = '<p class="landing-token-card-error">Failed to load token data</p>';
       });
-    })();
+    });
   </script>
 </body>
 </html>

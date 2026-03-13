@@ -249,12 +249,12 @@ var dailyBrief = (function() {
       // Volume
       html += '<td class="cell-volume">' + formatUsd(t.volume24h) + '</td>';
 
+      // Vol/MCap ratio
+      html += '<td class="cell-volratio"><span class="ratio-badge ' + ratioClass + '">' + ratio.toFixed(2) + 'x</span></td>';
+
       // Token Age (time since creation on PumpFun)
       var ageTime = t.createdAt ? new Date(t.createdAt).getTime() : null;
       html += '<td class="cell-age">' + (ageTime ? formatTimeAgo(ageTime) : '--') + '</td>';
-
-      // Vol/MCap ratio
-      html += '<td class="cell-volratio"><span class="ratio-badge ' + ratioClass + '">' + ratio.toFixed(2) + 'x</span></td>';
 
       // Graduated (time ago) — graduatedAt is the PumpSwap pool creation time,
       // discoveredAt is when we first saw it (fallback if pool time unavailable)

@@ -15210,7 +15210,7 @@ body.landscape .hero h1 {
 
 .brief-analysis-sub {
   font-size: 0.6875rem;
-  color: var(--text-dim);
+  color: var(--text-secondary);
 }
 
 /* Stats bar */
@@ -15300,6 +15300,18 @@ body.landscape .hero h1 {
 
 .brief-row:hover {
   background: var(--bg-hover);
+}
+
+.brief-row .change-up {
+  color: #22c55e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
+}
+
+.brief-row .change-down {
+  color: #ef4444;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
 }
 
 /* Mobile responsive */
