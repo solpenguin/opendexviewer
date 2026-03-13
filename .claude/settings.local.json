@@ -111,7 +111,11 @@
       "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed --stat)",
       "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/solana.js)",
       "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/geckoTerminal.js)",
-      "Bash(node -e \"require\\(''''./backend/src/routes/tokens.js''''\\)\")"
+      "Bash(node -e \"require\\(''''./backend/src/routes/tokens.js''''\\)\")",
+      "WebSearch",
+      "WebFetch(domain:docs.helius.dev)",
+      "WebFetch(domain:www.helius.dev)",
+      "WebFetch(domain:helius.mintlify.app)"
     ]
   }
 }

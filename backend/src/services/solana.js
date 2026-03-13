@@ -360,25 +360,61 @@ async function getTokenMetadata(mintAddress) {
       logoUri = content.json_uri;
     }
 
-    // Extract social/default links from metadata
+    // Extract social/default links from metadata.
+    // Links can come from three sources (checked in priority order):
+    //   1. Off-chain JSON metadata (json_uri) — most tokens store links here
+    //      (pump.fun, Metaplex standard). Fields: twitter, telegram, website, discord
+    //   2. content.links.external_url — set by some token creators on-chain
+    //   3. metadata.extensions — legacy on-chain extensions (rarely used)
     const defaultLinks = {};
     try {
-      if (typeof content.links?.external_url === 'string' && content.links.external_url) {
+      // 1. Fetch off-chain JSON metadata (where most tokens store social links)
+      if (typeof content.json_uri === 'string' && content.json_uri) {
+        try {
+          const jsonRes = await axios.get(content.json_uri, { timeout: 5000, httpsAgent });
+          const offchain = jsonRes.data;
+          if (offchain && typeof offchain === 'object') {
+            if (typeof offchain.twitter === 'string' && offchain.twitter) {
+              defaultLinks.twitter = offchain.twitter.startsWith('http') ? offchain.twitter : `https://x.com/${offchain.twitter.replace(/^@/, '')}`;
+            }
+            if (typeof offchain.telegram === 'string' && offchain.telegram) {
+              defaultLinks.telegram = offchain.telegram.startsWith('http') ? offchain.telegram : `https://t.me/${offchain.telegram.replace(/^@/, '')}`;
+            }
+            if (typeof offchain.discord === 'string' && offchain.discord) {
+              defaultLinks.discord = offchain.discord.startsWith('http') ? offchain.discord : `https://discord.gg/${offchain.discord}`;
+            }
+            if (typeof offchain.website === 'string' && offchain.website) {
+              defaultLinks.website = offchain.website.startsWith('http') ? offchain.website : `https://${offchain.website}`;
+            }
+            // Some tokens use "external_url" in their JSON metadata
+            if (!defaultLinks.website && typeof offchain.external_url === 'string' && offchain.external_url) {
+              defaultLinks.website = offchain.external_url.startsWith('http') ? offchain.external_url : `https://${offchain.external_url}`;
+            }
+          }
+        } catch (jsonErr) {
+          // Non-critical: off-chain metadata may be unavailable (IPFS down, etc.)
+          console.warn(`[Solana] Failed to fetch json_uri for ${mintAddress}: ${jsonErr.message}`);
+        }
+      }
+
+      // 2. content.links.external_url (on-chain, fallback for website)
+      if (!defaultLinks.website && typeof content.links?.external_url === 'string' && content.links.external_url) {
         defaultLinks.website = content.links.external_url;
       }
-      // Some tokens store social links in metadata extensions — values may be handles or full URLs
+
+      // 3. metadata.extensions (legacy on-chain extensions, rarely populated)
       const ext = metadata.extensions;
       if (ext && typeof ext === 'object') {
-        if (typeof ext.twitter === 'string' && ext.twitter) {
+        if (!defaultLinks.twitter && typeof ext.twitter === 'string' && ext.twitter) {
           defaultLinks.twitter = ext.twitter.startsWith('http') ? ext.twitter : `https://x.com/${ext.twitter.replace(/^@/, '')}`;
         }
-        if (typeof ext.telegram === 'string' && ext.telegram) {
+        if (!defaultLinks.telegram && typeof ext.telegram === 'string' && ext.telegram) {
           defaultLinks.telegram = ext.telegram.startsWith('http') ? ext.telegram : `https://t.me/${ext.telegram.replace(/^@/, '')}`;
         }
-        if (typeof ext.discord === 'string' && ext.discord) {
+        if (!defaultLinks.discord && typeof ext.discord === 'string' && ext.discord) {
           defaultLinks.discord = ext.discord.startsWith('http') ? ext.discord : `https://discord.gg/${ext.discord}`;
         }
-        if (typeof ext.website === 'string' && ext.website && !defaultLinks.website) {
+        if (!defaultLinks.website && typeof ext.website === 'string' && ext.website) {
           defaultLinks.website = ext.website.startsWith('http') ? ext.website : `https://${ext.website}`;
         }
       }
