@@ -84,11 +84,53 @@ async function enrichMarketDataBatched(tokens) {
   }
 }
 
+/**
+ * Enrich tokens with pool creation time (= graduation time) via individual
+ * GeckoTerminal pool lookups. Also backfills priceChange24h and liquidity
+ * which the batch /tokens/multi/ endpoint often returns null for new tokens.
+ */
+async function enrichGraduationTime(tokens) {
+  for (const token of tokens) {
+    try {
+      const overview = await geckoService.getTokenOverview(token.address);
+      if (overview) {
+        if (overview.pairCreatedAt) {
+          token.graduatedAt = overview.pairCreatedAt;
+          // Recompute grad velocity now that we have the real graduation time
+          const gradMs = new Date(overview.pairCreatedAt).getTime();
+          token._graduatedAtMs = gradMs;
+          token.gradVelocityHours = computeGradVelocity(
+            token.createdAt ? new Date(token.createdAt).getTime() : null,
+            gradMs
+          );
+        }
+        // Backfill fields the batch endpoint often misses on new tokens
+        if (overview.priceChange24h && !token.priceChange24h) token.priceChange24h = overview.priceChange24h;
+        if (overview.liquidity && !token.liquidity) token.liquidity = overview.liquidity;
+      }
+    } catch (err) {
+      if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+      /* non-critical — graduatedAt stays null, COALESCE(NULL, NOW()) in DB */
+    }
+  }
+}
+
 async function enrichWithHolders(token) {
   try {
     // Jupiter V2 search returns holderCount directly
     const count = await jupiterService.getTokenHolderCount(token.address);
-    if (count != null) token.holders = count;
+    if (count != null && count > 0) {
+      token.holders = count;
+      return;
+    }
+  } catch (err) {
+    if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+    /* non-critical — fall through to Helius */
+  }
+  // Fallback: Helius DAS API for newly graduated tokens not yet in Jupiter
+  try {
+    const heliusCount = await solanaService.getTokenHolderCount(token.address);
+    if (heliusCount != null && heliusCount > 0) token.holders = heliusCount;
   } catch (err) {
     if (err.isOverloaded || err.isCircuitBreakerError) throw err;
     /* non-critical */
@@ -617,6 +659,11 @@ const jobProcessors = {
           }
         }
 
+        // Fetch pool creation time (= real graduation time) via individual
+        // GeckoTerminal pool lookups. Runs after batch enrichment to avoid
+        // competing for the same rate-limited queue.
+        await enrichGraduationTime(newTokens);
+
         for (const t of newTokens) {
           computeDerivedFields(t);
         }
@@ -639,6 +686,7 @@ const jobProcessors = {
         }));
 
         // Use individual pool lookups for accurate price change + liquidity
+        // Also captures pairCreatedAt to fix graduated_at for pre-fix tokens
         for (const token of staleTokens) {
           try {
             const overview = await geckoService.getTokenOverview(token.address);
@@ -648,6 +696,7 @@ const jobProcessors = {
               token.volume24h = overview.volume24h || 0;
               token.marketCap = overview.marketCap || overview.fdv || 0;
               token.liquidity = overview.liquidity || 0;
+              if (overview.pairCreatedAt) token.graduatedAt = overview.pairCreatedAt;
             }
           } catch (err) {
             if (err.isOverloaded || err.isCircuitBreakerError) throw err;

@@ -3307,12 +3307,14 @@ async function updateDailyBriefMarketData(tokens) {
           holders = CASE WHEN $7::int > 0 THEN $7::int ELSE holders END,
           vol_mcap_ratio = $8,
           liq_mcap_ratio = $9,
+          graduated_at = COALESCE($10::timestamptz, graduated_at),
           enriched_at = NOW()
         WHERE mint_address = $1
       `, [
         t.address, t.price || 0, t.priceChange24h || 0, t.volume24h || 0,
         t.marketCap || 0, t.liquidity || 0, t.holders || 0,
-        t.volMcapRatio || 0, t.liqMcapRatio || 0
+        t.volMcapRatio || 0, t.liqMcapRatio || 0,
+        t.graduatedAt || null
       ]);
       if (result.rowCount > 0) count++;
     }
@@ -3339,6 +3341,7 @@ async function getDailyBriefTokens(hoursAgo = 24, limit = 50) {
     SELECT
       mint_address AS address, name, symbol, logo_uri AS "logoUri",
       created_at AS "createdAt", graduated_at AS "graduatedAt",
+      discovered_at AS "discoveredAt",
       description, website, twitter, telegram,
       price, price_change_24h AS "priceChange24h",
       volume_24h AS "volume24h", market_cap AS "marketCap",
