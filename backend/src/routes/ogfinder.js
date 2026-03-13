@@ -4,7 +4,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { asyncHandler } = require('../middleware/validation');
+const { asyncHandler, catchUnlessOverloaded } = require('../middleware/validation');
 const { searchLimiter } = require('../middleware/rateLimit');
 const { cache, TTL } = require('../services/cache');
 const db = require('../services/database');
@@ -62,7 +62,7 @@ router.get('/search', searchLimiter, asyncHandler(async (req, res) => {
     if (mints.length > 0) {
       const [heliusData, dbRows] = await Promise.all([
         solanaService.isHeliusConfigured()
-          ? solanaService.getTokenMetadataBatch(mints).catch(() => ({}))
+          ? solanaService.getTokenMetadataBatch(mints).catch(catchUnlessOverloaded({}))
           : Promise.resolve({}),
         db.getTokensBatch(mints).catch(() => [])
       ]);
@@ -121,7 +121,7 @@ router.post('/enrich', searchLimiter, asyncHandler(async (req, res) => {
 
   const [heliusData, dbRows] = await Promise.all([
     solanaService.isHeliusConfigured()
-      ? solanaService.getTokenMetadataBatch(batch).catch(() => ({}))
+      ? solanaService.getTokenMetadataBatch(batch).catch(catchUnlessOverloaded({}))
       : Promise.resolve({}),
     db.getTokensBatch(batch).catch(() => [])
   ]);

@@ -13,7 +13,7 @@ const TTL = {
   MEDIUM: 60000,        // 1 minute
   OHLCV: 300000,        // 5 minutes - chart/OHLCV data; candles form over minutes/hours
   POOLS: 180000,        // 3 minutes - for pool data (rarely changes)
-  PRICE_DATA: 300000,   // 5 minutes - for price/volume data (rolling cache)
+  PRICE_DATA: 600000,   // 10 minutes - for price/volume data (rolling cache)
   PRICE_FRESH: 60000,   // 1 minute - freshness threshold for individual token views
   LONG: 300000,         // 5 minutes
   VERY_LONG: 900000,    // 15 minutes
@@ -562,6 +562,8 @@ class CacheService {
       try {
         return await this.inFlightFetches.get(freshnessKey);
       } catch (error) {
+        // Always propagate overload errors — don't mask systemic issues with stale data
+        if (error.isOverloaded || error.isCircuitBreakerError) throw error;
         if (cached) return cached.value;
         throw error;
       }
@@ -586,6 +588,8 @@ class CacheService {
     try {
       return await fetchPromise;
     } catch (error) {
+      // Always propagate overload errors — don't mask systemic issues with stale data
+      if (error.isOverloaded || error.isCircuitBreakerError) throw error;
       // Return stale data as fallback if fetch fails
       if (cached) return cached.value;
       throw error;

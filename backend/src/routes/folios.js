@@ -10,7 +10,7 @@ const db = require('../services/database');
 const jupiterService = require('../services/jupiter');
 const geckoService = require('../services/geckoTerminal');
 const solanaService = require('../services/solana');
-const { asyncHandler, requireDatabase, validateAdminSession, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
+const { asyncHandler, requireDatabase, validateAdminSession, SOLANA_ADDRESS_REGEX, catchUnlessOverloaded } = require('../middleware/validation');
 const { searchLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
 const { cache, keys, TTL } = require('../services/cache');
 
@@ -201,11 +201,11 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
     if (mints.length > 0) {
       try {
         const [geckoData, batchPrices, jupiterMetrics] = await Promise.all([
-          geckoService.getMultiTokenInfo(mints).catch(() => ({})),
-          jupiterService.getTokenPrices(mints).catch(() => ({})),
+          geckoService.getMultiTokenInfo(mints).catch(catchUnlessOverloaded({})),
+          jupiterService.getTokenPrices(mints).catch(catchUnlessOverloaded({})),
           Promise.all(folio.tokens.map(async t => {
             try { return await jupiterService.getTokenMetrics(t.token_mint); }
-            catch { return null; }
+            catch (e) { if (e.isOverloaded || e.isCircuitBreakerError) throw e; return null; }
           }))
         ]);
 
@@ -222,7 +222,7 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
                   if (!jupiterMetrics[idx]) jupiterMetrics[idx] = {};
                   jupiterMetrics[idx].holderCount = count;
                 }
-              } catch { /* non-critical */ }
+              } catch (e) { if (e.isOverloaded || e.isCircuitBreakerError) throw e; /* non-critical */ }
             }));
           }
         }
@@ -252,7 +252,7 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
           // Holders: Jupiter V2 > Helius backfill
           if (jup.holderCount != null) t.holders = jup.holderCount;
         });
-      } catch { /* non-critical */ }
+      } catch (e) { if (e.isOverloaded || e.isCircuitBreakerError) throw e; /* non-critical */ }
     }
 
     // Final fallback: Helius metadata batch for tokens still missing name/logo
@@ -274,7 +274,7 @@ router.get('/:id', searchLimiter, asyncHandler(async (req, res) => {
               if (!t.logo_uri && meta.logoUri) t.logo_uri = meta.logoUri;
             }
           }
-        } catch { /* non-critical */ }
+        } catch (e) { if (e.isOverloaded || e.isCircuitBreakerError) throw e; /* non-critical */ }
       }
     }
   }
@@ -338,10 +338,10 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
   // Fetch live metrics from GeckoTerminal (24h change, price, mcap, vol) + Jupiter V2 (holders, liquidity)
   const mints = folio.tokens.map(t => t.token_mint).filter(Boolean);
   const [geckoData, tokenMetrics] = await Promise.all([
-    geckoService.getMultiTokenInfo(mints).catch(() => ({})),
+    geckoService.getMultiTokenInfo(mints).catch(catchUnlessOverloaded({})),
     Promise.all(folio.tokens.map(async (t) => {
       try { return await jupiterService.getTokenMetrics(t.token_mint); }
-      catch { return null; }
+      catch (e) { if (e.isOverloaded || e.isCircuitBreakerError) throw e; return null; }
     }))
   ]);
 
@@ -358,7 +358,7 @@ router.post('/:id/ai-analysis', veryStrictLimiter, asyncHandler(async (req, res)
             if (!tokenMetrics[idx]) tokenMetrics[idx] = {};
             tokenMetrics[idx].holderCount = count;
           }
-        } catch { /* non-critical */ }
+        } catch (e) { if (e.isOverloaded || e.isCircuitBreakerError) throw e; /* non-critical */ }
       }));
     }
   }

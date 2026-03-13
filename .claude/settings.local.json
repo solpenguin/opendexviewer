@@ -103,7 +103,10 @@
       "Bash(grep -n \"async\\\\|defer\" /c/VS/OPENDEX/opendexviewer/frontend/*.html)",
       "Bash(grep -n \"Promise.all\\\\|Promise.allSettled\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
       "Bash(grep -n \"Image\\(\\)\\\\|new Image\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
-      "Bash(grep -n \"onerror\\\\|onload\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)"
+      "Bash(grep -n \"onerror\\\\|onload\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(grep -n \"crypto\\\\|JSON.stringify\\\\|blocking\\\\|sync\" /c/VS/OPENDEX/opendexviewer/backend/src/services/*.js)",
+      "Bash(grep -n \"503\\\\|queue.*full\\\\|overloaded\\\\|retryAfter\\\\|backpressure\" c:/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)",
+      "Bash(grep -A5 \"API queue full\" c:/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)"
     ]
   }
 }

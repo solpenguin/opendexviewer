@@ -1564,6 +1564,27 @@ async function validateDeviceSession(req, res, next) {
   next();
 }
 
+/**
+ * Create a .catch() handler that re-throws overload errors (queue full, circuit breaker open)
+ * but returns a fallback value for normal API failures.
+ * This lets route handlers gracefully degrade for transient errors while propagating
+ * systemic overload to the global error handler (which returns 429/503 to the client).
+ *
+ * Usage: someApiCall().catch(catchUnlessOverloaded([]))
+ *        someApiCall().catch(catchUnlessOverloaded(null))
+ *
+ * @param {*} fallback - Value to return for non-overload errors
+ * @returns {Function} catch handler
+ */
+function catchUnlessOverloaded(fallback) {
+  return (error) => {
+    if (error.isOverloaded || error.isCircuitBreakerError) {
+      throw error;
+    }
+    return fallback;
+  };
+}
+
 module.exports = {
   validateMint,
   validateWallet,
@@ -1620,5 +1641,6 @@ module.exports = {
   SOLANA_ADDRESS_REGEX,
   BLOCKED_DOMAINS,
   SUSPICIOUS_PATTERNS,
-  MAX_URL_LENGTH
+  MAX_URL_LENGTH,
+  catchUnlessOverloaded
 };

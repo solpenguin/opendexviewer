@@ -266,10 +266,15 @@ const api = {
         if (error.status >= 400 && error.status < 500 && error.status !== 429) {
           break;
         }
-        // Global 429 awareness: suppress background fetches for the retry-after window
-        if (error.status === 429) {
+        // Global 429/503 awareness: suppress background fetches for the retry-after window
+        if (error.status === 429 || error.status === 503) {
+          const wasAlreadyLimited = isRateLimited();
           const backoff = (error.retryAfter || 60) * 1000;
           _rateLimitedUntil = Math.max(_rateLimitedUntil, Date.now() + backoff);
+          // Show toast once when rate limiting first kicks in (not on every retry)
+          if (!wasAlreadyLimited && typeof toast !== 'undefined') {
+            toast.warning('Server is busy — data may be delayed. Retrying automatically.');
+          }
         }
 
         if (attempt < maxRetries - 1) {

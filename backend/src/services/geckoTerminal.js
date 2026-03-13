@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { rateLimitedRequest, sleep } = require('./rateLimiter');
+const { circuitBreakers } = require('./circuitBreaker');
 const { httpsAgent } = require('./httpAgent');
 
 // GeckoTerminal / CoinGecko Onchain API
@@ -146,12 +147,14 @@ async function deduplicatedRequest(key, requestFn) {
     return inFlightRequests.get(key);
   }
 
-  // Create the request promise with retry wrapper
+  // Create the request promise with circuit breaker + retry + rate limiting
   const requestPromise = (async () => {
     try {
-      return await withRetry(
-        () => rateLimitedRequest('geckoTerminal', requestFn),
-        key
+      return await circuitBreakers.geckoTerminal.execute(() =>
+        withRetry(
+          () => rateLimitedRequest('geckoTerminal', requestFn),
+          key
+        )
       );
     } finally {
       // Clean up after request completes (success or failure)

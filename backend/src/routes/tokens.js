@@ -6,7 +6,7 @@ const birdeyeService = require('../services/birdeye');
 const solanaService = require('../services/solana');
 const db = require('../services/database');
 const { cache, TTL, keys } = require('../services/cache');
-const { validateMint, validatePagination, validateSearch, asyncHandler, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
+const { validateMint, validatePagination, validateSearch, asyncHandler, SOLANA_ADDRESS_REGEX, catchUnlessOverloaded } = require('../middleware/validation');
 const { searchLimiter, strictLimiter, veryStrictLimiter } = require('../middleware/rateLimit');
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
@@ -476,6 +476,7 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
 
     res.json(tokens);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details or stack traces
     res.status(500).json({ error: 'Failed to fetch tokens' });
   }
@@ -545,7 +546,7 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
       // Helius has priority; DB is fallback for mints Helius doesn't cover
       const [heliusData, dbRows] = await Promise.all([
         solanaService.isHeliusConfigured()
-          ? solanaService.getTokenMetadataBatch(uncachedMints).catch(() => ({}))
+          ? solanaService.getTokenMetadataBatch(uncachedMints).catch(catchUnlessOverloaded({}))
           : Promise.resolve({}),
         db.getTokensBatch(uncachedMints).catch(() => [])
       ]);
@@ -676,6 +677,7 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
     return res.json(response);
 
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
     return res.status(500).json({ error: 'Failed to fetch token batch' });
   }
@@ -805,8 +807,8 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
     // 2. If local results are insufficient, fetch from external APIs in parallel
     if (results.length < MIN_SEARCH_RESULTS) try {
       const [geckoResults, jupiterResults] = await Promise.all([
-        geckoService.searchTokens(query, MIN_SEARCH_RESULTS, dexPrefixes).catch(() => []),
-        jupiterService.searchTokens(query).catch(() => [])
+        geckoService.searchTokens(query, MIN_SEARCH_RESULTS, dexPrefixes).catch(catchUnlessOverloaded([])),
+        jupiterService.searchTokens(query).catch(catchUnlessOverloaded([]))
       ]);
 
       // Merge results: GeckoTerminal first (free, no API key), then Jupiter
@@ -834,7 +836,8 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
         }
       }
     } catch (err) {
-      // Privacy: Don't log error details
+      if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+      // Privacy: Don't log error details for normal API failures
     }
 
     // Enrich with community update flags
@@ -853,6 +856,7 @@ router.get('/search', searchLimiter, validateSearch, asyncHandler(async (req, re
 
     res.json(results);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to search tokens' });
   }
@@ -1056,7 +1060,7 @@ router.get('/spikes', searchLimiter, asyncHandler(async (req, res) => {
       // No cached trending data — fetch from GeckoTerminal (2 pages, not 3, to reduce load)
       const pageFetches = [1, 2].map(page =>
         geckoService.getTrendingTokens({ limit: 20, skipEnrichment: useHeliusEnrichment, page })
-          .catch(() => [])
+          .catch(catchUnlessOverloaded([]))
       );
       const pages = await Promise.all(pageFetches);
       for (const pageTokens of pages) {
@@ -1230,6 +1234,7 @@ router.get('/spikes', searchLimiter, asyncHandler(async (req, res) => {
     await cache.set(cacheKey, result, TTL.MEDIUM);
     res.json(result);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     console.error('[Spikes] Error:', error.message);
     res.status(500).json({ error: 'Failed to detect spike tokens' });
   }
@@ -1259,7 +1264,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       const fetchPromises = [
         // Helius provides: metadata, supply, price (for top 10k tokens)
         solanaService.isHeliusConfigured()
-          ? solanaService.getTokenMetadata(mint).catch(() => null)
+          ? solanaService.getTokenMetadata(mint).catch(catchUnlessOverloaded(null))
           : Promise.resolve(null),
         // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
         geckoService.getTokenOverview(mint),
@@ -1271,15 +1276,15 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       if (holders == null) {
         fetchPromises.push(
           (async () => {
-            const jupiterCount = await jupiterService.getTokenHolderCount(mint).catch(() => null);
+            const jupiterCount = await jupiterService.getTokenHolderCount(mint).catch(catchUnlessOverloaded(null));
             if (jupiterCount != null && jupiterCount > 1) return jupiterCount;
 
             if (solanaService.isHeliusConfigured()) {
-              const heliusCount = await solanaService.getTokenHolderCount(mint).catch(() => null);
+              const heliusCount = await solanaService.getTokenHolderCount(mint).catch(catchUnlessOverloaded(null));
               if (heliusCount != null && heliusCount > 1) return heliusCount;
             }
 
-            const birdeyeCount = await birdeyeService.getTokenOverview(mint).then(o => o?.holder ?? null).catch(() => null);
+            const birdeyeCount = await birdeyeService.getTokenOverview(mint).then(o => o?.holder ?? null).catch(catchUnlessOverloaded(null));
             if (birdeyeCount != null && birdeyeCount > 1) return birdeyeCount;
 
             return jupiterCount ?? null;
@@ -1392,6 +1397,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
 
     res.json(result);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details or stack traces
     res.status(500).json({ error: 'Failed to fetch token details' });
   }
@@ -1415,6 +1421,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
           new Promise((_, reject) => setTimeout(() => reject(new Error('Price timeout')), 3000))
         ]);
       } catch (err) {
+        if (err.isOverloaded || err.isCircuitBreakerError) throw err;
         // GeckoTerminal failed or timed out — fall through to Jupiter
       }
 
@@ -1427,6 +1434,7 @@ router.get('/:mint/price', validateMint, asyncHandler(async (req, res) => {
 
     res.json(priceData);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch price data' });
   }
@@ -1464,6 +1472,7 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
           new Promise((_, reject) => setTimeout(() => reject(new Error('Chart timeout')), 4000))
         ]);
       } catch (err) {
+        if (err.isOverloaded || err.isCircuitBreakerError) throw err;
         // GeckoTerminal failed or timed out — fall through to Jupiter
       }
 
@@ -1479,6 +1488,7 @@ router.get('/:mint/chart', validateMint, asyncHandler(async (req, res) => {
 
     res.json(chartData);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch chart data' });
   }
@@ -1508,6 +1518,7 @@ router.get('/:mint/ohlcv', validateMint, asyncHandler(async (req, res) => {
 
     res.json(ohlcvData);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch OHLCV data' });
   }
@@ -1530,6 +1541,7 @@ router.get('/:mint/pools', validateMint, asyncHandler(async (req, res) => {
 
     res.json(pools);
   } catch (error) {
+    if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
     res.status(500).json({ error: 'Failed to fetch pools data' });
   }
@@ -1761,9 +1773,9 @@ router.get('/:mint/holders', validateMint, asyncHandler(async (req, res) => {
     // Try standard RPC first (fast, pre-sorted), fall back to Helius DAS if it fails.
     const [rpcAccounts, supplyResult, mintAccount, tokenAuth] = await Promise.all([
       solanaService.getTokenLargestAccounts(mint),
-      solanaService.getTokenSupply(mint).catch(() => null),
-      solanaService.getAccountInfo(mint).catch(() => null),
-      solanaService.getTokenAuthorities(mint).catch(() => null)
+      solanaService.getTokenSupply(mint).catch(catchUnlessOverloaded(null)),
+      solanaService.getAccountInfo(mint).catch(catchUnlessOverloaded(null)),
+      solanaService.getTokenAuthorities(mint).catch(catchUnlessOverloaded(null))
     ]);
 
     // If standard RPC failed, try Helius DAS API as fallback

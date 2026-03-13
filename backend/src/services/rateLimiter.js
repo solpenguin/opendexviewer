@@ -53,7 +53,10 @@ const RATE_LIMITS = {
     minInterval: 200,    // Minimum 200ms between requests (5 req/sec max)
     maxJitter: 100,      // Add up to 100ms random jitter
     burstLimit: 3,       // Allow up to 3 requests in quick succession
-    burstWindow: 1000    // Within 1 second
+    burstWindow: 1000,   // Within 1 second
+    useQueue: true,      // Queue-based processing for ordered rate limiting
+    maxQueueSize: 500,   // Queue capacity
+    queueTimeout: 15000  // 15s timeout
   },
   geckoTerminal: {
     // CoinGecko paid plan: 250 requests/minute ≈ 1 request every 240ms
@@ -231,7 +234,7 @@ async function rateLimitedRequest(apiName, requestFn) {
 /**
  * Queue a request to be executed with rate limiting
  * Requests are processed in order with proper delays
- * Includes queue size limits and request timeouts to prevent resource exhaustion
+ * Includes queue size limits and adaptive request timeouts
  * @param {string} apiName - Name of the API
  * @param {Function} requestFn - Async function that makes the request
  * @returns {Promise<any>} Result of the request
@@ -239,7 +242,7 @@ async function rateLimitedRequest(apiName, requestFn) {
 async function queueRequest(apiName, requestFn) {
   const config = RATE_LIMITS[apiName] || RATE_LIMITS.default;
   const maxQueueSize = config.maxQueueSize || MAX_QUEUE_SIZE;
-  const queueTimeout = config.queueTimeout || QUEUE_TIMEOUT_MS;
+  const baseTimeout = config.queueTimeout || QUEUE_TIMEOUT_MS;
 
   return new Promise((resolve, reject) => {
     // Get or create queue for this API
@@ -252,25 +255,32 @@ async function queueRequest(apiName, requestFn) {
     // Reject if queue is full to prevent unbounded growth
     if (queue.length >= maxQueueSize) {
       queueMetrics.recordRejection(apiName);
+      // Estimate retry time based on drain rate
+      const estimatedDrainMs = queue.length * (config.minInterval + (config.maxJitter / 2));
+      const retryAfterSecs = Math.min(Math.ceil(estimatedDrainMs / 1000), 60);
       console.warn(`[RateLimiter] ${apiName} queue full (${queue.length}/${maxQueueSize}), rejecting request (total rejections: ${queueMetrics.totalRejections})`);
       const error = new Error(`API queue full - server overloaded. Try again later.`);
-      error.retryAfter = 30; // Suggest retry after 30 seconds
+      error.retryAfter = retryAfterSecs;
+      error.isOverloaded = true;
       reject(error);
       return;
     }
 
+    // Adaptive timeout: scale based on queue position
+    // Position 0 gets base timeout; position N gets base + N * minInterval
+    const positionDelay = queue.length * config.minInterval;
+    const queueTimeout = baseTimeout + positionDelay;
+
     // Set up timeout for this request
     const item = { requestFn, resolve, reject, timeoutId: null, timedOut: false, queuedAt: Date.now() };
     const timeoutId = setTimeout(() => {
-      // Mark as timed out so processQueue skips it if already dequeued
+      // Mark as timed out so processQueue skips it
       item.timedOut = true;
-      // Find and remove this request from queue if still pending
-      const index = queue.indexOf(item);
-      if (index !== -1) {
-        queue.splice(index, 1);
-      }
-      console.warn(`[RateLimiter] ${apiName} request timed out after ${queueTimeout}ms in queue`);
-      reject(new Error(`Request timed out waiting in queue`));
+      console.warn(`[RateLimiter] ${apiName} request timed out after ${queueTimeout}ms in queue (position was ~${queue.length})`);
+      const err = new Error(`Request timed out waiting in queue`);
+      err.isOverloaded = true;
+      reject(err);
+      // Note: timed-out items are skipped by processQueue when dequeued, no need to splice
     }, queueTimeout);
     item.timeoutId = timeoutId;
 
@@ -288,54 +298,64 @@ async function queueRequest(apiName, requestFn) {
 
 /**
  * Process the request queue for an API
- * Executes requests with rate limiting delays directly (not through rateLimitedRequest to avoid recursion)
+ * Uses a drain-safe loop: re-checks for new items after setting isProcessing=false
+ * to prevent items from getting stranded by a race between push and loop exit
  * @param {string} apiName - Name of the API
  */
 async function processQueue(apiName) {
+  // Atomic check-and-set: if already processing, the active loop will pick up new items
   if (isProcessing.get(apiName)) return;
   isProcessing.set(apiName, true);
 
   const queue = requestQueues.get(apiName);
 
-  while (queue && queue.length > 0) {
-    const item = queue.shift();
-    const { requestFn, resolve, reject, timeoutId, timedOut, queuedAt } = item;
+  try {
+    while (queue && queue.length > 0) {
+      const item = queue.shift();
 
-    // Skip if the request was already rejected by the timeout handler
-    if (timedOut) {
-      continue;
-    }
-
-    try {
-      // Clear the timeout since we're processing this request now
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      // Skip if the request was already rejected by the timeout handler
+      if (item.timedOut) {
+        if (item.timeoutId) clearTimeout(item.timeoutId);
+        continue;
       }
 
-      // Log queue wait time for monitoring
-      if (queuedAt) {
-        const waitTime = Date.now() - queuedAt;
-        if (waitTime > 5000) {
-          console.log(`[RateLimiter] ${apiName} request waited ${Math.round(waitTime / 1000)}s in queue`);
+      try {
+        // Clear the timeout since we're processing this request now
+        if (item.timeoutId) {
+          clearTimeout(item.timeoutId);
         }
-      }
 
-      // Apply rate limiting delay directly (not through rateLimitedRequest to avoid recursion)
-      const delay = getRequiredDelay(apiName);
-      if (delay > 0) {
-        await sleep(delay);
-      }
-      recordRequest(apiName);
+        // Log queue wait time for monitoring
+        if (item.queuedAt) {
+          const waitTime = Date.now() - item.queuedAt;
+          if (waitTime > 5000) {
+            console.log(`[RateLimiter] ${apiName} request waited ${Math.round(waitTime / 1000)}s in queue`);
+          }
+        }
 
-      // Execute the actual request
-      const result = await requestFn();
-      resolve(result);
-    } catch (error) {
-      reject(error);
+        // Apply rate limiting delay directly (not through rateLimitedRequest to avoid recursion)
+        const delay = getRequiredDelay(apiName);
+        if (delay > 0) {
+          await sleep(delay);
+        }
+        recordRequest(apiName);
+
+        // Execute the actual request
+        const result = await item.requestFn();
+        item.resolve(result);
+      } catch (error) {
+        item.reject(error);
+      }
     }
+  } finally {
+    isProcessing.set(apiName, false);
   }
 
-  isProcessing.set(apiName, false);
+  // Drain safety net: items may have been pushed between the while-loop exit
+  // and isProcessing=false. Re-check and restart if needed.
+  if (queue && queue.length > 0) {
+    processQueue(apiName);
+  }
 }
 
 /**

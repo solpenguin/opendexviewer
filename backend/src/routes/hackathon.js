@@ -5,7 +5,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { asyncHandler, requireDatabase, SOLANA_ADDRESS_REGEX } = require('../middleware/validation');
+const { asyncHandler, requireDatabase, SOLANA_ADDRESS_REGEX, catchUnlessOverloaded } = require('../middleware/validation');
 const db = require('../services/database');
 const solanaService = require('../services/solana');
 const geckoService = require('../services/geckoTerminal');
@@ -69,7 +69,7 @@ router.get('/tokens', requireDatabase, asyncHandler(async (req, res) => {
     if (!metaComplete) {
       const [heliusData, dbRows] = await Promise.all([
         solanaService.isHeliusConfigured()
-          ? solanaService.getTokenMetadataBatch(hackathonMints).catch(() => ({}))
+          ? solanaService.getTokenMetadataBatch(hackathonMints).catch(catchUnlessOverloaded({}))
           : Promise.resolve({}),
         db.getTokensBatch(hackathonMints).catch(() => [])
       ]);

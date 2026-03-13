@@ -376,6 +376,12 @@ app.use((err, req, res, next) => {
     userMessage = 'Service temporarily unavailable';
     errorCode = 'SERVICE_UNAVAILABLE';
     retryAfter = Math.ceil(err.retryAfter / 1000); // Convert to seconds
+  } else if (err.isOverloaded) {
+    // Queue-full or queue-timeout errors — always 429 regardless of message content
+    statusCode = 429;
+    userMessage = 'Too many requests - please try again later';
+    errorCode = 'RATE_LIMITED';
+    retryAfter = err.retryAfter || 30;
   } else if (process.env.NODE_ENV !== 'production') {
     // In development, show actual error
     userMessage = err.message;
@@ -389,11 +395,11 @@ app.use((err, req, res, next) => {
       statusCode = 400;
       userMessage = 'Invalid request';
       errorCode = 'VALIDATION_ERROR';
-    } else if (err.message?.includes('rate limit') || err.message?.includes('too many') || err.message?.includes('queue full')) {
+    } else if (err.message?.includes('rate limit') || err.message?.includes('too many') || err.message?.includes('queue full') || err.message?.includes('overloaded')) {
       statusCode = 429;
       userMessage = 'Too many requests - please try again later';
       errorCode = 'RATE_LIMITED';
-      retryAfter = 30; // Default retry after 30 seconds
+      retryAfter = err.retryAfter || 30; // Use error's retryAfter if available (e.g. from queue drain estimate)
     } else if (err.message?.includes('timeout') || err.message?.includes('timed out')) {
       statusCode = 504;
       userMessage = 'Request timed out';

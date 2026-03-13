@@ -210,6 +210,7 @@ class CircuitBreakerError extends Error {
     this.circuitState = state;
     this.retryAfter = retryAfter;
     this.isCircuitBreakerError = true;
+    this.isOverloaded = true;
   }
 }
 

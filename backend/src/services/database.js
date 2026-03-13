@@ -80,7 +80,7 @@ function createPool() {
   // Production: Higher pool for concurrent users
   // Development: Lower pool to avoid exhausting local DB
   const isProduction = process.env.NODE_ENV === 'production';
-  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 30 : 10);
+  const maxConnections = parseInt(process.env.DB_POOL_MAX) || (isProduction ? 60 : 10);
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -88,9 +88,9 @@ function createPool() {
     // Set DB_SSL_REJECT_UNAUTHORIZED=true only if you have proper CA certs.
     ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true' } : false,
     max: maxConnections,                    // Maximum connections in pool
-    min: parseInt(process.env.DB_POOL_MIN) || (isProduction ? 2 : 2), // Keep low to avoid exhausting Render's connection limit
+    min: parseInt(process.env.DB_POOL_MIN) || (isProduction ? 5 : 2), // Warm pool for faster response under load
     idleTimeoutMillis: 60000,               // Close idle connections after 60s
-    connectionTimeoutMillis: 10000,         // Timeout for new connections
+    connectionTimeoutMillis: 5000,          // Timeout for new connections (fail fast under load)
     statement_timeout: 30000,               // Kill queries running > 30s
     query_timeout: 30000,                   // Same as statement_timeout for safety
     allowExitOnIdle: false                  // Keep pool alive
