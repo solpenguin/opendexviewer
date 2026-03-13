@@ -15325,25 +15325,30 @@ body.landscape .hero h1 {
 .brief-kol-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.25rem;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  gap: 0.625rem;
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(245, 158, 11, 0.15));
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 10px;
+  color: #fbbf24;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.08);
 }
 
 .brief-kol-btn:hover {
-  border-color: rgba(99, 102, 241, 0.5);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(139, 92, 246, 0.18));
+  border-color: rgba(234, 179, 8, 0.65);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.22), rgba(245, 158, 11, 0.22));
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.15);
 }
 
 .brief-kol-btn svg {
-  color: var(--accent);
+  color: #fbbf24;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
@@ -15352,12 +15357,12 @@ body.landscape .hero h1 {
 }
 
 .brief-kol-cost {
-  font-size: 0.6875rem;
-  background: rgba(99, 102, 241, 0.2);
-  color: var(--accent);
-  padding: 0.125rem 0.4rem;
-  border-radius: 4px;
-  font-weight: 600;
+  font-size: 0.75rem;
+  background: rgba(234, 179, 8, 0.2);
+  color: #fbbf24;
+  padding: 0.15rem 0.5rem;
+  border-radius: 5px;
+  font-weight: 700;
 }
 
 .brief-kol-btn:disabled {
@@ -15366,8 +15371,9 @@ body.landscape .hero h1 {
 }
 
 .brief-kol-btn:disabled:hover {
-  border-color: rgba(99, 102, 241, 0.25);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
+  border-color: rgba(234, 179, 8, 0.4);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(245, 158, 11, 0.15));
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.08);
 }
 
 /* AI KOL Result Panel */
