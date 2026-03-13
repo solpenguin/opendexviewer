@@ -362,27 +362,29 @@ async function getTokenMetadata(mintAddress) {
 
     // Extract social/default links from metadata
     const defaultLinks = {};
-    if (content.links?.external_url) {
-      defaultLinks.website = content.links.external_url;
-    }
-    // Some tokens store social links in metadata extensions — values may be handles or full URLs
-    if (metadata.extensions) {
-      if (metadata.extensions.twitter) {
-        const tw = metadata.extensions.twitter;
-        defaultLinks.twitter = tw.startsWith('http') ? tw : `https://x.com/${tw.replace(/^@/, '')}`;
+    try {
+      if (typeof content.links?.external_url === 'string' && content.links.external_url) {
+        defaultLinks.website = content.links.external_url;
       }
-      if (metadata.extensions.telegram) {
-        const tg = metadata.extensions.telegram;
-        defaultLinks.telegram = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '')}`;
+      // Some tokens store social links in metadata extensions — values may be handles or full URLs
+      const ext = metadata.extensions;
+      if (ext && typeof ext === 'object') {
+        if (typeof ext.twitter === 'string' && ext.twitter) {
+          defaultLinks.twitter = ext.twitter.startsWith('http') ? ext.twitter : `https://x.com/${ext.twitter.replace(/^@/, '')}`;
+        }
+        if (typeof ext.telegram === 'string' && ext.telegram) {
+          defaultLinks.telegram = ext.telegram.startsWith('http') ? ext.telegram : `https://t.me/${ext.telegram.replace(/^@/, '')}`;
+        }
+        if (typeof ext.discord === 'string' && ext.discord) {
+          defaultLinks.discord = ext.discord.startsWith('http') ? ext.discord : `https://discord.gg/${ext.discord}`;
+        }
+        if (typeof ext.website === 'string' && ext.website && !defaultLinks.website) {
+          defaultLinks.website = ext.website.startsWith('http') ? ext.website : `https://${ext.website}`;
+        }
       }
-      if (metadata.extensions.discord) {
-        const dc = metadata.extensions.discord;
-        defaultLinks.discord = dc.startsWith('http') ? dc : `https://discord.gg/${dc}`;
-      }
-      if (metadata.extensions.website && !defaultLinks.website) {
-        const ws = metadata.extensions.website;
-        defaultLinks.website = ws.startsWith('http') ? ws : `https://${ws}`;
-      }
+    } catch (e) {
+      // Non-critical: don't let link extraction break metadata response
+      console.error('[Solana] defaultLinks extraction error:', e.message);
     }
 
     const result = {

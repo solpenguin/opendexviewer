@@ -106,7 +106,11 @@
       "Bash(grep -n \"onerror\\\\|onload\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
       "Bash(grep -n \"crypto\\\\|JSON.stringify\\\\|blocking\\\\|sync\" /c/VS/OPENDEX/opendexviewer/backend/src/services/*.js)",
       "Bash(grep -n \"503\\\\|queue.*full\\\\|overloaded\\\\|retryAfter\\\\|backpressure\" c:/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)",
-      "Bash(grep -A5 \"API queue full\" c:/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)"
+      "Bash(grep -A5 \"API queue full\" c:/VS/OPENDEX/opendexviewer/backend/src/routes/*.js)",
+      "Bash(git -C /c/VS/OPENDEX/opendexviewer log --oneline -20 -- backend/src/services/geckoTerminal.js backend/src/services/solana.js backend/src/routes/tokens.js)",
+      "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed --stat)",
+      "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/solana.js)",
+      "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/geckoTerminal.js)"
     ]
   }
 }

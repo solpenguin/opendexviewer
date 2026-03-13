@@ -1261,6 +1261,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       // Fetch data in parallel
       // Strategy: Use Helius for metadata (name, symbol, decimals, supply, basic price)
       // Use GeckoTerminal only for market data Helius can't provide (volume, price change, liquidity)
+      // GeckoTerminal token info fetched separately for social links (pools endpoint doesn't have them)
       const fetchPromises = [
         // Helius provides: metadata, supply, price (for top 10k tokens)
         solanaService.isHeliusConfigured()
@@ -1268,7 +1269,9 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
           : Promise.resolve(null),
         // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
         geckoService.getTokenOverview(mint),
-        db.getApprovedSubmissions(mint).catch(() => [])
+        db.getApprovedSubmissions(mint).catch(() => []),
+        // GeckoTerminal token info: has social links (websites, twitter, telegram, discord)
+        geckoService.getTokenInfo(mint).catch(() => null)
       ];
 
       // If holder count not cached, try sources sequentially with early return
@@ -1293,7 +1296,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       }
 
       const results = await Promise.all(fetchPromises);
-      const [heliusMetadata, geckoOverview, submissions, fetchedHolders] = results;
+      const [heliusMetadata, geckoOverview, submissions, geckoTokenInfo, fetchedHolders] = results;
 
       let finalHolders = fetchedHolders;
 
@@ -1337,14 +1340,16 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal > Jupiter
       // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
       // - Market data (volume, price change, liquidity): GeckoTerminal only
-      // Merge default social links from metadata sources (Helius > GeckoTerminal)
+      // Merge default social links from metadata sources
+      // GeckoTerminal token info (not pools) has websites/twitter/telegram/discord
+      // Helius has external_url and metadata extensions
       const mergedDefaultLinks = {};
-      const geckoLinks = gecko.defaultLinks || {};
+      const geckoSocial = (geckoTokenInfo || {}).defaultLinks || {};
       const heliusLinks = helius.defaultLinks || {};
-      // Helius links take priority, GeckoTerminal fills gaps
+      // GeckoTerminal token endpoint is the most reliable source; Helius fills gaps
       for (const key of ['website', 'twitter', 'telegram', 'discord']) {
-        if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
-        else if (geckoLinks[key]) mergedDefaultLinks[key] = geckoLinks[key];
+        if (geckoSocial[key]) mergedDefaultLinks[key] = geckoSocial[key];
+        else if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
       }
 
       const tokenResult = {
