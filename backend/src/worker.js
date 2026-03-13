@@ -22,6 +22,7 @@ const db = require('./services/database');
 const geckoService = require('./services/geckoTerminal');
 const jupiterService = require('./services/jupiter');
 const solanaService = require('./services/solana');
+const birdeyeService = require('./services/birdeye');
 const { cache, TTL, keys } = require('./services/cache');
 
 // Allowed DEXes for similar-tokens anti-spoofing filter
@@ -139,19 +140,24 @@ async function enrichMarketDataBatched(tokens) {
   }
 }
 
+/**
+ * Enrich holder counts using Birdeye (same source as spikes/trending pages).
+ * Birdeye's getTokenOverview reliably returns holder counts for Solana tokens
+ * including new PumpSwap graduates. Falls back to Helius DAS if Birdeye fails.
+ */
 async function enrichWithHolders(token) {
+  // Primary: Birdeye overview (same as spikes page)
   try {
-    // Jupiter V2 search returns holderCount directly
-    const count = await jupiterService.getTokenHolderCount(token.address);
-    if (count != null && count > 0) {
-      token.holders = count;
+    const overview = await birdeyeService.getTokenOverview(token.address);
+    if (overview && overview.holder > 0) {
+      token.holders = overview.holder;
       return;
     }
   } catch (err) {
     if (err.isOverloaded || err.isCircuitBreakerError) throw err;
     /* non-critical — fall through to Helius */
   }
-  // Fallback: Helius DAS API for newly graduated tokens not yet in Jupiter
+  // Fallback: Helius DAS API
   try {
     const heliusCount = await solanaService.getTokenHolderCount(token.address);
     if (heliusCount != null && heliusCount > 0) token.holders = heliusCount;
