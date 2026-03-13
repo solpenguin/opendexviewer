@@ -636,6 +636,13 @@ const api = {
         apiCache.TTL.tokenList,
         true
       );
+    },
+
+    async aiKol(data) {
+      return api.request('/api/daily-brief/ai-kol', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
     }
   },
 

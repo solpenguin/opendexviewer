@@ -15314,6 +15314,104 @@ body.landscape .hero h1 {
   font-size: 0.8125rem;
 }
 
+/* AI KOL Button */
+.brief-kol-btn {
+  gap: 0.375rem;
+}
+
+.brief-kol-cost {
+  font-size: 0.6875rem;
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.brief-kol-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* AI KOL Result Panel */
+.brief-kol-panel {
+  max-width: 900px;
+  margin: 0 auto 1rem;
+  padding: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.brief-kol-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.brief-kol-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.brief-kol-panel-title svg {
+  color: var(--accent);
+}
+
+.brief-kol-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.brief-kol-close:hover {
+  color: var(--text-primary);
+}
+
+.brief-kol-content {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.brief-kol-content .kol-section {
+  margin-bottom: 0.75rem;
+}
+
+.brief-kol-content .kol-section:last-child {
+  margin-bottom: 0;
+}
+
+.brief-kol-content .kol-label {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.125rem;
+}
+
+.brief-kol-content .kol-text {
+  color: var(--text-primary);
+}
+
+.brief-kol-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.875rem;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .brief-hero {
@@ -15358,6 +15456,10 @@ body.landscape .hero h1 {
   .brief-controls {
     gap: 0.5rem;
   }
+
+  .brief-kol-panel {
+    margin: 0 0.5rem 1rem;
+  }
 }
 
 @media (max-width: 480px) {
@@ -15375,10 +15477,11 @@ body.landscape .hero h1 {
     height: 14px;
   }
 
-  /* On very small screens, keep Token + Price + 24h + MCap visible */
+  /* On very small screens, keep Token + MCap + 24h visible */
   .brief-table .cell-volume,
   .brief-table .cell-graduated,
-  .brief-table .cell-holders {
+  .brief-table .cell-holders,
+  .brief-table .cell-age {
     display: none;
   }
 
@@ -15390,6 +15493,10 @@ body.landscape .hero h1 {
     gap: 0.375rem;
   }
 
+  .brief-kol-btn .brief-kol-cost {
+    display: none;
+  }
+
   .brief-hero-icon {
     width: 44px;
     height: 44px;
@@ -15398,6 +15505,10 @@ body.landscape .hero h1 {
 
   .brief-subtitle {
     font-size: 0.875rem;
+  }
+
+  .brief-kol-panel {
+    padding: 0.875rem;
   }
 }
 

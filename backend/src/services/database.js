@@ -432,6 +432,8 @@ async function initializeDatabase() {
         ON CONFLICT (key) DO NOTHING;
       INSERT INTO burn_config (key, value) VALUES ('ai_analysis_cost', '25')
         ON CONFLICT (key) DO NOTHING;
+      INSERT INTO burn_config (key, value) VALUES ('daily_brief_kol_cost', '100')
+        ON CONFLICT (key) DO NOTHING;
 
       -- Folios: curated token lists linked to KOL twitter accounts
       CREATE TABLE IF NOT EXISTS folios (
@@ -2824,6 +2826,19 @@ async function getAdvancedAIAnalysisCost() {
   }
 }
 
+// Get the Daily Brief KOL analysis cost in BC
+async function getDailyBriefKolCost() {
+  if (!pool) return 100;
+  try {
+    const result = await pool.query(
+      "SELECT value FROM burn_config WHERE key = 'daily_brief_kol_cost'"
+    );
+    return result.rows.length > 0 ? parseFloat(result.rows[0].value) : 100;
+  } catch {
+    return 100;
+  }
+}
+
 // Get the Folio AI analysis cost in BC
 async function getFolioAIAnalysisCost() {
   if (!pool) return 75;
@@ -3580,6 +3595,7 @@ module.exports = {
   setAIAnalysisCost,
   getAdvancedAIAnalysisCost,
   setAdvancedAIAnalysisCost,
+  getDailyBriefKolCost,
   getFolioAIAnalysisCost,
   setFolioAIAnalysisCost,
   isBurnTxUsed,

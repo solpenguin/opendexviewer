@@ -47,6 +47,11 @@ var dailyBrief = (function() {
     els.losers = document.getElementById('brief-losers');
     els.avgVolRatio = document.getElementById('brief-avg-volratio');
     els.topVolRatio = document.getElementById('brief-top-volratio');
+    // AI KOL
+    els.kolBtn = document.getElementById('brief-kol-btn');
+    els.kolPanel = document.getElementById('brief-kol-panel');
+    els.kolContent = document.getElementById('brief-kol-content');
+    els.kolClose = document.getElementById('brief-kol-close');
   }
 
   // --- Dropdown logic ---
@@ -334,6 +339,102 @@ var dailyBrief = (function() {
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // --- AI KOL ---
+
+  async function handleKol() {
+    // Get currently filtered tokens
+    var filtered = applyFilters(state.tokens);
+    if (filtered.length === 0) {
+      if (typeof toast !== 'undefined') toast.warning('No tokens to analyze');
+      return;
+    }
+
+    // Require wallet
+    if (typeof wallet === 'undefined' || !wallet.connected || !wallet.address) {
+      if (typeof toast !== 'undefined') toast.warning('Connect your wallet to use AI KOL');
+      return;
+    }
+
+    var walletAddress = wallet.address;
+
+    // Disable button, show loading
+    els.kolBtn.disabled = true;
+    els.kolPanel.style.display = '';
+    els.kolContent.innerHTML = '<div class="brief-kol-loading"><div class="loading-spinner small"></div>Analyzing ' + filtered.length + ' tokens...</div>';
+
+    // Build token summaries for the API
+    var tokenData = filtered.map(function(t) {
+      return {
+        name: t.name || '',
+        symbol: t.symbol || '',
+        marketCap: t.marketCap || 0,
+        volume24h: t.volume24h || 0,
+        priceChange24h: t.priceChange24h || 0,
+        volMcapRatio: t.volMcapRatio || 0
+      };
+    });
+
+    try {
+      var result = await api.dailyBrief.aiKol({
+        tokens: tokenData,
+        walletAddress: walletAddress,
+        hoursWindow: state.hours
+      });
+
+      renderKolResult(result.analysis);
+    } catch (err) {
+      var msg = 'Analysis failed';
+      if (err.status === 402) {
+        msg = err.message || 'Insufficient Burn Credits (100 BC required)';
+      } else if (err.status === 400 && err.code === 'WALLET_REQUIRED') {
+        msg = 'Connect your wallet to use AI KOL';
+      } else if (err.message) {
+        msg = err.message;
+      }
+      els.kolContent.innerHTML = '<span style="color:var(--danger)">' + escapeHtml(msg) + '</span>';
+    } finally {
+      els.kolBtn.disabled = false;
+    }
+  }
+
+  function renderKolResult(text) {
+    // Parse the structured analysis into sections
+    var sections = ['OVERALL', 'STANDOUTS', 'PATTERNS', 'VERDICT'];
+    var html = '';
+    var remaining = text;
+
+    for (var i = 0; i < sections.length; i++) {
+      var label = sections[i];
+      var nextLabel = sections[i + 1];
+      var regex = new RegExp(label + '[:\\s]*', 'i');
+      var match = remaining.match(regex);
+      if (!match) continue;
+
+      var start = match.index + match[0].length;
+      var end = remaining.length;
+      if (nextLabel) {
+        var nextRegex = new RegExp(nextLabel + '[:\\s]*', 'i');
+        var nextMatch = remaining.substring(start).match(nextRegex);
+        if (nextMatch) end = start + nextMatch.index;
+      }
+
+      var content = remaining.substring(start, end).trim();
+      if (content) {
+        html += '<div class="kol-section">';
+        html += '<div class="kol-label">' + escapeHtml(label) + '</div>';
+        html += '<div class="kol-text">' + escapeHtml(content) + '</div>';
+        html += '</div>';
+      }
+    }
+
+    // Fallback: if no sections parsed, show raw text
+    if (!html) {
+      html = '<div class="kol-text">' + escapeHtml(text) + '</div>';
+    }
+
+    els.kolContent.innerHTML = html;
+  }
+
   // --- Event handlers ---
 
   function handleSort(e) {
@@ -397,6 +498,12 @@ var dailyBrief = (function() {
     initDropdown(els.volumeDropdown, function(value) {
       state.filterMinVolume = parseInt(value) || 0;
       if (state.tokens.length > 0) applyFiltersAndRender();
+    });
+
+    // AI KOL button
+    if (els.kolBtn) els.kolBtn.addEventListener('click', handleKol);
+    if (els.kolClose) els.kolClose.addEventListener('click', function() {
+      els.kolPanel.style.display = 'none';
     });
 
     // Close dropdowns on outside click

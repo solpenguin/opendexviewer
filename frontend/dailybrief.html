@@ -210,6 +210,33 @@
         </div>
       </div>
 
+      <button id="brief-kol-btn" class="btn btn-accent btn-sm brief-kol-btn" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93"/><path d="M8.24 9.93A4 4 0 0112 2"/>
+          <path d="M2 19c0-3.87 3.13-7 7-7h6c3.87 0 7 3.13 7 7"/>
+          <circle cx="12" cy="14" r="3"/>
+        </svg>
+        AI KOL
+        <span class="brief-kol-cost">100 BC</span>
+      </button>
+    </div>
+
+    <!-- AI KOL Result Panel -->
+    <div id="brief-kol-panel" class="brief-kol-panel" style="display: none;">
+      <div class="brief-kol-panel-header">
+        <div class="brief-kol-panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93"/><path d="M8.24 9.93A4 4 0 0112 2"/>
+            <path d="M2 19c0-3.87 3.13-7 7-7h6c3.87 0 7 3.13 7 7"/>
+            <circle cx="12" cy="14" r="3"/>
+          </svg>
+          AI KOL Analysis
+        </div>
+        <button id="brief-kol-close" class="brief-kol-close" type="button" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="brief-kol-content" class="brief-kol-content"></div>
     </div>
 
     <!-- Analysis Cards -->

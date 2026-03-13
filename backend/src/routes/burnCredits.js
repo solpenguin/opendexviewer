@@ -149,6 +149,7 @@ router.get('/config', defaultLimiter, asyncHandler(async (req, res) => {
     const aiAnalysisCost = await db.getAIAnalysisCost();
     const aiAdvancedAnalysisCost = await db.getAdvancedAIAnalysisCost();
     const folioAIAnalysisCost = await db.getFolioAIAnalysisCost();
+    const dailyBriefKolCost = await db.getDailyBriefKolCost();
     res.json({
       tokenMint: OD_TOKEN_MINT,
       tokenSymbol: '$OD',
@@ -156,6 +157,7 @@ router.get('/config', defaultLimiter, asyncHandler(async (req, res) => {
       aiAnalysisCost,
       aiAdvancedAnalysisCost,
       folioAIAnalysisCost,
+      dailyBriefKolCost,
       description: `${conversionRate.toLocaleString()} $OD = 1 Burn Credit`
     });
   } catch (error) {
