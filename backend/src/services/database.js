@@ -485,7 +485,7 @@ async function initializeDatabase() {
         discovered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
 
-      CREATE INDEX IF NOT EXISTS idx_daily_brief_graduated ON daily_brief_tokens(graduated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_daily_brief_discovered ON daily_brief_tokens(discovered_at DESC);
       CREATE INDEX IF NOT EXISTS idx_daily_brief_mcap ON daily_brief_tokens(market_cap DESC NULLS LAST);
     `);
 
@@ -3348,7 +3348,7 @@ async function getDailyBriefTokens(hoursAgo = 24, limit = 50) {
       liq_mcap_ratio AS "liqMcapRatio",
       pool_address AS "poolAddress"
     FROM daily_brief_tokens
-    WHERE graduated_at >= NOW() - INTERVAL '1 hour' * $1
+    WHERE discovered_at >= NOW() - INTERVAL '1 hour' * $1
     ORDER BY market_cap DESC NULLS LAST
     LIMIT $2
   `, [hoursAgo, limit]);
@@ -3375,7 +3375,7 @@ async function getDailyBriefCount(hoursAgo = 24) {
 
   const result = await pool.query(`
     SELECT COUNT(*) AS count FROM daily_brief_tokens
-    WHERE graduated_at >= NOW() - INTERVAL '1 hour' * $1
+    WHERE discovered_at >= NOW() - INTERVAL '1 hour' * $1
   `, [hoursAgo]);
 
   return parseInt(result.rows[0].count) || 0;
@@ -3388,7 +3388,7 @@ async function getDailyBriefExistingMints() {
   if (!pool) return new Set();
 
   const result = await pool.query(
-    'SELECT mint_address FROM daily_brief_tokens WHERE graduated_at >= NOW() - INTERVAL \'25 hours\''
+    'SELECT mint_address FROM daily_brief_tokens WHERE discovered_at >= NOW() - INTERVAL \'25 hours\''
   );
 
   return new Set(result.rows.map(r => r.mint_address));
@@ -3404,7 +3404,7 @@ async function getDailyBriefStaleTokens(staleMinutes = 5, limit = 10) {
   const result = await pool.query(`
     SELECT mint_address AS address FROM daily_brief_tokens
     WHERE enriched_at < NOW() - INTERVAL '1 minute' * $1
-      AND graduated_at >= NOW() - INTERVAL '24 hours'
+      AND discovered_at >= NOW() - INTERVAL '24 hours'
     ORDER BY market_cap DESC NULLS LAST
     LIMIT $2
   `, [staleMinutes, limit]);
@@ -3419,7 +3419,7 @@ async function evictStaleDailyBriefTokens(hoursAgo = 24) {
   if (!pool) return 0;
 
   const result = await pool.query(
-    'DELETE FROM daily_brief_tokens WHERE graduated_at < NOW() - INTERVAL \'1 hour\' * $1',
+    'DELETE FROM daily_brief_tokens WHERE discovered_at < NOW() - INTERVAL \'1 hour\' * $1',
     [hoursAgo]
   );
 
@@ -3447,7 +3447,7 @@ async function getDailyBriefStats() {
       COUNT(*) AS count,
       MAX(enriched_at) AS last_enriched
     FROM daily_brief_tokens
-    WHERE graduated_at >= NOW() - INTERVAL '24 hours'
+    WHERE discovered_at >= NOW() - INTERVAL '24 hours'
   `);
 
   const row = result.rows[0];

@@ -439,6 +439,9 @@ var dailyBrief = (function() {
     // Refresh button
     if (els.refreshBtn) els.refreshBtn.addEventListener('click', function() { load(); });
 
+    // Clean up interval on page unload
+    window.addEventListener('beforeunload', stopAutoRefresh);
+
     // Initial load
     load();
     startAutoRefresh();

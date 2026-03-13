@@ -77,7 +77,10 @@ async function enrichMarketDataBatched(tokens) {
           if (info.symbol && !token.symbol) token.symbol = info.symbol;
         }
       }
-    } catch (_) { /* non-critical — tokens keep their defaults */ }
+    } catch (err) {
+      if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+      /* non-critical — tokens keep their defaults */
+    }
   }
 }
 
@@ -86,7 +89,10 @@ async function enrichWithHolders(token) {
     // Jupiter V2 search returns holderCount directly
     const count = await jupiterService.getTokenHolderCount(token.address);
     if (count != null) token.holders = count;
-  } catch (_) { /* non-critical */ }
+  } catch (err) {
+    if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+    /* non-critical */
+  }
 }
 
 async function enrichHoldersBatched(tokens) {
@@ -110,7 +116,10 @@ async function enrichWithHelius(tokens) {
         if (!token.logoUri) token.logoUri = meta.logoUri || null;
       }
     }
-  } catch (_) { /* non-critical */ }
+  } catch (err) {
+    if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+    /* non-critical */
+  }
 }
 
 // Redis connection config
@@ -597,11 +606,16 @@ const jobProcessors = {
       if (newTokens.length > 0) {
         console.log(`[DailyBrief] ${newTokens.length} new PumpSwap graduates found`);
 
-        await Promise.all([
+        const enrichResults = await Promise.allSettled([
           enrichMarketDataBatched(newTokens),
           enrichHoldersBatched(newTokens),
           enrichWithHelius(newTokens)
         ]);
+        for (const r of enrichResults) {
+          if (r.status === 'rejected') {
+            console.warn('[DailyBrief] Enrichment batch failed:', r.reason?.message || r.reason);
+          }
+        }
 
         for (const t of newTokens) {
           computeDerivedFields(t);
@@ -635,7 +649,10 @@ const jobProcessors = {
               token.marketCap = overview.marketCap || overview.fdv || 0;
               token.liquidity = overview.liquidity || 0;
             }
-          } catch (_) { /* non-critical */ }
+          } catch (err) {
+            if (err.isOverloaded || err.isCircuitBreakerError) throw err;
+            /* non-critical */
+          }
         }
         await enrichHoldersBatched(staleTokens);
 
