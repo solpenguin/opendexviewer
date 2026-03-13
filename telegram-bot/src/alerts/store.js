@@ -175,7 +175,7 @@ async function ensureBriefSubsTable() {
     CREATE TABLE IF NOT EXISTS telegram_brief_subs (
       id            SERIAL PRIMARY KEY,
       user_id       BIGINT NOT NULL,
-      chat_id       BIGINT NOT NULL UNIQUE,
+      chat_id       BIGINT NOT NULL,
       frequency_hrs INTEGER NOT NULL DEFAULT 24,
       filter_mcap   TEXT NOT NULL DEFAULT 'all',
       filter_vol    DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -187,6 +187,20 @@ async function ensureBriefSubsTable() {
     );
     CREATE INDEX IF NOT EXISTS idx_brief_subs_active
       ON telegram_brief_subs (is_active) WHERE is_active = TRUE;
+  `);
+  // Ensure UNIQUE constraint exists (table may have been created without it)
+  await db.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'telegram_brief_subs'::regclass
+          AND contype = 'u'
+          AND conname = 'telegram_brief_subs_chat_id_key'
+      ) THEN
+        ALTER TABLE telegram_brief_subs ADD CONSTRAINT telegram_brief_subs_chat_id_key UNIQUE (chat_id);
+      END IF;
+    END $$;
   `);
 }
 
@@ -227,7 +241,7 @@ async function getDueBriefSubs() {
   const res = await db.query(
     `SELECT * FROM telegram_brief_subs
      WHERE is_active = TRUE
-       AND (last_sent_at IS NULL OR last_sent_at < NOW() - (frequency_hrs || ' hours')::INTERVAL)`
+       AND (last_sent_at IS NULL OR last_sent_at < NOW() - make_interval(hours => frequency_hrs))`
   );
   return res.rows;
 }

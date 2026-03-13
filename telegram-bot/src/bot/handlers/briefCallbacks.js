@@ -6,6 +6,13 @@ const {
   applyFilters, formatBriefMessage, isAdmin, isGroup
 } = require('../commands/brief');
 
+// Whitelists for wizard values — reject anything not in these sets
+const VALID_FREQS = new Set([3, 6, 12, 24]);
+const VALID_HOURS = new Set([6, 12, 24, 48]);
+const VALID_MCAPS = new Set(['all', 'micro', 'small', 'mid', 'large']);
+const VALID_VOLS = new Set([0, 1000, 10000, 50000, 100000]);
+const VALID_RATIOS = new Set([0, 0.5, 1, 2, 5]);
+
 // Temporary in-memory state for the subscription wizard (keyed by `userId:chatId`)
 // Cleared once the subscription is saved.
 const wizardState = new Map();
@@ -77,8 +84,11 @@ module.exports = (bot) => {
   // ── Step 1: Frequency ──────────────────────────────────────────────
   bot.callbackQuery(/^bsub:freq:(\d+)$/, async (ctx) => {
     if (!(await requireAdminCb(ctx))) return;
-    await ctx.answerCallbackQuery();
     const freq = parseInt(ctx.match[1]);
+    if (isNaN(freq) || !VALID_FREQS.has(freq)) {
+      return ctx.answerCallbackQuery({ text: 'Invalid frequency.' });
+    }
+    await ctx.answerCallbackQuery();
     const key = getKey(ctx);
     wizardState.set(key, { freq });
 
@@ -100,8 +110,11 @@ module.exports = (bot) => {
   // ── Step 2: Hours window ───────────────────────────────────────────
   bot.callbackQuery(/^bsub:hours:(\d+)$/, async (ctx) => {
     if (!(await requireAdminCb(ctx))) return;
-    await ctx.answerCallbackQuery();
     const hours = parseInt(ctx.match[1]);
+    if (isNaN(hours) || !VALID_HOURS.has(hours)) {
+      return ctx.answerCallbackQuery({ text: 'Invalid time window.' });
+    }
+    await ctx.answerCallbackQuery();
     const key = getKey(ctx);
     const state = wizardState.get(key);
     if (!state) return ctx.reply('Session expired. Use /brief setup to start again.');
@@ -128,8 +141,11 @@ module.exports = (bot) => {
   // ── Step 3: MCap filter ────────────────────────────────────────────
   bot.callbackQuery(/^bsub:mcap:(\w+)$/, async (ctx) => {
     if (!(await requireAdminCb(ctx))) return;
-    await ctx.answerCallbackQuery();
     const mcap = ctx.match[1];
+    if (!VALID_MCAPS.has(mcap)) {
+      return ctx.answerCallbackQuery({ text: 'Invalid market cap filter.' });
+    }
+    await ctx.answerCallbackQuery();
     const key = getKey(ctx);
     const state = wizardState.get(key);
     if (!state) return ctx.reply('Session expired. Use /brief setup to start again.');
@@ -157,8 +173,11 @@ module.exports = (bot) => {
   // ── Step 4: Volume filter ──────────────────────────────────────────
   bot.callbackQuery(/^bsub:vol:(\d+)$/, async (ctx) => {
     if (!(await requireAdminCb(ctx))) return;
-    await ctx.answerCallbackQuery();
     const vol = parseInt(ctx.match[1]);
+    if (isNaN(vol) || !VALID_VOLS.has(vol)) {
+      return ctx.answerCallbackQuery({ text: 'Invalid volume filter.' });
+    }
+    await ctx.answerCallbackQuery();
     const key = getKey(ctx);
     const state = wizardState.get(key);
     if (!state) return ctx.reply('Session expired. Use /brief setup to start again.');
@@ -187,8 +206,11 @@ module.exports = (bot) => {
   // ── Step 5: Ratio filter -> save subscription ──────────────────────
   bot.callbackQuery(/^bsub:ratio:(.+)$/, async (ctx) => {
     if (!(await requireAdminCb(ctx))) return;
-    await ctx.answerCallbackQuery();
     const ratio = parseFloat(ctx.match[1]);
+    if (isNaN(ratio) || !VALID_RATIOS.has(ratio)) {
+      return ctx.answerCallbackQuery({ text: 'Invalid ratio filter.' });
+    }
+    await ctx.answerCallbackQuery();
     const key = getKey(ctx);
     const state = wizardState.get(key);
     if (!state) return ctx.reply('Session expired. Use /brief setup to start again.');

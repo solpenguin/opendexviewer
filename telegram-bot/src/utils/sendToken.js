@@ -3,6 +3,7 @@ const axios = require('axios');
 const { URL } = require('url');
 const dns = require('dns');
 const { promisify } = require('util');
+const { truncateHtml, TELEGRAM_MSG_LIMIT, TELEGRAM_CAPTION_LIMIT } = require('./format');
 
 const dnsLookup = promisify(dns.lookup);
 
@@ -79,7 +80,7 @@ async function sendTokenMessage(ctx, statusMsg, message) {
     try {
       const photo = await downloadImage(message.bannerUrl);
       await ctx.replyWithPhoto(photo, {
-        caption: message.text,
+        caption: truncateHtml(message.text, TELEGRAM_CAPTION_LIMIT),
         parse_mode: 'HTML',
         reply_markup: message.replyMarkup
       });
@@ -89,7 +90,7 @@ async function sendTokenMessage(ctx, statusMsg, message) {
     }
   }
 
-  await ctx.reply(message.text, {
+  await ctx.reply(truncateHtml(message.text, TELEGRAM_MSG_LIMIT), {
     parse_mode: 'HTML',
     reply_markup: message.replyMarkup,
     link_preview_options: { is_disabled: true }

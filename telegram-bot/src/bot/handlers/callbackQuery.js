@@ -1,5 +1,5 @@
 const tokensApi = require('../../api/tokens');
-const { formatTokenMessage } = require('../../utils/format');
+const { formatTokenMessage, truncateHtml, TELEGRAM_MSG_LIMIT, TELEGRAM_CAPTION_LIMIT } = require('../../utils/format');
 const { downloadImage } = require('../../utils/sendToken');
 const { enrichWithPrice } = require('../../utils/enrichToken');
 const { isValidSolanaAddress } = require('../../utils/solana');
@@ -23,7 +23,7 @@ module.exports = (bot) => {
         try {
           const photo = await downloadImage(message.bannerUrl);
           await ctx.replyWithPhoto(photo, {
-            caption: message.text,
+            caption: truncateHtml(message.text, TELEGRAM_CAPTION_LIMIT),
             parse_mode: 'HTML',
             reply_markup: message.replyMarkup
           });
@@ -33,7 +33,7 @@ module.exports = (bot) => {
         }
       }
 
-      await ctx.reply(message.text, {
+      await ctx.reply(truncateHtml(message.text, TELEGRAM_MSG_LIMIT), {
         parse_mode: 'HTML',
         reply_markup: message.replyMarkup,
         link_preview_options: { is_disabled: true }
@@ -61,12 +61,12 @@ module.exports = (bot) => {
       // If the original message was a photo (banner), update caption
       if (ctx.callbackQuery.message?.photo) {
         await ctx.editMessageCaption({
-          caption: message.text,
+          caption: truncateHtml(message.text, TELEGRAM_CAPTION_LIMIT),
           parse_mode: 'HTML',
           reply_markup: message.replyMarkup
         });
       } else {
-        await ctx.editMessageText(message.text, {
+        await ctx.editMessageText(truncateHtml(message.text, TELEGRAM_MSG_LIMIT), {
           parse_mode: 'HTML',
           reply_markup: message.replyMarkup,
           link_preview_options: { is_disabled: true }

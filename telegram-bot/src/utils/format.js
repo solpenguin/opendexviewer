@@ -52,6 +52,19 @@ function isSafeUrl(url) {
   }
 }
 
+const TELEGRAM_MSG_LIMIT = 4096;
+const TELEGRAM_CAPTION_LIMIT = 1024;
+
+function truncateHtml(text, limit) {
+  if (text.length <= limit) return text;
+  // Leave room for truncation notice
+  const truncated = text.slice(0, limit - 30);
+  // Try to cut at last newline to avoid breaking HTML tags
+  const lastNewline = truncated.lastIndexOf('\n');
+  const cutPoint = lastNewline > limit * 0.5 ? lastNewline : truncated.length;
+  return truncated.slice(0, cutPoint) + '\n\n<i>[Message truncated]</i>';
+}
+
 function formatTokenMessage(token) {
   const mint = token.mintAddress || token.address;
   const name = escapeHtml(token.name || 'Unknown');
@@ -118,4 +131,4 @@ function formatTokenMessage(token) {
   return { text, replyMarkup: keyboard, bannerUrl };
 }
 
-module.exports = { escapeHtml, formatPrice, formatNumber, formatChange, formatTokenMessage };
+module.exports = { escapeHtml, formatPrice, formatNumber, formatChange, formatTokenMessage, truncateHtml, TELEGRAM_MSG_LIMIT, TELEGRAM_CAPTION_LIMIT };

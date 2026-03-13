@@ -13,19 +13,19 @@ async function enrichWithPrice(token) {
   if (!mint) return token;
 
   // If market data looks complete, no need to re-fetch
-  if (token.marketCap > 0 && token.price > 0) return token;
+  if (token.marketCap != null && token.marketCap > 0 && token.price != null && token.price > 0) return token;
 
   try {
     const priceData = await tokensApi.getPrice(mint);
     if (priceData) {
       return {
         ...token,
-        price: priceData.price ?? token.price ?? 0,
-        marketCap: priceData.marketCap ?? token.marketCap ?? 0,
-        fdv: priceData.fdv ?? token.fdv ?? 0,
-        volume24h: priceData.volume24h ?? token.volume24h ?? 0,
-        priceChange24h: priceData.priceChange24h ?? token.priceChange24h ?? 0,
-        liquidity: priceData.liquidity ?? token.liquidity ?? 0
+        price: priceData.price != null ? priceData.price : (token.price ?? 0),
+        marketCap: priceData.marketCap != null ? priceData.marketCap : (token.marketCap ?? 0),
+        fdv: priceData.fdv != null ? priceData.fdv : (token.fdv ?? 0),
+        volume24h: priceData.volume24h != null ? priceData.volume24h : (token.volume24h ?? 0),
+        priceChange24h: priceData.priceChange24h != null ? priceData.priceChange24h : (token.priceChange24h ?? 0),
+        liquidity: priceData.liquidity != null ? priceData.liquidity : (token.liquidity ?? 0)
       };
     }
   } catch (err) {

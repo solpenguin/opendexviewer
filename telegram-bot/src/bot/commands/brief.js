@@ -1,7 +1,7 @@
 const { InlineKeyboard } = require('grammy');
 const tokensApi = require('../../api/tokens');
 const store = require('../../alerts/store');
-const { escapeHtml, formatNumber, formatChange, formatPrice } = require('../../utils/format');
+const { escapeHtml, formatNumber, formatChange, formatPrice, truncateHtml, TELEGRAM_MSG_LIMIT } = require('../../utils/format');
 const config = require('../../config');
 
 // ── Filter / frequency labels (HTML-safe — used in parse_mode HTML) ──
@@ -105,7 +105,7 @@ function formatBriefMessage(tokens, hours, filterMcap, filterVol, filterRatio) {
 
   keyboard.url('Full Brief on OpenDEX', `${config.FRONTEND_URL}/dailybrief.html`);
 
-  return { text, keyboard };
+  return { text: truncateHtml(text, TELEGRAM_MSG_LIMIT), keyboard };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

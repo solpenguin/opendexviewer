@@ -1,6 +1,6 @@
 const { InlineKeyboard } = require('grammy');
 const tokensApi = require('../../api/tokens');
-const { escapeHtml, formatPrice, formatNumber } = require('../../utils/format');
+const { escapeHtml, formatPrice, formatNumber, truncateHtml, TELEGRAM_MSG_LIMIT } = require('../../utils/format');
 const config = require('../../config');
 
 const PAGE_SIZE = 10;
@@ -169,7 +169,7 @@ module.exports = (bot) => {
       const total = leaderboard.total || 0;
       const boardText = formatLeaderboard('watchlist', tokens, total, 1);
 
-      const text = highlights + '\n' + boardText;
+      const text = truncateHtml(highlights + '\n' + boardText, TELEGRAM_MSG_LIMIT);
       const keyboard = buildKeyboard('watchlist', 1, total);
 
       await ctx.api.editMessageText(statusMsg.chat.id, statusMsg.message_id, text, {
@@ -197,6 +197,12 @@ module.exports = (bot) => {
       return;
     }
 
+    // Validate tab and page
+    const VALID_TABS = new Set(['watchlist', 'sentiment', 'calls']);
+    if (!VALID_TABS.has(tab) || isNaN(page) || page < 1 || page > 1000) {
+      return ctx.answerCallbackQuery();
+    }
+
     try {
       const offset = (page - 1) * PAGE_SIZE;
       let result;
@@ -217,7 +223,7 @@ module.exports = (bot) => {
 
       const highlights = await getCachedHighlights();
       const boardText = formatLeaderboard(tab, tokens, total, page);
-      const text = highlights + '\n' + boardText;
+      const text = truncateHtml(highlights + '\n' + boardText, TELEGRAM_MSG_LIMIT);
       const keyboard = buildKeyboard(tab, page, total);
 
       await ctx.editMessageText(text, {
