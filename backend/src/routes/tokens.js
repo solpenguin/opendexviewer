@@ -1342,20 +1342,24 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       ]);
       const jup = jupiterMeta || {};
 
-      // Resolve default links: use 24h cache if available, otherwise fetch + merge + cache
+      // Resolve default links: use 24h cache if available, otherwise fetch + merge + cache.
+      // Only non-empty results are cached — empty results could be transient failures
+      // (IPFS timeout, etc.) and should be retried on the next token detail request.
       let mergedDefaultLinks = {};
-      if (cachedLinks) {
+      if (cachedLinks && Object.keys(cachedLinks).length > 0) {
         mergedDefaultLinks = cachedLinks;
-      } else {
+      } else if (!cachedLinks) {
+        // No cache entry — fetch off-chain metadata
         const offchainLinks = await solanaService.fetchOffchainLinks(helius.jsonUri).catch(() => null);
         const onchain = helius.onchainLinks || {};
         for (const key of ['website', 'twitter', 'telegram', 'discord']) {
           if (offchainLinks && offchainLinks[key]) mergedDefaultLinks[key] = offchainLinks[key];
           else if (onchain[key]) mergedDefaultLinks[key] = onchain[key];
         }
-        // Cache for 24h — social links rarely change. Cache even empty result
-        // to avoid re-fetching json_uri for tokens that have no links.
-        await cache.set(linksCacheKey, Object.keys(mergedDefaultLinks).length > 0 ? mergedDefaultLinks : {}, TTL.DAY);
+        if (Object.keys(mergedDefaultLinks).length > 0) {
+          await cache.set(linksCacheKey, mergedDefaultLinks, TTL.DAY);
+        }
+        // Don't cache empty — could be transient IPFS/network failure
       }
 
       const tokenResult = {

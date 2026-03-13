@@ -551,6 +551,7 @@ const tokenDetail = {
           if (this.mint !== mint || !fullData) return;
           this.token = fullData;
           this.renderToken();
+          this.updateCommunitySection();
         }).catch(() => {});
       }
     } catch (err) {
