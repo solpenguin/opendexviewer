@@ -25,7 +25,7 @@ const burnCreditsRoutes = require('./routes/burnCredits');
 const deviceAuthRoutes = require('./routes/deviceAuth');
 const folioRoutes = require('./routes/folios');
 const dailyBriefRoutes = require('./routes/dailyBrief');
-const bagsRoutes = require('./routes/bags');
+// const bagsRoutes = require('./routes/bags'); // Disabled — Bags listing page hidden for now
 
 // Import middleware
 const { defaultLimiter } = require('./middleware/rateLimit');
@@ -304,7 +304,7 @@ app.use('/api/burn-credits', burnCreditsRoutes);
 app.use('/api/auth/device-session', deviceAuthRoutes);
 app.use('/api/folios', folioRoutes);
 app.use('/api/daily-brief', dailyBriefRoutes);
-app.use('/api/bags', bagsRoutes);
+// app.use('/api/bags', bagsRoutes); // Disabled — Bags listing page hidden for now
 
 // Public API (v1) - requires API key for most endpoints
 app.use('/api/v1', publicApiRoutes);

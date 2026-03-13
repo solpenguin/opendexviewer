@@ -118,7 +118,8 @@
       "WebFetch(domain:helius.mintlify.app)",
       "WebFetch(domain:docs.bags.fm)",
       "WebFetch(domain:public-api-v2.bags.fm)",
-      "Bash(node -e \"require\\(''./src/routes/bags''\\)\")"
+      "Bash(node -e \"require\\(''./src/routes/bags''\\)\")",
+      "Bash(grep -r -l -i \"bags\" c:/VS/OPENDEX/opendexviewer/frontend/*.html)"
     ]
   }
 }
