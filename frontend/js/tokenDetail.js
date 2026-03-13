@@ -1139,6 +1139,8 @@ const tokenDetail = {
       this._aiAnalysisCache = null;
       const aiBtn = document.getElementById('ai-analysis-btn');
       if (aiBtn) { aiBtn.disabled = true; aiBtn.title = 'Waiting for holder data...'; }
+      const shareBtn = document.getElementById('holders-share');
+      if (shareBtn) { shareBtn.disabled = true; shareBtn.title = 'Waiting for holder data...'; }
       if (refreshBtn) refreshBtn.classList.add('spinning');
     }
 
@@ -1286,6 +1288,10 @@ const tokenDetail = {
           expandBtn.innerHTML = `Show All ${holders.length} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
         }
       }
+
+      // Enable share button now that holder data is rendered
+      const shareBtnDone = document.getElementById('holders-share');
+      if (shareBtnDone) { shareBtnDone.disabled = false; shareBtnDone.title = 'Share holder analytics'; }
 
       // Lazy-load hold times and diamond hands after table renders (non-blocking).
       // First call triggers backend computation; subsequent polls pick up results.
@@ -1562,6 +1568,9 @@ const tokenDetail = {
         scale: 2,
         useCORS: true,
         logging: false,
+        ignoreElements: (el) => el.classList && el.classList.contains('ai-analysis-overlay'),
+        scrollY: -window.scrollY,
+        windowHeight: section.scrollHeight,
       });
 
       const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
