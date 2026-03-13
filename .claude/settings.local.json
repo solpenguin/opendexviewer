@@ -110,7 +110,8 @@
       "Bash(git -C /c/VS/OPENDEX/opendexviewer log --oneline -20 -- backend/src/services/geckoTerminal.js backend/src/services/solana.js backend/src/routes/tokens.js)",
       "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed --stat)",
       "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/solana.js)",
-      "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/geckoTerminal.js)"
+      "Bash(git -C /c/VS/OPENDEX/opendexviewer show 9856bed -- backend/src/services/geckoTerminal.js)",
+      "Bash(node -e \"require\\(''''./backend/src/routes/tokens.js''''\\)\")"
     ]
   }
 }

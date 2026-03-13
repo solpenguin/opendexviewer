@@ -2095,57 +2095,54 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
       }
     }));
 
-    // Dispatch computation for stale wallets — try worker, fall back to inline
+    // Dispatch computation for stale wallets — try worker, fall back to inline.
+    // Uses a unified pending key shared with diamond-hands so only ONE computation
+    // runs per token, even when both endpoints are called simultaneously.
     let computed = true;
     if (staleWallets.length > 0) {
-      const pendingKey = `hold-times-pending:${mint}`;
+      const pendingKey = `holder-metrics-pending:${mint}`;
       const pending = await cache.get(pendingKey);
       let needsComputation = false;
 
       if (!pending) {
-        // First request — try worker, fall back to inline
         needsComputation = true;
       } else if (typeof pending === 'number' && (Date.now() - pending) > 30000) {
-        // Pending for >30s with no progress — worker likely isn't running
-        console.log(`[HoldTimes] Pending for ${Math.round((Date.now() - pending) / 1000)}s, stale wallets remain — forcing inline fallback`);
+        console.log(`[HolderMetrics] Pending for ${Math.round((Date.now() - pending) / 1000)}s, stale wallets remain — forcing inline fallback`);
         await cache.delete(pendingKey);
         needsComputation = true;
       } else {
-        console.log(`[HoldTimes] Already pending (${typeof pending === 'number' ? Math.round((Date.now() - pending) / 1000) + 's ago' : 'flag'}), ${staleWallets.length} stale wallets — waiting`);
+        console.log(`[HolderMetrics] Already pending (${typeof pending === 'number' ? Math.round((Date.now() - pending) / 1000) + 's ago' : 'flag'}), ${staleWallets.length} stale wallets — waiting`);
       }
 
       if (needsComputation) {
         await cache.set(pendingKey, Date.now(), 120000);
         let useInline = false;
 
-        // Try worker first
-        const job = await jobQueue.addAnalyticsJob('compute-hold-times', {
+        const job = await jobQueue.addAnalyticsJob('compute-holder-metrics', {
           mint,
           wallets: staleWallets
         });
 
         if (job) {
-          // Check if worker is actually processing jobs
           const workerActive = await jobQueue.isWorkerActive();
           if (!workerActive) {
-            console.log(`[HoldTimes] Job queued but no active worker detected — using inline fallback`);
+            console.log(`[HolderMetrics] Job queued but no active worker — using inline fallback`);
             useInline = true;
           } else {
-            console.log(`[HoldTimes] Job queued to worker for ${staleWallets.length} wallets`);
+            console.log(`[HolderMetrics] Job queued to worker for ${staleWallets.length} wallets`);
           }
         } else {
-          console.log(`[HoldTimes] Job queue unavailable — using inline fallback`);
+          console.log(`[HolderMetrics] Job queue unavailable — using inline fallback`);
           useInline = true;
         }
 
         if (useInline) {
-          // Compute in background without blocking the response
           const bgWallets = [...staleWallets];
           const bgMint = mint;
 
           setImmediate(() => {
             (async () => {
-              console.log(`[HoldTimes] Inline background: computing ${bgWallets.length} wallets for ${bgMint}`);
+              console.log(`[HolderMetrics] Inline: computing ${bgWallets.length} wallets for ${bgMint}`);
               const BATCH_SIZE = 10;
               const DAY_MS = 86400000;
               let successCount = 0;
@@ -2159,13 +2156,13 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
                         const metrics = await solanaService.getWalletHoldMetrics(wallet, bgMint);
                         return [wallet, metrics];
                       } catch (err) {
-                        console.error(`[HoldTimes] Wallet ${wallet.slice(0,8)}... error:`, err.message);
+                        console.error(`[HolderMetrics] Wallet ${wallet.slice(0,8)}... error:`, err.message);
                         return [wallet, null];
                       }
                     })
                   );
                   for (const [wallet, metrics] of results) {
-                    if (!metrics) { failCount++; continue; } // API error — skip, don't cache sentinel
+                    if (!metrics) { failCount++; continue; }
                     const avg = metrics.avgHoldTime ?? -1;
                     const token = metrics.tokenHoldTime ?? -1;
                     const age = metrics.walletAge ?? -1;
@@ -2175,11 +2172,11 @@ router.get('/:mint/holders/hold-times', validateMint, asyncHandler(async (req, r
                     if (avg > 0 || token > 0) successCount++;
                   }
                 }
-                console.log(`[HoldTimes] Inline complete for ${bgMint}: ${successCount} with data, ${failCount} failed`);
+                console.log(`[HolderMetrics] Inline complete for ${bgMint}: ${successCount} with data, ${failCount} failed`);
               } catch (err) {
-                console.error(`[HoldTimes] Inline failed for ${bgMint}:`, err.message);
+                console.error(`[HolderMetrics] Inline failed for ${bgMint}:`, err.message);
               } finally {
-                await cache.delete(`hold-times-pending:${bgMint}`);
+                await cache.delete(`holder-metrics-pending:${bgMint}`);
               }
             })();
           });
@@ -2260,8 +2257,10 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
       return res.json(result);
     }
 
-    // Background computation for uncached wallets
-    const pendingKey = `diamond-hands-pending:${mint}`;
+    // Background computation for uncached wallets.
+    // Uses the same unified pending key as hold-times — if hold-times is already
+    // computing these wallets, we piggyback on that instead of duplicating work.
+    const pendingKey = `holder-metrics-pending:${mint}`;
     const pending = await cache.get(pendingKey);
 
     if (pending && typeof pending === 'number' && (Date.now() - pending) > 30000) {
@@ -2274,8 +2273,7 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
     if (!isStillPending) {
       await cache.set(pendingKey, Date.now(), 300000); // 5 min dedup
 
-      // Try worker first
-      const job = await jobQueue.addAnalyticsJob('compute-diamond-hands', {
+      const job = await jobQueue.addAnalyticsJob('compute-holder-metrics', {
         mint,
         wallets: uncached
       });
@@ -2318,7 +2316,7 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
                   })
                 );
                 for (const [wallet, metrics] of results) {
-                  if (!metrics) continue; // API error — skip, don't cache sentinel
+                  if (!metrics) continue;
                   const avg = metrics.avgHoldTime ?? -1;
                   const token = metrics.tokenHoldTime ?? -1;
                   const age = metrics.walletAge ?? -1;
@@ -2332,11 +2330,13 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
             } catch (err) {
               console.error(`[DiamondHands] Inline failed:`, err.message);
             } finally {
-              await cache.delete(`diamond-hands-pending:${bgMint}`);
+              await cache.delete(`holder-metrics-pending:${bgMint}`);
             }
           })();
         });
       }
+    } else {
+      console.log(`[DiamondHands] Computation already pending for ${mint.slice(0, 8)}..., waiting for shared result`);
     }
 
     // Return partial distribution from cached data so far

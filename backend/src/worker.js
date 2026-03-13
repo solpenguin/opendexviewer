@@ -464,15 +464,16 @@ const jobProcessors = {
   // ==========================================
 
   /**
-   * Compute average hold times for holder wallets.
-   * Fetches swap history from Helius for each wallet that doesn't have
-   * a fresh per-wallet cache entry. Results are cached per-wallet for 24 hours.
+   * Unified holder metrics computation — used by both hold-times and diamond-hands.
+   * Previously these were two separate jobs that duplicated API calls when both
+   * endpoints were hit simultaneously. Now a single job computes per-wallet metrics
+   * and clears the shared pending flag.
    */
-  'compute-hold-times': async (job) => {
+  'compute-holder-metrics': async (job) => {
     const { mint, wallets } = job.data;
     if (!wallets || wallets.length === 0) return { computed: 0 };
 
-    console.log(`[Worker] Computing hold times for ${wallets.length} wallets (token ${mint})`);
+    console.log(`[Worker] Computing holder metrics for ${wallets.length} wallets (token ${mint})`);
 
     const BATCH_SIZE = 10;
     let computed = 0;
@@ -486,7 +487,7 @@ const jobProcessors = {
             const metrics = await solanaService.getWalletHoldMetrics(wallet, mint);
             return [wallet, metrics];
           } catch (err) {
-            console.warn(`[Worker] Hold time failed for ${wallet}:`, err.message);
+            console.warn(`[Worker] Hold metrics failed for ${wallet}:`, err.message);
             return [wallet, null];
           }
         })
@@ -494,73 +495,22 @@ const jobProcessors = {
 
       for (const [wallet, metrics] of batchResults) {
         if (!metrics) {
-          // API error (timeout, rate limit) — don't cache, so it retries next request
           skipped++;
           continue;
         }
 
-        // Cache avg hold time (wallet-level, reusable across tokens)
         await cache.set(`wallet-hold-time:${wallet}`, metrics.avgHoldTime ?? -1, TTL.DAY);
-
-        // Cache token-specific hold time
         await cache.set(`wallet-token-hold:${wallet}:${mint}`, metrics.tokenHoldTime ?? -1, TTL.DAY);
-
-        // Cache wallet age (positive ms = known, -1 = unknown/100+ txs)
         await cache.set(`wallet-age:${wallet}`, metrics.walletAge ?? -1, TTL.DAY);
 
         computed++;
       }
     }
 
-    // Clear pending flag so the endpoint knows computation is done
-    await cache.delete(`hold-times-pending:${mint}`);
+    // Clear unified pending flag
+    await cache.delete(`holder-metrics-pending:${mint}`);
 
-    console.log(`[Worker] Hold times for ${mint}: ${computed} computed, ${skipped} no data`);
-    return { computed, skipped };
-  },
-
-  /**
-   * Compute diamond hands data — same as compute-hold-times but clears
-   * the diamond-hands-pending flag when done.
-   */
-  'compute-diamond-hands': async (job) => {
-    const { mint, wallets } = job.data;
-    if (!wallets || wallets.length === 0) return { computed: 0 };
-
-    console.log(`[Worker] Computing diamond hands for ${wallets.length} wallets (token ${mint})`);
-
-    const BATCH_SIZE = 25;
-    let computed = 0;
-    let skipped = 0;
-
-    for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
-      const batch = wallets.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (wallet) => {
-          try {
-            const metrics = await solanaService.getWalletHoldMetrics(wallet, mint);
-            return [wallet, metrics];
-          } catch (err) {
-            return [wallet, null];
-          }
-        })
-      );
-
-      for (const [wallet, metrics] of batchResults) {
-        if (!metrics) { skipped++; continue; } // API error — skip, don't cache sentinel
-        const avg = metrics.avgHoldTime ?? -1;
-        const token = metrics.tokenHoldTime ?? -1;
-        const age = metrics.walletAge ?? -1;
-        await cache.set(`wallet-hold-time:${wallet}`, avg, TTL.DAY);
-        await cache.set(`wallet-token-hold:${wallet}:${mint}`, token, TTL.DAY);
-        await cache.set(`wallet-age:${wallet}`, age, TTL.DAY);
-        if (avg > 0 || token > 0) computed++;
-        else skipped++;
-      }
-    }
-
-    await cache.delete(`diamond-hands-pending:${mint}`);
-    console.log(`[Worker] Diamond hands for ${mint}: ${computed} with data, ${skipped} no data`);
+    console.log(`[Worker] Holder metrics for ${mint}: ${computed} computed, ${skipped} no data`);
     return { computed, skipped };
   },
 

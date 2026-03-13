@@ -1149,7 +1149,7 @@ router.post('/ai-cache/delete-entry', validateAdminSession, asyncHandler(async (
 /**
  * POST /admin/diamond-hands/reset
  * Clear diamond hands cache for a specific token mint address.
- * Clears: diamond-hands:{mint}, diamond-hands-wallets:{mint}, diamond-hands-pending:{mint}
+ * Clears: diamond-hands:{mint}, diamond-hands-wallets:{mint}, holder-metrics-pending:{mint}
  */
 router.post('/diamond-hands/reset',
   validateAdminSession,
@@ -1163,7 +1163,7 @@ router.post('/diamond-hands/reset',
     const keysToDelete = [
       `diamond-hands:${mint}`,
       `diamond-hands-wallets:${mint}`,
-      `diamond-hands-pending:${mint}`
+      `holder-metrics-pending:${mint}`
     ];
 
     let deleted = 0;
