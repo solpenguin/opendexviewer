@@ -1131,21 +1131,41 @@ const tokenDetail = {
       const poolData = await api.bags.getPool(this.mint);
       if (!poolData || !poolData.isBagsToken) return;
 
-      // Show the Bags badge
+      // Show the Bags badge and link to this token's Bags page
       const badge = document.getElementById('bags-badge');
-      if (badge) badge.style.display = '';
+      if (badge) {
+        badge.href = `https://bags.fm/${this.mint}`;
+        badge.style.display = '';
+      }
 
-      // Fetch lifetime fees in parallel once we know it's a Bags token
-      const feesData = await api.bags.getLifetimeFees(this.mint);
+      // Fetch lifetime fees + SOL price in parallel
+      const [feesData, solPriceData] = await Promise.all([
+        api.bags.getLifetimeFees(this.mint),
+        api.tokens.getPrice('So11111111111111111111111111111111111111112').catch(() => null)
+      ]);
+
       if (feesData && feesData.lifetimeFees != null) {
-        const card = document.getElementById('bags-rewards-card');
-        const valueEl = document.getElementById('stat-bags-rewards');
-        if (card) card.style.display = '';
-        if (valueEl) {
-          const fees = feesData.lifetimeFees;
-          valueEl.textContent = fees >= 1000
+        const section = document.getElementById('bags-stats-section');
+        const solEl = document.getElementById('bags-rewards-sol');
+        const usdEl = document.getElementById('bags-rewards-usd');
+        if (section) section.style.display = '';
+
+        const fees = feesData.lifetimeFees;
+        if (solEl) {
+          solEl.textContent = fees >= 1000
             ? `${utils.formatNumber(fees, '')} SOL`
             : `${fees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} SOL`;
+        }
+        if (usdEl) {
+          const solPrice = solPriceData?.price || 0;
+          if (solPrice > 0) {
+            const usdValue = fees * solPrice;
+            usdEl.textContent = usdValue >= 1000
+              ? `$${utils.formatNumber(usdValue)}`
+              : `$${usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          } else {
+            usdEl.textContent = '--';
+          }
         }
       }
     } catch (err) {

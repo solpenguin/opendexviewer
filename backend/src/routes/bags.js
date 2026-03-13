@@ -7,9 +7,9 @@ const { cache } = require('../services/cache');
 const { httpsAgent } = require('../services/httpAgent');
 
 const BAGS_API_BASE = 'https://public-api-v2.bags.fm/api/v1';
-const BAGS_POOLS_TTL = 3600;  // 1 hour  — pool list changes rarely (new token launches)
-const BAGS_LIST_TTL = 1800;   // 30 min  — enriched list with prices (prices go stale slowly for a directory page)
-const BAGS_FEES_TTL = 3600;   // 1 hour  — lifetime fees are cumulative, change slowly
+const BAGS_POOLS_TTL = 3600000;  // 1 hour (ms) — pool list changes rarely (new token launches)
+const BAGS_LIST_TTL = 1800000;   // 30 min (ms) — enriched list with prices
+const BAGS_FEES_TTL = 3600000;   // 1 hour (ms) — lifetime fees are cumulative, change slowly
 
 function getBagsApiKey() {
   return process.env.BAGS_API_KEY || null;
