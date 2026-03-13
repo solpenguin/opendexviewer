@@ -486,6 +486,7 @@ async function initializeDatabase() {
       );
 
       CREATE INDEX IF NOT EXISTS idx_daily_brief_discovered ON daily_brief_tokens(discovered_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_daily_brief_graduated_coalesce ON daily_brief_tokens(COALESCE(graduated_at, discovered_at) DESC);
       CREATE INDEX IF NOT EXISTS idx_daily_brief_mcap ON daily_brief_tokens(market_cap DESC NULLS LAST);
     `);
 
@@ -3351,7 +3352,7 @@ async function getDailyBriefTokens(hoursAgo = 24, limit = 50) {
       liq_mcap_ratio AS "liqMcapRatio",
       pool_address AS "poolAddress"
     FROM daily_brief_tokens
-    WHERE discovered_at >= NOW() - INTERVAL '1 hour' * $1
+    WHERE COALESCE(graduated_at, discovered_at) >= NOW() - INTERVAL '1 hour' * $1
     ORDER BY market_cap DESC NULLS LAST
     LIMIT $2
   `, [hoursAgo, limit]);
@@ -3378,7 +3379,7 @@ async function getDailyBriefCount(hoursAgo = 24) {
 
   const result = await pool.query(`
     SELECT COUNT(*) AS count FROM daily_brief_tokens
-    WHERE discovered_at >= NOW() - INTERVAL '1 hour' * $1
+    WHERE COALESCE(graduated_at, discovered_at) >= NOW() - INTERVAL '1 hour' * $1
   `, [hoursAgo]);
 
   return parseInt(result.rows[0].count) || 0;
@@ -3423,7 +3424,7 @@ async function evictStaleDailyBriefTokens(hoursAgo = 24) {
   if (!pool) return 0;
 
   const result = await pool.query(
-    'DELETE FROM daily_brief_tokens WHERE discovered_at < NOW() - INTERVAL \'1 hour\' * $1',
+    'DELETE FROM daily_brief_tokens WHERE COALESCE(graduated_at, discovered_at) < NOW() - INTERVAL \'1 hour\' * $1',
     [hoursAgo]
   );
 
@@ -3451,7 +3452,7 @@ async function getDailyBriefStats() {
       COUNT(*) AS count,
       MAX(enriched_at) AS last_enriched
     FROM daily_brief_tokens
-    WHERE discovered_at >= NOW() - INTERVAL '24 hours'
+    WHERE COALESCE(graduated_at, discovered_at) >= NOW() - INTERVAL '24 hours'
   `);
 
   const row = result.rows[0];

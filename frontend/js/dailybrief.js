@@ -203,10 +203,21 @@ var dailyBrief = (function() {
   }
 
   function sortTokens(tokens, field, order) {
-    var isDate = field === 'createdAt';
+    var isDate = field === 'createdAt' || field === 'graduatedAt';
     return tokens.slice().sort(function(a, b) {
-      var va = isDate ? (a[field] ? new Date(a[field]).getTime() : 0) : (a[field] || 0);
-      var vb = isDate ? (b[field] ? new Date(b[field]).getTime() : 0) : (b[field] || 0);
+      var va, vb;
+      if (field === 'graduatedAt') {
+        va = a.graduatedAt || a.discoveredAt || a.createdAt;
+        vb = b.graduatedAt || b.discoveredAt || b.createdAt;
+        va = va ? new Date(va).getTime() : 0;
+        vb = vb ? new Date(vb).getTime() : 0;
+      } else if (isDate) {
+        va = a[field] ? new Date(a[field]).getTime() : 0;
+        vb = b[field] ? new Date(b[field]).getTime() : 0;
+      } else {
+        va = a[field] || 0;
+        vb = b[field] || 0;
+      }
       return order === 'desc' ? vb - va : va - vb;
     });
   }
@@ -400,6 +411,7 @@ var dailyBrief = (function() {
         'cell-change': 'priceChange24h',
         'cell-volume': 'volume24h',
         'cell-age': 'createdAt',
+        'cell-graduated': 'graduatedAt',
         'cell-volratio': 'volMcapRatio'
       };
       for (var i = 0; i < headers.length; i++) {

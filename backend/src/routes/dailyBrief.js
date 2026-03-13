@@ -63,7 +63,7 @@ function computeAggregateStats(tokens) {
 // GET /api/daily-brief
 router.get('/', searchLimiter, asyncHandler(async (req, res) => {
   const { hours = 24, limit = 50 } = req.query;
-  const hoursAgo = Math.max(1, Math.min(24, parseInt(hours) || 24));
+  const hoursAgo = Math.max(1, Math.min(72, parseInt(hours) || 24));
   const resultLimit = Math.max(1, Math.min(100, parseInt(limit) || 50));
 
   // Read from database (written by worker)
