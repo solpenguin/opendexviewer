@@ -115,7 +115,10 @@
       "WebSearch",
       "WebFetch(domain:docs.helius.dev)",
       "WebFetch(domain:www.helius.dev)",
-      "WebFetch(domain:helius.mintlify.app)"
+      "WebFetch(domain:helius.mintlify.app)",
+      "WebFetch(domain:docs.bags.fm)",
+      "WebFetch(domain:public-api-v2.bags.fm)",
+      "Bash(node -e \"require\\(''./src/routes/bags''\\)\")"
     ]
   }
 }

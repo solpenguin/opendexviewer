@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>OG Finder - OpenDex</title>
-  <meta name="description" content="Find the oldest PumpFun tokens by name or ticker. Discover the OG mints on Solana.">
+  <title>Bags Tokens - OpenDex</title>
+  <meta name="description" content="Browse all tokens launched on the Bags platform with market data and lifetime rewards.">
   <meta name="theme-color" content="#07080a">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OpenDex">
-  <meta property="og:title" content="OG Finder - OpenDex">
-  <meta property="og:description" content="Find the oldest PumpFun tokens by name or ticker. Discover the OG mints on Solana.">
+  <meta property="og:title" content="Bags Tokens - OpenDex">
+  <meta property="og:description" content="Browse all tokens launched on the Bags platform with market data and lifetime rewards.">
   <meta property="og:image" content="https://opendex.online/OpenDexBanner2.png">
-  <meta property="og:url" content="https://opendex.online/ogfinder">
+  <meta property="og:url" content="https://opendex.online/bags">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="OG Finder - OpenDex">
-  <meta name="twitter:description" content="Find the oldest PumpFun tokens by name or ticker. Discover the OG mints on Solana.">
+  <meta name="twitter:title" content="Bags Tokens - OpenDex">
+  <meta name="twitter:description" content="Browse all tokens launched on the Bags platform with market data and lifetime rewards.">
   <meta name="twitter:image" content="https://opendex.online/OpenDexBanner2.png">
 
   <!-- Favicon -->
@@ -33,8 +33,6 @@
 
   <link rel="stylesheet" href="css/styles.css">
   <link rel="preconnect" href="https://opendex-api-dy30.onrender.com" crossorigin>
-  <link rel="dns-prefetch" href="https://api.geckoterminal.com">
-  <link rel="dns-prefetch" href="https://api.jup.ag">
 </head>
 <body>
   <header class="header">
@@ -58,12 +56,12 @@
           <div class="nav-dropdown-menu">
             <a href="community.html" class="nav-dropdown-item">Community</a>
             <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
-            <a href="ogfinder.html" class="nav-dropdown-item active">OG Finder</a>
+            <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
             <a href="spikes.html" class="nav-dropdown-item">Spike Detector</a>
             <a href="dailybrief.html" class="nav-dropdown-item">Daily Brief</a>
             <a href="burn.html" class="nav-dropdown-item">Burn Credits</a>
             <a href="folios.html" class="nav-dropdown-item">Folios</a>
-            <a href="bags.html" class="nav-dropdown-item">Bags</a>
+            <a href="bags.html" class="nav-dropdown-item active">Bags</a>
           </div>
         </div>
         <div class="nav-dropdown">
@@ -78,88 +76,96 @@
       </nav>
 
       <div class="header-actions">
-        <button id="install-app-btn" class="btn btn-ghost btn-sm" style="display:none;" aria-label="Install app">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Install
+        <button id="install-app-btn" class="btn btn-ghost btn-sm" style="display: none;" title="Install OpenDex App">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button id="connect-wallet" class="btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="5" width="20" height="14" rx="2"/>
-            <path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/>
-          </svg>
-          Connect Wallet
-        </button>
+        <div id="wallet-container"></div>
       </div>
     </div>
   </header>
   <div id="announcement-banner"></div>
 
-  <main class="main ogfinder-page">
-    <!-- Hero + Search -->
-    <section id="ogfinder-hero" class="ogfinder-hero">
-      <div class="ogfinder-hero-glow"></div>
-      <div class="ogfinder-hero-content">
-        <div class="ogfinder-hero-icon">
+  <main class="main spikes-page">
+    <!-- Hero -->
+    <section class="spikes-hero">
+      <div class="spikes-hero-glow bags-hero-glow"></div>
+      <div class="spikes-hero-content">
+        <div class="spikes-hero-icon bags-hero-icon">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 0 1-8 0"/>
           </svg>
         </div>
-        <h1 class="ogfinder-title">OG Finder</h1>
-        <p class="ogfinder-subtitle">Find the oldest PumpFun tokens by name or ticker</p>
+        <h1 class="spikes-title">Bags Tokens</h1>
+        <p class="spikes-subtitle">All tokens launched on the <a href="https://bags.fm" target="_blank" rel="noopener" style="color: var(--green); text-decoration: underline;">Bags</a> platform with lifetime rewards</p>
 
-        <div class="ogfinder-search">
-          <div class="ogfinder-search-wrapper">
-            <svg class="ogfinder-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        <div class="spikes-controls">
+          <button id="bags-refresh-btn" class="btn btn-accent btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
-            <input type="text" id="ogfinder-input" class="ogfinder-search-input" placeholder="Search by token name or ticker..." autocomplete="off" maxlength="50">
-            <button id="ogfinder-clear" class="ogfinder-search-clear" style="display: none;" aria-label="Clear search">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-          <button id="ogfinder-btn" class="btn btn-accent">Search</button>
-        </div>
-
-        <div class="ogfinder-hints">
-          <span class="ogfinder-hint">Try searching:</span>
-          <button class="ogfinder-hint-tag" data-query="pepe">pepe</button>
-          <button class="ogfinder-hint-tag" data-query="doge">doge</button>
-          <button class="ogfinder-hint-tag" data-query="trump">trump</button>
-          <button class="ogfinder-hint-tag" data-query="cat">cat</button>
+            Refresh
+          </button>
         </div>
       </div>
     </section>
 
-    <!-- Results -->
-    <section id="ogfinder-results" class="community-section" style="display: none;">
-      <div class="ogfinder-table-header">
-        <div class="ogfinder-table-title-row">
-          <svg class="ogfinder-title-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <h2 class="ogfinder-table-title">Results</h2>
-          <span id="ogfinder-count" class="ogfinder-count"></span>
-        </div>
-        <span id="ogfinder-query-label" class="ogfinder-query-label"></span>
+    <!-- Stats Bar -->
+    <div class="spikes-stats-bar" id="bags-stats" style="display: none;">
+      <div class="spikes-stat">
+        <span class="spikes-stat-label">Total Tokens</span>
+        <span class="spikes-stat-value" id="bags-total">--</span>
       </div>
+      <div class="spikes-stat">
+        <span class="spikes-stat-label">Total Rewards</span>
+        <span class="spikes-stat-value" id="bags-total-rewards">--</span>
+      </div>
+    </div>
 
+    <!-- Results -->
+    <section id="bags-results" class="community-section" style="display: none;">
       <div class="community-table-container">
-        <table class="token-table community-table ogfinder-table">
+        <table class="token-table community-table spikes-table">
           <thead>
             <tr>
               <th class="cell-rank">#</th>
               <th class="cell-token">Token</th>
-              <th class="cell-mint">Mint Address</th>
-              <th class="cell-date">Mint Date</th>
-              <th class="cell-mcap">Market Cap</th>
+              <th class="cell-price">Price</th>
+              <th class="cell-change">24h</th>
+              <th class="cell-volume">Volume</th>
+              <th class="cell-mcap">MCap</th>
+              <th class="cell-rewards">Rewards (SOL)</th>
             </tr>
           </thead>
-          <tbody id="ogfinder-table-body"></tbody>
+          <tbody id="bags-table-body"></tbody>
         </table>
       </div>
     </section>
+
+    <!-- Loading state -->
+    <div id="bags-loading" class="spikes-loading">
+      <div class="spikes-spinner"></div>
+      <p>Loading Bags tokens...</p>
+    </div>
+
+    <!-- Empty state -->
+    <div id="bags-empty" class="spikes-empty" style="display: none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
+        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 0 1-8 0"/>
+      </svg>
+      <p>No Bags tokens found</p>
+      <p class="spikes-empty-hint">Bags API may not be configured or there are no tokens yet</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="bags-error" class="spikes-error" style="display: none;">
+      <p id="bags-error-msg">Failed to load Bags tokens</p>
+      <button class="btn btn-ghost btn-sm" onclick="bagsPage.load()">Try Again</button>
+    </div>
   </main>
 
   <footer class="footer">
@@ -189,8 +195,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script defer src="js/wallet.js"></script>
   <script defer src="js/announcements.js"></script>
-  <script defer src="js/pumpfun.js"></script>
-  <script defer src="js/ogfinder.js"></script>
+  <script defer src="js/bags.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
     (function() {
@@ -199,7 +204,6 @@
       if (!installBtn) return;
       if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
 
-      // Detect iOS/iPadOS (no beforeinstallprompt support)
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       if (isIOS) {
         installBtn.style.display = '';
@@ -225,7 +229,6 @@
       });
       window.addEventListener('appinstalled', function() { installBtn.style.display = 'none'; });
     })();
-    /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
   </script>
 </body>
 </html>

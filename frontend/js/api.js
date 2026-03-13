@@ -959,6 +959,24 @@ const api = {
     }
   },
 
+  // Bags platform endpoints
+  bags: {
+    async list() {
+      const cacheKey = 'bags:list';
+      return apiCache.getOrFetch(cacheKey, () => api.request('/api/bags/list'), apiCache.TTL.tokenList);
+    },
+
+    async getPool(mint) {
+      const cacheKey = `bags:pool:${mint}`;
+      return apiCache.getOrFetch(cacheKey, () => api.request(`/api/bags/pool/${encodeURIComponent(mint)}`), apiCache.TTL.tokenDetail);
+    },
+
+    async getLifetimeFees(mint) {
+      const cacheKey = `bags:fees:${mint}`;
+      return apiCache.getOrFetch(cacheKey, () => api.request(`/api/bags/lifetime-fees/${encodeURIComponent(mint)}`), apiCache.TTL.tokenDetail);
+    }
+  },
+
   // Device session endpoints (mobile device linking)
   deviceSession: {
     async verify(token) {

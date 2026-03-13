@@ -76,7 +76,8 @@ const tokenDetail = {
         this.loadSubmissions(),
         sentiment.loadForToken(this.mint), // Load community sentiment
         this.loadSimilarTokens(), // Load similar tokens (anti-spoofing)
-        this.loadHolderAnalytics() // Load holder concentration data
+        this.loadHolderAnalytics(), // Load holder concentration data
+        this.loadBagsInfo() // Check if Bags platform token + load rewards
       ]);
       await voting.initForPage(); // Initialize voting after submissions are rendered
 
@@ -1124,6 +1125,34 @@ const tokenDetail = {
   },
 
   // Load holder analytics (fresh = true bypasses both frontend + backend cache)
+  // Load Bags platform info (pool detection + lifetime rewards)
+  async loadBagsInfo() {
+    try {
+      const poolData = await api.bags.getPool(this.mint);
+      if (!poolData || !poolData.isBagsToken) return;
+
+      // Show the Bags badge
+      const badge = document.getElementById('bags-badge');
+      if (badge) badge.style.display = '';
+
+      // Fetch lifetime fees in parallel once we know it's a Bags token
+      const feesData = await api.bags.getLifetimeFees(this.mint);
+      if (feesData && feesData.lifetimeFees != null) {
+        const card = document.getElementById('bags-rewards-card');
+        const valueEl = document.getElementById('stat-bags-rewards');
+        if (card) card.style.display = '';
+        if (valueEl) {
+          const fees = feesData.lifetimeFees;
+          valueEl.textContent = fees >= 1000
+            ? `${utils.formatNumber(fees, '')} SOL`
+            : `${fees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} SOL`;
+        }
+      }
+    } catch (err) {
+      if (config.app.debug) console.warn('[TokenDetail] Bags info lookup failed:', err.message);
+    }
+  },
+
   async loadHolderAnalytics(fresh = false) {
     const section = document.getElementById('holders-section');
     const refreshBtn = document.getElementById('holders-refresh');
