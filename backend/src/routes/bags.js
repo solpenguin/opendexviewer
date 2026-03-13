@@ -7,63 +7,64 @@ const { cache } = require('../services/cache');
 const { httpsAgent } = require('../services/httpAgent');
 
 const BAGS_API_BASE = 'https://public-api-v2.bags.fm/api/v1';
-const BAGS_POOLS_TTL = 3600000;  // 1 hour (ms) — pool list changes rarely (new token launches)
-const BAGS_LIST_TTL = 1800000;   // 30 min (ms) — enriched list with prices
-const BAGS_FEES_TTL = 3600000;   // 1 hour (ms) — lifetime fees are cumulative, change slowly
+const BAGS_MINT_SET_TTL = 3600000; // 1 hour (ms) — set of all Bags token mints
+const BAGS_LIST_TTL = 1800000;     // 30 min (ms) — enriched list with prices
+const BAGS_FEES_TTL = 3600000;     // 1 hour (ms) — lifetime fees are cumulative, change slowly
+
+// GeckoTerminal DEX IDs for Bags pools
+const BAGS_DEX_IDS = ['meteora-damm-v2', 'meteora-dbc'];
+
+const TOP_N = 50;     // Final token count to return
+const MAX_PAGES = 3;  // Max pages to scan per DEX (each page ~20 pools)
 
 function getBagsApiKey() {
   return process.env.BAGS_API_KEY || null;
 }
 
 // ---------------------------------------------------------------------------
-// Shared pool index — single Bags API call, reused by /list, /pool/:mint
+// Bags mint set — lightweight Set of all Bags token mints for membership checks
+// Used by /pool/:mint and to filter GeckoTerminal DEX pools
 // ---------------------------------------------------------------------------
-let _poolsFetchPromise = null; // Request coalescing
+let _mintSetPromise = null;
 
-async function getPoolIndex(apiKey) {
-  const cacheKey = 'bags:pool-index';
+async function getBagsMintSet(apiKey) {
+  const cacheKey = 'bags:mint-set';
   const cached = await cache.get(cacheKey);
-  if (cached) return cached; // { mints: string[], map: { [mint]: pool } }
+  if (cached) return new Set(cached); // cached as array, reconstruct Set
 
-  // Coalesce concurrent requests into one upstream call
-  if (_poolsFetchPromise) return _poolsFetchPromise;
+  if (_mintSetPromise) return _mintSetPromise;
 
-  _poolsFetchPromise = (async () => {
+  _mintSetPromise = (async () => {
     try {
       const resp = await axios.get(`${BAGS_API_BASE}/solana/bags/pools`, {
         headers: { 'x-api-key': apiKey },
         httpsAgent,
-        timeout: 15000
+        timeout: 30000
       });
 
       const pools = resp.data?.response;
-      if (!Array.isArray(pools)) return { mints: [], map: {} };
+      if (!Array.isArray(pools)) return new Set();
 
-      const map = {};
-      const mints = [];
-      for (const p of pools) {
-        map[p.tokenMint] = p;
-        mints.push(p.tokenMint);
-      }
-
-      const index = { mints, map };
-      await cache.set(cacheKey, index, BAGS_POOLS_TTL);
-      return index;
+      const mints = pools.map(p => p.tokenMint);
+      // Cache as plain array (Sets don't JSON-serialize)
+      await cache.set(cacheKey, mints, BAGS_MINT_SET_TTL);
+      console.log(`[Bags] Mint set built: ${mints.length} tokens`);
+      return new Set(mints);
     } catch (err) {
-      console.error('[Bags] Pool index fetch failed:', err.message);
-      return { mints: [], map: {} };
+      console.error('[Bags] Mint set fetch failed:', err.message);
+      return new Set();
     } finally {
-      _poolsFetchPromise = null;
+      _mintSetPromise = null;
     }
   })();
 
-  return _poolsFetchPromise;
+  return _mintSetPromise;
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/bags/list - All Bags tokens with market data and rewards
+// GET /api/bags/list — Top Bags tokens by volume (via GeckoTerminal DEX pools)
 // ---------------------------------------------------------------------------
-let _listFetchPromise = null; // Request coalescing
+let _listFetchPromise = null;
 
 router.get('/list', defaultLimiter, asyncHandler(async (req, res) => {
   const apiKey = getBagsApiKey();
@@ -75,7 +76,6 @@ router.get('/list', defaultLimiter, asyncHandler(async (req, res) => {
   const cached = await cache.get(cacheKey);
   if (cached) return res.json(cached);
 
-  // Coalesce: if another request is already building the list, piggyback
   if (!_listFetchPromise) {
     _listFetchPromise = buildBagsList(apiKey).finally(() => { _listFetchPromise = null; });
   }
@@ -89,53 +89,112 @@ router.get('/list', defaultLimiter, asyncHandler(async (req, res) => {
   }
 }));
 
-const TOP_N = 50; // Cap to limit API calls — only enrich this many
+// ---------------------------------------------------------------------------
+// Pipeline: GeckoTerminal DEX pools → filter by Bags membership → enrich
+// ---------------------------------------------------------------------------
 
 async function buildBagsList(apiKey) {
-  const { mints, map } = await getPoolIndex(apiKey);
-  if (mints.length === 0) {
+  const geckoService = require('../services/geckoTerminal');
+
+  // Step 1: Get the set of all Bags token mints + top DEX pools in parallel
+  const [mintSet, dexPools] = await Promise.all([
+    getBagsMintSet(apiKey),
+    fetchTopDexPools(geckoService)
+  ]);
+
+  if (mintSet.size === 0) {
     const result = { success: true, tokens: [], totalPools: 0 };
     await cache.set('bags:list', result, BAGS_LIST_TTL);
     return result;
   }
 
-  // Take first TOP_N mints from the pool list, then fetch market data + fees
-  // only for those. Avoids fetching GeckoTerminal data for every pool just to rank.
-  const topMints = mints.slice(0, TOP_N);
-  const geckoService = require('../services/geckoTerminal');
+  // Step 2: Filter DEX pools to only confirmed Bags tokens, dedup by mint
+  const seen = new Set();
+  const bagsPoolData = [];
+  for (const pool of dexPools) {
+    if (!pool.baseAddress) continue;
+    if (seen.has(pool.baseAddress)) continue;
+    if (!mintSet.has(pool.baseAddress)) continue;
+    seen.add(pool.baseAddress);
+    bagsPoolData.push(pool);
+    if (bagsPoolData.length >= TOP_N) break;
+  }
 
-  const [marketData, feesResults] = await Promise.all([
-    fetchBatchMarketData(geckoService, topMints),
+  if (bagsPoolData.length === 0) {
+    const result = { success: true, tokens: [], totalPools: mintSet.size };
+    await cache.set('bags:list', result, BAGS_LIST_TTL);
+    return result;
+  }
+
+  // Step 3: Enrich with token metadata (name, symbol, logo) and lifetime fees
+  const topMints = bagsPoolData.map(p => p.baseAddress);
+
+  const [tokenMeta, feesResults] = await Promise.all([
+    fetchBatchTokenMeta(geckoService, topMints),
     fetchBatchLifetimeFees(apiKey, topMints)
   ]);
 
-  const tokens = topMints.map(mint => {
-    const market = marketData[mint] || {};
-    const pool = map[mint];
+  // Step 4: Assemble final token objects
+  const tokens = bagsPoolData.map(pool => {
+    const mint = pool.baseAddress;
+    const meta = tokenMeta[mint] || {};
+    // Pool name is "TOKEN / SOL" — extract symbol as fallback
+    const poolSymbol = pool.name ? pool.name.split(' / ')[0] : null;
+
     return {
       address: mint,
-      name: market.name || null,
-      symbol: market.symbol || null,
-      logoUri: market.logoUri || market.logoURI || null,
-      price: market.price || 0,
-      priceChange24h: market.priceChange24h || 0,
-      marketCap: market.marketCap || 0,
-      volume24h: market.volume24h || 0,
-      liquidity: market.liquidity || 0,
-      lifetimeRewards: feesResults[mint] || 0,
-      migrated: !!(pool && pool.dammV2PoolKey)
+      name: meta.name || poolSymbol || null,
+      symbol: meta.symbol || poolSymbol || null,
+      logoUri: meta.logoUri || meta.logoURI || null,
+      price: pool.price || 0,
+      priceChange24h: pool.priceChange24h || 0,
+      marketCap: meta.marketCap || pool.marketCap || 0,
+      volume24h: pool.volume24h || 0,
+      liquidity: pool.liquidity || 0,
+      lifetimeRewards: feesResults[mint] || 0
     };
   });
 
-  // Sort by volume descending (tokens with activity first)
+  // Already sorted by volume from GeckoTerminal, but ensure it
   tokens.sort((a, b) => (b.volume24h || 0) - (a.volume24h || 0));
 
-  const result = { success: true, tokens, totalPools: mints.length };
+  const result = { success: true, tokens, totalPools: mintSet.size };
   await cache.set('bags:list', result, BAGS_LIST_TTL);
   return result;
 }
 
-async function fetchBatchMarketData(geckoService, mints) {
+/**
+ * Fetch top pools from both Bags DEXes on GeckoTerminal, sorted by volume.
+ * Scans up to MAX_PAGES per DEX, then merges and sorts.
+ */
+async function fetchTopDexPools(geckoService) {
+  const allPools = [];
+
+  // Fetch pages from both DEXes in parallel
+  const fetches = [];
+  for (const dexId of BAGS_DEX_IDS) {
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      fetches.push(
+        geckoService.getDexPools(dexId, page).catch(() => [])
+      );
+    }
+  }
+
+  const results = await Promise.all(fetches);
+  for (const pools of results) {
+    allPools.push(...pools);
+  }
+
+  // Sort merged pools by volume descending
+  allPools.sort((a, b) => (b.volume24h || 0) - (a.volume24h || 0));
+  return allPools;
+}
+
+/**
+ * Batch-fetch token metadata (name, symbol, logo, marketCap) via GeckoTerminal.
+ * getMultiTokenInfo handles 30 tokens per call.
+ */
+async function fetchBatchTokenMeta(geckoService, mints) {
   const all = {};
   for (let i = 0; i < mints.length; i += 30) {
     try {
@@ -145,12 +204,13 @@ async function fetchBatchMarketData(geckoService, mints) {
   return all;
 }
 
-// Fetch lifetime fees with concurrency limit and per-mint caching
+/**
+ * Fetch lifetime fees with concurrency limit and per-mint caching.
+ */
 async function fetchBatchLifetimeFees(apiKey, mints) {
   const results = {};
   const uncached = [];
 
-  // Check per-mint fee cache first — avoids re-fetching on list rebuild
   for (const mint of mints) {
     const cached = await cache.get(`bags:fees:${mint}`);
     if (cached && cached.lifetimeFees != null) {
@@ -160,7 +220,6 @@ async function fetchBatchLifetimeFees(apiKey, mints) {
     }
   }
 
-  // Fetch only uncached mints, 10 at a time
   const CONCURRENCY = 10;
   for (let i = 0; i < uncached.length; i += CONCURRENCY) {
     const batch = uncached.slice(i, i + CONCURRENCY);
@@ -176,7 +235,6 @@ async function fetchBatchLifetimeFees(apiKey, mints) {
           const lamports = BigInt(resp.data.response || '0');
           const sol = Number(lamports) / 1e9;
           results[mint] = sol;
-          // Cache individual fee so subsequent list rebuilds skip it
           await cache.set(`bags:fees:${mint}`, { success: true, lifetimeFees: sol, lifetimeFeesLamports: resp.data.response || '0' }, BAGS_FEES_TTL);
         } else {
           results[mint] = 0;
@@ -191,8 +249,7 @@ async function fetchBatchLifetimeFees(apiKey, mints) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/bags/pool/:mint - Check if a token is a Bags token
-// Uses the cached pool index instead of a per-token API call
+// GET /api/bags/pool/:mint — Check if a token is a Bags token
 // ---------------------------------------------------------------------------
 router.get('/pool/:mint', defaultLimiter, asyncHandler(async (req, res) => {
   const { mint } = req.params;
@@ -205,19 +262,16 @@ router.get('/pool/:mint', defaultLimiter, asyncHandler(async (req, res) => {
     return res.json({ success: true, isBagsToken: false });
   }
 
-  // Look up in the shared pool index (1 cached API call for all tokens)
-  const { map } = await getPoolIndex(apiKey);
-  const pool = map[mint] || null;
+  const mintSet = await getBagsMintSet(apiKey);
 
   res.json({
     success: true,
-    isBagsToken: !!pool,
-    pool
+    isBagsToken: mintSet.has(mint)
   });
 }));
 
 // ---------------------------------------------------------------------------
-// GET /api/bags/lifetime-fees/:mint - Lifetime fees for a single Bags token
+// GET /api/bags/lifetime-fees/:mint — Lifetime fees for a single Bags token
 // ---------------------------------------------------------------------------
 router.get('/lifetime-fees/:mint', defaultLimiter, asyncHandler(async (req, res) => {
   const { mint } = req.params;

@@ -298,6 +298,11 @@ const adminApi = {
   },
   async clearDailyBriefCache() {
     return this.request('/admin/daily-brief-cache', { method: 'DELETE' });
+  },
+
+  // Bags cache
+  async refreshBagsCache() {
+    return this.request('/admin/bags/refresh-cache', { method: 'POST' });
   }
 };
 
@@ -456,6 +461,10 @@ const adminPanel = {
     // Daily Brief cache
     document.getElementById('refresh-daily-brief-btn')?.addEventListener('click', () => this.loadDailyBriefCache());
     document.getElementById('clear-daily-brief-btn')?.addEventListener('click', () => this.clearDailyBriefCache());
+
+    // Bags cache
+    document.getElementById('refresh-bags-cache-btn')?.addEventListener('click', () => this.loadBagsCacheStatus());
+    document.getElementById('clear-bags-cache-btn')?.addEventListener('click', () => this.clearBagsCache());
     document.getElementById('ai-cache-table')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
@@ -2206,6 +2215,41 @@ const adminPanel = {
           this.loadDailyBriefCache();
         } catch (error) {
           toast.error('Failed to clear: ' + error.message);
+        }
+      }
+    );
+  },
+
+  // ==========================================
+  // Bags Cache
+  // ==========================================
+
+  async loadBagsCacheStatus() {
+    var container = document.getElementById('bags-cache-status');
+    if (!container) return;
+    container.innerHTML = '<p style="color: var(--text-muted);">Checking cache...</p>';
+
+    try {
+      // We don't have a dedicated status endpoint — just show a ready message
+      container.innerHTML =
+        '<p style="color: var(--text-secondary); font-size: 0.85rem;">Bags cache is active. Use "Clear &amp; Rebuild" to flush all cached pool data, token lists, and per-token fee entries. The next visit to the Bags page will trigger a fresh fetch.</p>';
+    } catch (error) {
+      container.innerHTML = '<p style="color: var(--accent-red);">Failed to check: ' + this.escapeHtml(error.message) + '</p>';
+    }
+  },
+
+  async clearBagsCache() {
+    this.showConfirmModal(
+      'Clear Bags Cache',
+      'This will delete all Bags cache (pool index, token list, per-token fees). The Bags page will re-fetch from the Bags API on next visit. Continue?',
+      async () => {
+        try {
+          var result = await adminApi.refreshBagsCache();
+          var cleared = result.data?.keysCleared || 0;
+          toast.success('Bags cache cleared (' + cleared + ' keys). Next page visit will rebuild.');
+          this.loadBagsCacheStatus();
+        } catch (error) {
+          toast.error('Failed to clear Bags cache: ' + error.message);
         }
       }
     );

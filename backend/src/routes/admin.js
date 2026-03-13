@@ -1214,6 +1214,47 @@ router.delete('/daily-brief-cache',
   })
 );
 
+// ==========================================
+// Bags Cache Management
+// ==========================================
+
+/**
+ * POST /admin/bags/refresh-cache
+ * Clear all Bags-related cache keys and return count of keys cleared.
+ * Clears: bags:pool-index, bags:list, bags:fees:*
+ */
+router.post('/bags/refresh-cache',
+  validateAdminSession,
+  asyncHandler(async (req, res) => {
+    let deleted = 0;
+
+    // Clear the two fixed keys
+    for (const key of ['bags:mint-set', 'bags:list']) {
+      const existed = await cache.get(key);
+      if (existed !== null && existed !== undefined) {
+        await cache.delete(key);
+        deleted++;
+      }
+    }
+
+    // Clear all per-mint fee cache entries
+    const feeKeys = await cache.scanKeys('bags:fees:*');
+    if (feeKeys.length > 0) {
+      for (const key of feeKeys) {
+        await cache.delete(key);
+      }
+      deleted += feeKeys.length;
+    }
+
+    console.log(`[Admin] Bags cache cleared (${deleted} keys)`);
+
+    res.json({
+      success: true,
+      data: { keysCleared: deleted }
+    });
+  })
+);
+
 // Export both the router and adminSettings for use by other routes
 module.exports = router;
 module.exports.adminSettings = adminSettings;

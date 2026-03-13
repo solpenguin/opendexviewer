@@ -4,8 +4,9 @@ var bagsPage = (function() {
 
   var state = {
     tokens: [],
-    sortField: 'marketCap',
+    sortField: 'volume24h',
     sortOrder: 'desc',
+    viewMode: 'volume', // 'volume' or 'marketCap'
     loading: false
   };
 
@@ -250,6 +251,29 @@ var bagsPage = (function() {
     // Table row click navigation
     if (els.tableBody) {
       els.tableBody.addEventListener('click', handleRowClick);
+    }
+
+    // View toggle (volume vs market cap)
+    var toggleContainer = document.getElementById('bags-view-toggle');
+    if (toggleContainer) {
+      toggleContainer.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-view]');
+        if (!btn || btn.classList.contains('active')) return;
+
+        var view = btn.getAttribute('data-view');
+        state.viewMode = view;
+        state.sortField = view === 'marketCap' ? 'marketCap' : 'volume24h';
+        state.sortOrder = 'desc';
+
+        // Update active button
+        var btns = toggleContainer.querySelectorAll('.bags-toggle-btn');
+        btns.forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+
+        if (state.tokens.length > 0) {
+          renderTable(state.tokens);
+        }
+      });
     }
 
     // Refresh button
