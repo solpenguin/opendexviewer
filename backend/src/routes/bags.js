@@ -89,6 +89,8 @@ router.get('/list', defaultLimiter, asyncHandler(async (req, res) => {
   }
 }));
 
+const TOP_N = 50; // Cap to limit API calls — only enrich this many
+
 async function buildBagsList(apiKey) {
   const { mints, map } = await getPoolIndex(apiKey);
   if (mints.length === 0) {
@@ -97,15 +99,17 @@ async function buildBagsList(apiKey) {
     return result;
   }
 
-  // Fetch market data (batched, max 30 per GeckoTerminal call) + fees in parallel
+  // Take first TOP_N mints from the pool list, then fetch market data + fees
+  // only for those. Avoids fetching GeckoTerminal data for every pool just to rank.
+  const topMints = mints.slice(0, TOP_N);
   const geckoService = require('../services/geckoTerminal');
 
   const [marketData, feesResults] = await Promise.all([
-    fetchBatchMarketData(geckoService, mints),
-    fetchBatchLifetimeFees(apiKey, mints)
+    fetchBatchMarketData(geckoService, topMints),
+    fetchBatchLifetimeFees(apiKey, topMints)
   ]);
 
-  const tokens = mints.map(mint => {
+  const tokens = topMints.map(mint => {
     const market = marketData[mint] || {};
     const pool = map[mint];
     return {
@@ -123,7 +127,8 @@ async function buildBagsList(apiKey) {
     };
   });
 
-  tokens.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+  // Sort by volume descending (tokens with activity first)
+  tokens.sort((a, b) => (b.volume24h || 0) - (a.volume24h || 0));
 
   const result = { success: true, tokens, totalPools: mints.length };
   await cache.set('bags:list', result, BAGS_LIST_TTL);
