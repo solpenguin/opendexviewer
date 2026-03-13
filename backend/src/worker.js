@@ -20,9 +20,7 @@ const { Worker } = require('bullmq');
 // Import services for job processing
 const db = require('./services/database');
 const geckoService = require('./services/geckoTerminal');
-const jupiterService = require('./services/jupiter');
 const solanaService = require('./services/solana');
-const birdeyeService = require('./services/birdeye');
 const { cache, TTL, keys } = require('./services/cache');
 
 // Allowed DEXes for similar-tokens anti-spoofing filter
@@ -34,7 +32,6 @@ const SIMILAR_TOKEN_DEX_PREFIXES = ['raydium', 'pump', 'bonk'];
 // Tokens with a `pump_swap_pool` field = PumpSwap graduates.
 // Results are persisted to PostgreSQL for the API route to read.
 
-const DAILY_BRIEF_HOLDER_BATCH_SIZE = 10;
 const GECKO_MULTI_BATCH_SIZE = 30; // getMultiTokenInfo max per call
 
 const DAILY_BRIEF_SKIP_ADDRESSES = new Set([
@@ -137,39 +134,6 @@ async function enrichMarketDataBatched(tokens) {
         if (err.isOverloaded || err.isCircuitBreakerError) throw err;
       }
     }
-  }
-}
-
-/**
- * Enrich holder counts using Birdeye (same source as spikes/trending pages).
- * Birdeye's getTokenOverview reliably returns holder counts for Solana tokens
- * including new PumpSwap graduates. Falls back to Helius DAS if Birdeye fails.
- */
-async function enrichWithHolders(token) {
-  // Primary: Birdeye overview (same as spikes page)
-  try {
-    const overview = await birdeyeService.getTokenOverview(token.address);
-    if (overview && overview.holder > 0) {
-      token.holders = overview.holder;
-      return;
-    }
-  } catch (err) {
-    if (err.isOverloaded || err.isCircuitBreakerError) throw err;
-    /* non-critical — fall through to Helius */
-  }
-  // Fallback: Helius DAS API
-  try {
-    const heliusCount = await solanaService.getTokenHolderCount(token.address);
-    if (heliusCount != null && heliusCount > 0) token.holders = heliusCount;
-  } catch (err) {
-    if (err.isOverloaded || err.isCircuitBreakerError) throw err;
-    /* non-critical */
-  }
-}
-
-async function enrichHoldersBatched(tokens) {
-  for (let i = 0; i < tokens.length; i += DAILY_BRIEF_HOLDER_BATCH_SIZE) {
-    await Promise.all(tokens.slice(i, i + DAILY_BRIEF_HOLDER_BATCH_SIZE).map(enrichWithHolders));
   }
 }
 
@@ -674,24 +638,15 @@ const jobProcessors = {
         totalDiscovered++;
       }
 
-      // 3. Enrich new tokens with market data + holders + metadata
+      // 3. Enrich new tokens with market data + metadata
       if (newTokens.length > 0) {
         console.log(`[DailyBrief] ${newTokens.length} new PumpSwap graduates found`);
 
         // enrichMarketDataBatched uses /pools/multi/ which returns market data
         // AND pool_created_at in a single call, so it must run first (sequential).
-        // Holders + Helius metadata are independent and can run in parallel after.
+        // Helius metadata runs after for name/logo backfill.
         await enrichMarketDataBatched(newTokens);
-
-        const enrichResults = await Promise.allSettled([
-          enrichHoldersBatched(newTokens),
-          enrichWithHelius(newTokens)
-        ]);
-        for (const r of enrichResults) {
-          if (r.status === 'rejected') {
-            console.warn('[DailyBrief] Enrichment batch failed:', r.reason?.message || r.reason);
-          }
-        }
+        await enrichWithHelius(newTokens);
 
         for (const t of newTokens) {
           computeDerivedFields(t);
@@ -701,38 +656,19 @@ const jobProcessors = {
         await db.upsertDailyBriefTokens(newTokens);
       }
 
-      // 4. Re-enrich stale existing tokens (market data + holders)
-      //    Uses individual getTokenOverview (pools endpoint) because it returns
-      //    accurate priceChange24h and liquidity — the batch /tokens/multi/ endpoint
-      //    often returns null for these fields on newer tokens.
-      const staleMints = await db.getDailyBriefStaleTokens(5, 15);
+      // 4. Re-enrich stale existing tokens (market data via batch pools endpoint)
+      const staleRows = await db.getDailyBriefStaleTokens(5, 15);
 
-      if (staleMints.length > 0) {
-        const staleTokens = staleMints.map(addr => ({
-          address: addr, name: '', symbol: '', logoUri: null,
+      if (staleRows.length > 0) {
+        const staleTokens = staleRows.map(r => ({
+          address: r.address, poolAddress: r.poolAddress || null,
+          name: '', symbol: '', logoUri: null,
           price: 0, priceChange24h: 0, volume24h: 0, marketCap: 0,
           liquidity: 0, holders: 0, volMcapRatio: 0, liqMcapRatio: 0
         }));
 
-        // Use individual pool lookups for accurate price change + liquidity
-        // Also captures pairCreatedAt to fix graduated_at for pre-fix tokens
-        for (const token of staleTokens) {
-          try {
-            const overview = await geckoService.getTokenOverview(token.address);
-            if (overview) {
-              token.price = overview.price || 0;
-              token.priceChange24h = overview.priceChange24h || 0;
-              token.volume24h = overview.volume24h || 0;
-              token.marketCap = overview.marketCap || overview.fdv || 0;
-              token.liquidity = overview.liquidity || 0;
-              if (overview.pairCreatedAt) token.graduatedAt = overview.pairCreatedAt;
-            }
-          } catch (err) {
-            if (err.isOverloaded || err.isCircuitBreakerError) throw err;
-            /* non-critical */
-          }
-        }
-        await enrichHoldersBatched(staleTokens);
+        // Reuse the same batch /pools/multi/ approach as initial enrichment
+        await enrichMarketDataBatched(staleTokens);
 
         for (const t of staleTokens) {
           computeDerivedFields(t);

@@ -16,8 +16,7 @@ var dailyBrief = (function() {
     hours: '24',
     // Filters (client-side)
     filterMcap: 'all',
-    filterMinVolume: 0,
-    filterMinHolders: 0
+    filterMinVolume: 0
   };
 
   // DOM element cache
@@ -37,13 +36,11 @@ var dailyBrief = (function() {
     els.hoursDropdown = document.getElementById('brief-hours-dropdown');
     els.mcapDropdown = document.getElementById('brief-mcap-dropdown');
     els.volumeDropdown = document.getElementById('brief-volume-dropdown');
-    els.holdersDropdown = document.getElementById('brief-holders-dropdown');
     els.refreshBtn = document.getElementById('brief-refresh-btn');
     // Analysis panel
     els.analysis = document.getElementById('brief-analysis');
     els.avgMcap = document.getElementById('brief-avg-mcap');
     els.medianMcap = document.getElementById('brief-median-mcap');
-    els.avgHolders = document.getElementById('brief-avg-holders');
     els.totalVolume = document.getElementById('brief-total-volume');
     els.avgChange = document.getElementById('brief-avg-change');
     els.gainers = document.getElementById('brief-gainers');
@@ -124,9 +121,6 @@ var dailyBrief = (function() {
       // Volume filter
       if (state.filterMinVolume > 0 && (t.volume24h || 0) < state.filterMinVolume) return false;
 
-      // Holders filter
-      if (state.filterMinHolders > 0 && (t.holders || 0) < state.filterMinHolders) return false;
-
       return true;
     });
   }
@@ -149,8 +143,6 @@ var dailyBrief = (function() {
 
     els.avgMcap.textContent = formatUsd(stats.avgMcap);
     els.medianMcap.textContent = formatUsd(stats.medianMcap);
-
-    els.avgHolders.textContent = stats.avgHolders > 0 ? formatNumber(Math.round(stats.avgHolders)) : '--';
     els.totalVolume.textContent = formatUsd(stats.totalVolume);
 
     var avgChange = stats.avgPriceChange || 0;
@@ -260,9 +252,6 @@ var dailyBrief = (function() {
       // Token Age (time since creation on PumpFun)
       var ageTime = t.createdAt ? new Date(t.createdAt).getTime() : null;
       html += '<td class="cell-age">' + (ageTime ? formatTimeAgo(ageTime) : '--') + '</td>';
-
-      // Holders
-      html += '<td class="cell-holders">' + (t.holders > 0 ? formatNumber(t.holders) : '--') + '</td>';
 
       // Vol/MCap ratio
       html += '<td class="cell-volratio"><span class="ratio-badge ' + ratioClass + '">' + ratio.toFixed(2) + 'x</span></td>';
@@ -399,11 +388,6 @@ var dailyBrief = (function() {
       if (state.tokens.length > 0) applyFiltersAndRender();
     });
 
-    initDropdown(els.holdersDropdown, function(value) {
-      state.filterMinHolders = parseInt(value) || 0;
-      if (state.tokens.length > 0) applyFiltersAndRender();
-    });
-
     // Close dropdowns on outside click
     document.addEventListener('click', closeAllDropdowns);
 
@@ -416,7 +400,6 @@ var dailyBrief = (function() {
         'cell-change': 'priceChange24h',
         'cell-volume': 'volume24h',
         'cell-age': 'createdAt',
-        'cell-holders': 'holders',
         'cell-volratio': 'volMcapRatio'
       };
       for (var i = 0; i < headers.length; i++) {

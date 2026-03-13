@@ -3405,14 +3405,15 @@ async function getDailyBriefStaleTokens(staleMinutes = 5, limit = 10) {
   if (!pool) return [];
 
   const result = await pool.query(`
-    SELECT mint_address AS address FROM daily_brief_tokens
+    SELECT mint_address AS address, pool_address AS "poolAddress"
+    FROM daily_brief_tokens
     WHERE enriched_at < NOW() - INTERVAL '1 minute' * $1
       AND discovered_at >= NOW() - INTERVAL '24 hours'
     ORDER BY market_cap DESC NULLS LAST
     LIMIT $2
   `, [staleMinutes, limit]);
 
-  return result.rows.map(r => r.address);
+  return result.rows;
 }
 
 /**
