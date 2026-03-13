@@ -1328,28 +1328,19 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         circulatingSupply = supply;
       }
 
-      // Second pass: fetch social links (needs coingeckoId) and Jupiter fallback in parallel
-      // coingeckoId comes from token endpoint (geckoTokenInfo), not pools (gecko)
+      // Second pass: Jupiter fallback for name if needed
       const coingeckoId = (geckoTokenInfo || {}).coingeckoId || null;
-      const [coinSocialLinks, jupiterMeta] = await Promise.all([
-        // CoinGecko Coin API has social links (website, twitter, telegram, discord)
-        // This is cached for 24h locally so subsequent loads are instant
-        coingeckoId
-          ? geckoService.getCoinSocialLinks(coingeckoId).catch(() => null)
-          : Promise.resolve(null),
-        // If neither Helius nor GeckoTerminal have the name, try Jupiter as last resort
-        (!helius.name && !gecko.name)
-          ? jupiterService.getTokenInfo(mint).catch(() => null)
-          : Promise.resolve(null)
-      ]);
+      let jupiterMeta = null;
+      if (!helius.name && !gecko.name) {
+        jupiterMeta = await jupiterService.getTokenInfo(mint).catch(() => null);
+      }
       const jup = jupiterMeta || {};
 
-      // Merge default social links: CoinGecko Coin API > Helius metadata extensions
-      const heliusLinks = helius.defaultLinks || {};
+      // Default social links: sourced from on-chain token metadata (Helius DAS)
       const mergedDefaultLinks = {};
+      const heliusLinks = helius.defaultLinks || {};
       for (const key of ['website', 'twitter', 'telegram', 'discord']) {
-        if (coinSocialLinks && coinSocialLinks[key]) mergedDefaultLinks[key] = coinSocialLinks[key];
-        else if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
+        if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
       }
 
       const tokenResult = {
