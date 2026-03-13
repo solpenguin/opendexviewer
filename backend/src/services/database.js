@@ -3231,7 +3231,7 @@ async function upsertDailyBriefTokens(tokens) {
     for (let i = 0; i < tokens.length; i++) {
       const t = tokens[i];
       const offset = i * COLS_PER_ROW;
-      placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, $${offset+6}, $${offset+7}, $${offset+8}, $${offset+9}, $${offset+10}, $${offset+11}, $${offset+12}, $${offset+13}, $${offset+14}, $${offset+15}, $${offset+16}, $${offset+17}, $${offset+18}, $${offset+19}, $${offset+20}, NOW())`);
+      placeholders.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4}, $${offset+5}, COALESCE($${offset+6}, NOW()), $${offset+7}, $${offset+8}, $${offset+9}, $${offset+10}, $${offset+11}, $${offset+12}, $${offset+13}, $${offset+14}, $${offset+15}, $${offset+16}, $${offset+17}, $${offset+18}, $${offset+19}, $${offset+20}, NOW())`);
       values.push(
         t.address, t.name || null, t.symbol || null, t.logoUri || null,
         t.createdAt || null, t.graduatedAt || null,
