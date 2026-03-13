@@ -18,16 +18,16 @@ module.exports = (bot) => {
         `/alert &lt;CA&gt; below &lt;mcap&gt; - Alert when market cap goes below\n` +
         `/alert &lt;CA&gt; change &lt;percent&gt; - Alert on market cap % change\n` +
         `/alerts - List your active alerts\n` +
-        `/removealert &lt;id&gt; - Remove an alert\n\n` +
-        `<b>Daily Brief</b>\n` +
-        `/brief - Graduated PumpFun tokens sorted by vol/mcap ratio\n` +
-        `/brief now - One-shot brief with your saved filters\n` +
-        `/brief setup - Subscribe with custom filters &amp; frequency\n` +
-        `/brief status - View your subscription settings\n` +
-        `/brief stop - Unsubscribe\n\n`;
+        `/removealert &lt;id&gt; - Remove an alert\n\n`;
     }
 
     text +=
+      `<b>Daily Brief</b>${isGroup ? ' (admin only)' : ''}\n` +
+      `/brief - Graduated PumpFun tokens sorted by vol/mcap ratio\n` +
+      `/brief now - One-shot brief with saved filters\n` +
+      `/brief setup - Subscribe with custom filters &amp; frequency\n` +
+      `/brief status - View subscription settings\n` +
+      `/brief stop - Unsubscribe\n\n` +
       `<b>Anti-Spoofing</b>\n` +
       `/pvp &lt;CA&gt; - Find tokens with similar names/tickers\n\n` +
       `<b>OG Finder</b>\n` +

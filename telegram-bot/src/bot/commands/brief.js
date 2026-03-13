@@ -108,46 +108,67 @@ function formatBriefMessage(tokens, hours, filterMcap, filterVol, filterRatio) {
   return { text, keyboard };
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function isGroup(ctx) {
+  return ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+}
+
+async function isAdmin(ctx) {
+  try {
+    const member = await ctx.getChatMember(ctx.from.id);
+    return ['creator', 'administrator'].includes(member.status);
+  } catch {
+    return false;
+  }
+}
+
+// Check admin for group chats; always allow in DMs
+async function requireAdminIfGroup(ctx) {
+  if (!isGroup(ctx)) return true;
+  if (await isAdmin(ctx)) return true;
+  await ctx.reply('Only group admins can manage the Daily Brief subscription.');
+  return false;
+}
+
 // ── /brief command ───────────────────────────────────────────────────
 module.exports = (bot) => {
   bot.command('brief', async (ctx) => {
-    // Only in private chats
-    if (ctx.chat.type !== 'private') {
-      return ctx.reply('Daily Brief subscriptions are only available in DMs.');
-    }
-
     const arg = ctx.match?.trim().toLowerCase();
+    const chatId = ctx.chat.id;
 
     // /brief stop — unsubscribe
     if (arg === 'stop' || arg === 'unsub' || arg === 'off') {
-      const removed = await store.removeBriefSub(ctx.from.id, ctx.chat.id);
+      if (!(await requireAdminIfGroup(ctx))) return;
+      const removed = await store.removeBriefSub(chatId);
       return ctx.reply(removed
         ? 'Daily Brief subscription cancelled.'
-        : 'You don\'t have an active subscription.');
+        : 'There is no active subscription for this chat.');
     }
 
     // /brief status — show current sub
     if (arg === 'status') {
-      const sub = await store.getBriefSub(ctx.from.id, ctx.chat.id);
+      const sub = await store.getBriefSub(chatId);
       if (!sub) {
-        return ctx.reply('You don\'t have an active Daily Brief subscription.\nUse /brief to set one up, or /brief now for a one-shot.');
+        return ctx.reply('No active Daily Brief subscription.\nUse /brief to set one up, or /brief now for a one-shot.');
       }
       return ctx.reply(
-        `<b>Your Daily Brief Subscription</b>\n\n` +
+        `<b>Daily Brief Subscription</b>\n\n` +
         `Frequency: ${FREQ_LABELS[sub.frequency_hrs] || sub.frequency_hrs + 'h'}\n` +
         `Time window: ${sub.hours_window}h\n` +
         `MCap: ${MCAP_LABELS[sub.filter_mcap] || sub.filter_mcap}\n` +
         `Min Volume: ${VOL_LABELS[String(sub.filter_vol)] || '$' + sub.filter_vol}\n` +
         `Min Vol/MCap: ${RATIO_LABELS[String(sub.filter_ratio)] || sub.filter_ratio + 'x'}\n` +
         `Last sent: ${sub.last_sent_at ? new Date(sub.last_sent_at).toUTCString() : 'Never'}\n\n` +
+        (isGroup(ctx) ? 'Any admin can edit or stop this subscription.\n' : '') +
         `Use /brief stop to unsubscribe.`,
         { parse_mode: 'HTML' }
       );
     }
 
-    // /brief now — instant brief with default or saved filters
+    // /brief now — instant brief with saved or default filters
     if (arg === 'now' || arg === '') {
-      const sub = await store.getBriefSub(ctx.from.id, ctx.chat.id);
+      const sub = await store.getBriefSub(chatId);
       const filterMcap = sub?.filter_mcap || 'all';
       const filterVol = sub?.filter_vol || 0;
       const filterRatio = sub?.filter_ratio || 1;
@@ -160,25 +181,26 @@ module.exports = (bot) => {
         const filtered = applyFilters(data.tokens || [], filterMcap, filterVol, filterRatio);
         const { text, keyboard } = formatBriefMessage(filtered, hours, filterMcap, filterVol, filterRatio);
 
-        await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, text, {
+        await ctx.api.editMessageText(chatId, statusMsg.message_id, text, {
           parse_mode: 'HTML',
           reply_markup: keyboard,
           link_preview_options: { is_disabled: true },
         });
       } catch (err) {
         console.error('[Brief] Fetch failed:', err.message);
-        await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, 'Failed to fetch Daily Brief. Try again later.');
+        await ctx.api.editMessageText(chatId, statusMsg.message_id, 'Failed to fetch Daily Brief. Try again later.');
       }
       return;
     }
 
     // /brief setup — show the subscription wizard (frequency picker)
     if (arg === 'setup' || arg === 'subscribe' || arg === 'sub') {
+      if (!(await requireAdminIfGroup(ctx))) return;
       return showFrequencyPicker(ctx);
     }
 
     // Default: show brief menu
-    const sub = await store.getBriefSub(ctx.from.id, ctx.chat.id);
+    const sub = await store.getBriefSub(chatId);
     const kb = new InlineKeyboard()
       .text('\u{1F4CB} Get Brief Now', 'brief:now')
       .row()
@@ -188,17 +210,20 @@ module.exports = (bot) => {
       kb.text('\u274C Unsubscribe', 'brief:unsub');
     }
 
+    const adminNote = isGroup(ctx) ? '\n<i>Admin-only: subscribe, edit, unsubscribe</i>' : '';
+
     await ctx.reply(
       `<b>\u{1F4CB} Daily Brief</b>\n\n` +
       `Get a curated list of newly graduated PumpFun tokens, sorted by volume/mcap ratio.\n\n` +
       (sub
-        ? `You have an active subscription (${FREQ_LABELS[sub.frequency_hrs] || sub.frequency_hrs + 'h'}).\n\n`
-        : `You don\'t have a subscription yet.\n\n`) +
+        ? `Active subscription (${FREQ_LABELS[sub.frequency_hrs] || sub.frequency_hrs + 'h'}).\n\n`
+        : 'No subscription yet.\n\n') +
       `<b>Quick commands:</b>\n` +
       `/brief now \u2014 one-shot brief\n` +
       `/brief setup \u2014 configure subscription\n` +
-      `/brief status \u2014 view your settings\n` +
-      `/brief stop \u2014 unsubscribe`,
+      `/brief status \u2014 view settings\n` +
+      `/brief stop \u2014 unsubscribe` +
+      adminNote,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   });
@@ -213,7 +238,7 @@ function showFrequencyPicker(ctx) {
     .text('Every 24h', 'bsub:freq:24');
 
   return ctx.reply(
-    '<b>Step 1/5 \u2014 Push Frequency</b>\n\nHow often should I send you the brief?',
+    '<b>Step 1/5 \u2014 Push Frequency</b>\n\nHow often should I send the brief?',
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
@@ -221,6 +246,8 @@ function showFrequencyPicker(ctx) {
 module.exports.showFrequencyPicker = showFrequencyPicker;
 module.exports.applyFilters = applyFilters;
 module.exports.formatBriefMessage = formatBriefMessage;
+module.exports.isAdmin = isAdmin;
+module.exports.isGroup = isGroup;
 module.exports.MCAP_LABELS = MCAP_LABELS;
 module.exports.VOL_LABELS = VOL_LABELS;
 module.exports.RATIO_LABELS = RATIO_LABELS;

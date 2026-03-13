@@ -1,7 +1,10 @@
 const { InlineKeyboard } = require('grammy');
 const store = require('../../alerts/store');
 const tokensApi = require('../../api/tokens');
-const { MCAP_LABELS, VOL_LABELS, RATIO_LABELS, FREQ_LABELS, HOURS_LABELS, applyFilters, formatBriefMessage } = require('../commands/brief');
+const {
+  MCAP_LABELS, VOL_LABELS, RATIO_LABELS, FREQ_LABELS, HOURS_LABELS,
+  applyFilters, formatBriefMessage, isAdmin, isGroup
+} = require('../commands/brief');
 
 // Temporary in-memory state for the subscription wizard (keyed by `userId:chatId`)
 // Cleared once the subscription is saved.
@@ -11,12 +14,20 @@ function getKey(ctx) {
   return `${ctx.from.id}:${ctx.chat.id}`;
 }
 
+// Admin gate for group chats — returns false (and shows toast) if not admin
+async function requireAdminCb(ctx) {
+  if (!isGroup(ctx)) return true;
+  if (await isAdmin(ctx)) return true;
+  await ctx.answerCallbackQuery({ text: 'Only group admins can do this.', show_alert: true });
+  return false;
+}
+
 module.exports = (bot) => {
   // ── Brief menu buttons ─────────────────────────────────────────────
   bot.callbackQuery('brief:now', async (ctx) => {
     await ctx.answerCallbackQuery({ text: 'Fetching...' });
 
-    const sub = await store.getBriefSub(ctx.from.id, ctx.chat.id);
+    const sub = await store.getBriefSub(ctx.chat.id);
     const filterMcap = sub?.filter_mcap || 'all';
     const filterVol = sub?.filter_vol || 0;
     const filterRatio = sub?.filter_ratio || 1;
@@ -39,6 +50,7 @@ module.exports = (bot) => {
   });
 
   bot.callbackQuery('brief:freq', async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
     const kb = new InlineKeyboard()
       .text('Every 3h', 'bsub:freq:3')
@@ -48,21 +60,23 @@ module.exports = (bot) => {
       .text('Every 24h', 'bsub:freq:24');
 
     await ctx.editMessageText(
-      '<b>Step 1/5 \u2014 Push Frequency</b>\n\nHow often should I send you the brief?',
+      '<b>Step 1/5 \u2014 Push Frequency</b>\n\nHow often should I send the brief?',
       { parse_mode: 'HTML', reply_markup: kb }
     );
   });
 
   bot.callbackQuery('brief:unsub', async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
-    const removed = await store.removeBriefSub(ctx.from.id, ctx.chat.id);
+    const removed = await store.removeBriefSub(ctx.chat.id);
     await ctx.editMessageText(removed
       ? 'Daily Brief subscription cancelled.'
-      : 'You don\'t have an active subscription.');
+      : 'There is no active subscription for this chat.');
   });
 
   // ── Step 1: Frequency ──────────────────────────────────────────────
   bot.callbackQuery(/^bsub:freq:(\d+)$/, async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
     const freq = parseInt(ctx.match[1]);
     const key = getKey(ctx);
@@ -85,6 +99,7 @@ module.exports = (bot) => {
 
   // ── Step 2: Hours window ───────────────────────────────────────────
   bot.callbackQuery(/^bsub:hours:(\d+)$/, async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
     const hours = parseInt(ctx.match[1]);
     const key = getKey(ctx);
@@ -96,8 +111,8 @@ module.exports = (bot) => {
       .text('All', 'bsub:mcap:all')
       .text('< $50K', 'bsub:mcap:micro')
       .row()
-      .text('$50K–$250K', 'bsub:mcap:small')
-      .text('$250K–$1M', 'bsub:mcap:mid')
+      .text('$50K\u2013$250K', 'bsub:mcap:small')
+      .text('$250K\u2013$1M', 'bsub:mcap:mid')
       .row()
       .text('> $1M', 'bsub:mcap:large');
 
@@ -112,6 +127,7 @@ module.exports = (bot) => {
 
   // ── Step 3: MCap filter ────────────────────────────────────────────
   bot.callbackQuery(/^bsub:mcap:(\w+)$/, async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
     const mcap = ctx.match[1];
     const key = getKey(ctx);
@@ -140,6 +156,7 @@ module.exports = (bot) => {
 
   // ── Step 4: Volume filter ──────────────────────────────────────────
   bot.callbackQuery(/^bsub:vol:(\d+)$/, async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
     const vol = parseInt(ctx.match[1]);
     const key = getKey(ctx);
@@ -167,16 +184,17 @@ module.exports = (bot) => {
     );
   });
 
-  // ── Step 5: Ratio filter → save subscription ──────────────────────
+  // ── Step 5: Ratio filter -> save subscription ──────────────────────
   bot.callbackQuery(/^bsub:ratio:(.+)$/, async (ctx) => {
+    if (!(await requireAdminCb(ctx))) return;
     await ctx.answerCallbackQuery();
     const ratio = parseFloat(ctx.match[1]);
     const key = getKey(ctx);
     const state = wizardState.get(key);
     if (!state) return ctx.reply('Session expired. Use /brief setup to start again.');
 
-    // Save subscription
-    const sub = await store.upsertBriefSub({
+    // Save subscription (per-chat; user_id tracks who set it up)
+    await store.upsertBriefSub({
       userId: ctx.from.id,
       chatId: ctx.chat.id,
       frequencyHrs: state.freq,
@@ -189,6 +207,8 @@ module.exports = (bot) => {
     // Clean up wizard state
     wizardState.delete(key);
 
+    const groupNote = isGroup(ctx) ? '\nAny admin can edit or stop this subscription.' : '';
+
     await ctx.editMessageText(
       `<b>\u2705 Daily Brief Subscription Active!</b>\n\n` +
       `<b>Settings:</b>\n` +
@@ -197,15 +217,14 @@ module.exports = (bot) => {
       `MCap: ${MCAP_LABELS[state.mcap]}\n` +
       `Min Volume: ${VOL_LABELS[String(state.vol)]}\n` +
       `Min Vol/MCap: ${RATIO_LABELS[String(ratio)]}\n\n` +
-      `I'll send your first brief soon. Use /brief now for an instant one.\n` +
-      `Use /brief stop to unsubscribe.`,
+      `I'll send the first brief soon. Use /brief now for an instant one.\n` +
+      `Use /brief stop to unsubscribe.` + groupNote,
       { parse_mode: 'HTML' }
     );
   });
 
   // ── Wizard state cleanup — prune entries older than 30 minutes ─────
   setInterval(() => {
-    // Wizard state entries are tiny, but prevent unbounded growth
     if (wizardState.size > 1000) {
       wizardState.clear();
     }

@@ -70,7 +70,7 @@ async function processDueSubs(bot) {
         err.description?.includes('deactivated');
       if (permanent) {
         console.warn(`[BriefScheduler] Chat ${sub.chat_id} unreachable, removing subscription`);
-        await store.removeBriefSub(sub.user_id, sub.chat_id).catch(() => {});
+        await store.removeBriefSub(sub.chat_id).catch(() => {});
       }
     }
   }

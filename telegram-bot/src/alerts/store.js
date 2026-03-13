@@ -175,7 +175,7 @@ async function ensureBriefSubsTable() {
     CREATE TABLE IF NOT EXISTS telegram_brief_subs (
       id            SERIAL PRIMARY KEY,
       user_id       BIGINT NOT NULL,
-      chat_id       BIGINT NOT NULL,
+      chat_id       BIGINT NOT NULL UNIQUE,
       frequency_hrs INTEGER NOT NULL DEFAULT 24,
       filter_mcap   TEXT NOT NULL DEFAULT 'all',
       filter_vol    DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -183,8 +183,7 @@ async function ensureBriefSubsTable() {
       hours_window  INTEGER NOT NULL DEFAULT 24,
       is_active     BOOLEAN NOT NULL DEFAULT TRUE,
       last_sent_at  TIMESTAMPTZ,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(user_id, chat_id)
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_brief_subs_active
       ON telegram_brief_subs (is_active) WHERE is_active = TRUE;
@@ -196,8 +195,8 @@ async function upsertBriefSub(data) {
   const res = await db.query(
     `INSERT INTO telegram_brief_subs (user_id, chat_id, frequency_hrs, filter_mcap, filter_vol, filter_ratio, hours_window)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (user_id, chat_id) DO UPDATE SET
-       frequency_hrs = $3, filter_mcap = $4, filter_vol = $5, filter_ratio = $6,
+     ON CONFLICT (chat_id) DO UPDATE SET
+       user_id = $1, frequency_hrs = $3, filter_mcap = $4, filter_vol = $5, filter_ratio = $6,
        hours_window = $7, is_active = TRUE, last_sent_at = NULL
      RETURNING *`,
     [data.userId, data.chatId, data.frequencyHrs, data.filterMcap, data.filterVol, data.filterRatio, data.hoursWindow]
@@ -205,20 +204,20 @@ async function upsertBriefSub(data) {
   return res.rows[0];
 }
 
-async function getBriefSub(userId, chatId) {
+async function getBriefSub(chatId) {
   const db = getPool();
   const res = await db.query(
-    'SELECT * FROM telegram_brief_subs WHERE user_id = $1 AND chat_id = $2 AND is_active = TRUE',
-    [userId, chatId]
+    'SELECT * FROM telegram_brief_subs WHERE chat_id = $1 AND is_active = TRUE',
+    [chatId]
   );
   return res.rows[0] || null;
 }
 
-async function removeBriefSub(userId, chatId) {
+async function removeBriefSub(chatId) {
   const db = getPool();
   const res = await db.query(
-    'UPDATE telegram_brief_subs SET is_active = FALSE WHERE user_id = $1 AND chat_id = $2 AND is_active = TRUE RETURNING id',
-    [userId, chatId]
+    'UPDATE telegram_brief_subs SET is_active = FALSE WHERE chat_id = $1 AND is_active = TRUE RETURNING id',
+    [chatId]
   );
   return res.rowCount > 0;
 }

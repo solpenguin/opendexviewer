@@ -76,6 +76,7 @@ async function setCommands(bot) {
     { command: 'pvp', description: 'Find similar tokens (anti-spoofing)' },
     { command: 'og', description: 'Find the oldest PumpFun tokens by name/ticker' },
     { command: 'community', description: 'Community leaderboards & highlights' },
+    { command: 'brief', description: 'Daily Brief — graduated PumpFun tokens' },
     { command: 'cadetect', description: 'Toggle CA auto-detection in this group' },
     { command: 'help', description: 'Show all commands' },
   ], { scope: { type: 'all_group_chats' } });
