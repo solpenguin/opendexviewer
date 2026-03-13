@@ -4,7 +4,7 @@ const { formatNumber, escapeHtml } = require('../../utils/format');
 module.exports = (bot) => {
   bot.command('alerts', async (ctx) => {
     const userId = ctx.from.id;
-    const alerts = alertStore.listByUser(userId);
+    const alerts = await alertStore.listByUser(userId);
 
     if (alerts.length === 0) {
       return ctx.reply('You have no active alerts. Create one with /alert.');

@@ -9,8 +9,8 @@ module.exports = (bot) => {
     const minutes = Math.floor((uptime % 3600) / 60);
     const seconds = uptime % 60;
 
-    const totalAlerts = alertStore.countAll();
-    const activeAlerts = alertStore.countActive();
+    const totalAlerts = await alertStore.countAll();
+    const activeAlerts = await alertStore.countActive();
 
     await ctx.reply(
       `<b>OpenDEX Bot Stats</b>\n\n` +

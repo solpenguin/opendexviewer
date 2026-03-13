@@ -42,7 +42,7 @@ module.exports = (bot) => {
     }
 
     const userId = ctx.from.id;
-    const existingAlerts = alertStore.listByUser(userId);
+    const existingAlerts = await alertStore.listByUser(userId);
     if (existingAlerts.length >= config.MAX_ALERTS_PER_USER) {
       return ctx.reply(
         `You have reached the maximum of ${config.MAX_ALERTS_PER_USER} active alerts.\n` +
@@ -67,7 +67,7 @@ module.exports = (bot) => {
         );
       }
 
-      const alert = alertStore.create({
+      const alert = await alertStore.create({
         userId,
         chatId: ctx.chat.id,
         mint,

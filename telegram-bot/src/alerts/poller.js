@@ -4,6 +4,7 @@ const tokensApi = require('../api/tokens');
 const config = require('../config');
 
 let pollIntervalId = null;
+let pruneIntervalId = null;
 let isPolling = false;
 
 // Cancellable timeout — avoids unhandled rejection when the poll finishes first
@@ -32,13 +33,10 @@ async function checkAlerts(bot) {
 }
 
 async function _doCheckAlerts(bot) {
-  const distinctMints = alertStore.getDistinctMints();
+  const distinctMints = await alertStore.getDistinctMints();
   if (distinctMints.length === 0) return;
 
   // Fetch fresh price data for each alerted token individually.
-  // The price endpoint (GET /api/tokens/:mint/price) always hits GeckoTerminal
-  // and returns reliable marketCap data, unlike the batch endpoint which may
-  // return Helius-only metadata with marketCap: 0 after cache expires.
   const tokenData = {};
   const CONCURRENCY = 20;
 
@@ -62,7 +60,7 @@ async function _doCheckAlerts(bot) {
   }
 
   // Check each active alert against current market cap
-  const alerts = alertStore.getAllActive();
+  const alerts = await alertStore.getAllActive();
 
   for (const alert of alerts) {
     const priceData = tokenData[alert.mint];
@@ -96,9 +94,8 @@ async function _doCheckAlerts(bot) {
       console.log(`[Alerts] Alert #${alert.id} triggered: ${alert.condition} ${alert.target_value} (current mcap: ${currentMcap})`);
       const sent = await notifications.sendAlertNotification(bot, alert, currentMcap);
       if (sent) {
-        alertStore.trigger(alert.id);
+        await alertStore.trigger(alert.id);
       } else {
-        // Notification failed — leave alert active so it retries next cycle
         console.warn(`[Alerts] Alert #${alert.id} triggered but notification failed, will retry`);
       }
     }
@@ -112,12 +109,21 @@ module.exports = {
     pollIntervalId = setInterval(() => {
       checkAlerts(bot).catch(err => console.error('[Alerts] Poll error:', err.message));
     }, config.ALERT_POLL_INTERVAL_MS);
+
+    // Prune old triggered alerts once per hour
+    pruneIntervalId = setInterval(() => {
+      alertStore.pruneOld().catch(err => console.error('[Alerts] Prune error:', err.message));
+    }, 60 * 60 * 1000);
   },
 
   stop() {
     if (pollIntervalId) {
       clearInterval(pollIntervalId);
       pollIntervalId = null;
+    }
+    if (pruneIntervalId) {
+      clearInterval(pruneIntervalId);
+      pruneIntervalId = null;
     }
   }
 };

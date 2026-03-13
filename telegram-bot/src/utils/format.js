@@ -103,6 +103,8 @@ function formatTokenMessage(token) {
 
   const safeMint = encodeURIComponent(mint);
   const keyboard = new InlineKeyboard()
+    .text('\u{1F504} Refresh', `refresh:${mint}`)
+    .row()
     .url('View on OpenDEX', `${config.FRONTEND_URL}/token.html?mint=${safeMint}`)
     .url('Solscan', `https://solscan.io/token/${safeMint}`)
     .row()

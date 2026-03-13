@@ -146,9 +146,9 @@ services:
         value: "50"
 
   # =====================================================
-  # Telegram Bot (Long polling worker)
+  # Telegram Bot (Webhook mode — web service)
   # =====================================================
-  - type: worker
+  - type: web
     name: opendex-telegram-bot
     runtime: node
     region: oregon
@@ -156,6 +156,7 @@ services:
     rootDir: telegram-bot
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /health
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
@@ -165,6 +166,20 @@ services:
         value: https://opendex.online
       - key: NODE_ENV
         value: production
+
+      # Webhook configuration
+      - key: WEBHOOK_URL
+        value: https://opendex-telegram-bot.onrender.com
+      - key: WEBHOOK_SECRET
+        sync: false
+
+      # Database connection (shared with backend)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: opendex-db
+          property: connectionString
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
 
   # =====================================================
   # Redis (BullMQ job queue)

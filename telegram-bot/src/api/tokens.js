@@ -54,5 +54,10 @@ module.exports = {
   async ogfinderSearch(query) {
     const { data } = await client.get('/api/ogfinder/search', { params: { q: query } });
     return data;
+  },
+
+  async getDailyBrief(params = {}) {
+    const { data } = await client.get('/api/daily-brief', { params });
+    return data;
   }
 };

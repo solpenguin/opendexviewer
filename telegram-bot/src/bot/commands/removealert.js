@@ -10,7 +10,7 @@ module.exports = (bot) => {
     }
 
     const userId = ctx.from.id;
-    const removed = alertStore.remove(id, userId);
+    const removed = await alertStore.remove(id, userId);
 
     if (removed) {
       await ctx.reply(`Alert #${id} removed.`);
