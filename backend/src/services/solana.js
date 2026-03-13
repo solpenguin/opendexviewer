@@ -360,6 +360,31 @@ async function getTokenMetadata(mintAddress) {
       logoUri = content.json_uri;
     }
 
+    // Extract social/default links from metadata
+    const defaultLinks = {};
+    if (content.links?.external_url) {
+      defaultLinks.website = content.links.external_url;
+    }
+    // Some tokens store social links in metadata extensions — values may be handles or full URLs
+    if (metadata.extensions) {
+      if (metadata.extensions.twitter) {
+        const tw = metadata.extensions.twitter;
+        defaultLinks.twitter = tw.startsWith('http') ? tw : `https://x.com/${tw.replace(/^@/, '')}`;
+      }
+      if (metadata.extensions.telegram) {
+        const tg = metadata.extensions.telegram;
+        defaultLinks.telegram = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '')}`;
+      }
+      if (metadata.extensions.discord) {
+        const dc = metadata.extensions.discord;
+        defaultLinks.discord = dc.startsWith('http') ? dc : `https://discord.gg/${dc}`;
+      }
+      if (metadata.extensions.website && !defaultLinks.website) {
+        const ws = metadata.extensions.website;
+        defaultLinks.website = ws.startsWith('http') ? ws : `https://${ws}`;
+      }
+    }
+
     const result = {
       mintAddress: mintAddress,
       address: mintAddress,
@@ -371,7 +396,9 @@ async function getTokenMetadata(mintAddress) {
       price: price,
       hasPriceData: price !== null,
       // Logo from content if available (checked multiple locations)
-      logoUri: logoUri
+      logoUri: logoUri,
+      // Social links from on-chain metadata
+      defaultLinks: Object.keys(defaultLinks).length > 0 ? defaultLinks : null
     };
 
     console.log(`[Solana] Token metadata for ${mintAddress}:`, {

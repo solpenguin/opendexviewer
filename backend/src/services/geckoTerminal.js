@@ -220,6 +220,15 @@ async function getTokenInfo(mintAddress) {
 
     const attrs = token.attributes || {};
 
+    // Extract social links if available in GeckoTerminal attributes
+    const defaultLinks = {};
+    if (attrs.websites && Array.isArray(attrs.websites) && attrs.websites.length > 0) {
+      defaultLinks.website = typeof attrs.websites[0] === 'string' ? attrs.websites[0] : attrs.websites[0]?.url;
+    }
+    if (attrs.twitter_handle) defaultLinks.twitter = `https://x.com/${attrs.twitter_handle}`;
+    if (attrs.telegram_handle) defaultLinks.telegram = `https://t.me/${attrs.telegram_handle}`;
+    if (attrs.discord_url) defaultLinks.discord = attrs.discord_url;
+
     return {
       mintAddress: attrs.address,
       address: attrs.address,
@@ -233,7 +242,8 @@ async function getTokenInfo(mintAddress) {
       marketCap: parseFloat(attrs.market_cap_usd) || 0,
       fdv: parseFloat(attrs.fdv_usd) || 0,
       totalSupply: attrs.total_supply,
-      coingeckoId: attrs.coingecko_coin_id
+      coingeckoId: attrs.coingecko_coin_id,
+      defaultLinks: Object.keys(defaultLinks).length > 0 ? defaultLinks : null
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenInfo error:', error.message);
@@ -428,7 +438,8 @@ async function getTokenOverview(mintAddress) {
       totalSupply: null, // Helius provides supply
       holder: null,
       pairCreatedAt: topPool.pool_created_at || null,
-      dexIds
+      dexIds,
+      defaultLinks: null // Pools endpoint doesn't have social data; Helius provides these
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenOverview error:', error.message);

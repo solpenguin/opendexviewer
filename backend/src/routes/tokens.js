@@ -1337,6 +1337,16 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal > Jupiter
       // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
       // - Market data (volume, price change, liquidity): GeckoTerminal only
+      // Merge default social links from metadata sources (Helius > GeckoTerminal)
+      const mergedDefaultLinks = {};
+      const geckoLinks = gecko.defaultLinks || {};
+      const heliusLinks = helius.defaultLinks || {};
+      // Helius links take priority, GeckoTerminal fills gaps
+      for (const key of ['website', 'twitter', 'telegram', 'discord']) {
+        if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
+        else if (geckoLinks[key]) mergedDefaultLinks[key] = geckoLinks[key];
+      }
+
       const tokenResult = {
         mintAddress: mint,
         address: mint,
@@ -1364,6 +1374,8 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         pairCreatedAt: gecko.pairCreatedAt || null,
         // Additional metadata
         coingeckoId: gecko.coingeckoId || null,
+        // Default social links from token metadata (not community-submitted)
+        defaultLinks: Object.keys(mergedDefaultLinks).length > 0 ? mergedDefaultLinks : null,
         // Submissions
         submissions: {
           banners: submissions.filter(s => s.submission_type === 'banner'),
