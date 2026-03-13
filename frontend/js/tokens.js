@@ -31,7 +31,7 @@ const tokenList = {
   // Map frontend sort field names to backend API field names
   // Frontend uses short names (mcap, change) but backend expects full property names
   apiSortField(sort) {
-    const map = { mcap: 'marketCap', change: 'priceChange24h', volume: 'volume', price: 'price', views: 'views' };
+    const map = { mcap: 'marketCap', change: 'priceChange24h', volume: 'volume', price: 'price', views: 'views', sentiment: 'sentimentScore' };
     return map[sort] || 'marketCap';
   },
 
@@ -130,7 +130,7 @@ const tokenList = {
     }
 
     // Restore sort from URL (overrides tab default if present)
-    if (sort && ['price', 'change', 'volume', 'mcap', 'views'].includes(sort)) {
+    if (sort && ['price', 'change', 'volume', 'mcap', 'views', 'sentiment'].includes(sort)) {
       this.currentSort = sort;
       this.sortOrder = order === 'asc' ? 'asc' : 'desc';
     }
@@ -725,7 +725,8 @@ const tokenList = {
       'change': 'priceChange24h',
       'volume': 'volume24h',
       'mcap': 'marketCap',
-      'views': 'views'
+      'views': 'views',
+      'sentiment': 'sentimentScore'
     };
 
     const field = sortFieldMap[this.currentSort] || 'marketCap';
