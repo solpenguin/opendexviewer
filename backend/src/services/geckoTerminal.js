@@ -220,15 +220,6 @@ async function getTokenInfo(mintAddress) {
 
     const attrs = token.attributes || {};
 
-    // Extract social links if available in GeckoTerminal attributes
-    const defaultLinks = {};
-    if (attrs.websites && Array.isArray(attrs.websites) && attrs.websites.length > 0) {
-      defaultLinks.website = typeof attrs.websites[0] === 'string' ? attrs.websites[0] : attrs.websites[0]?.url;
-    }
-    if (attrs.twitter_handle) defaultLinks.twitter = `https://x.com/${attrs.twitter_handle}`;
-    if (attrs.telegram_handle) defaultLinks.telegram = `https://t.me/${attrs.telegram_handle}`;
-    if (attrs.discord_url) defaultLinks.discord = attrs.discord_url;
-
     return {
       mintAddress: attrs.address,
       address: attrs.address,
@@ -242,8 +233,7 @@ async function getTokenInfo(mintAddress) {
       marketCap: parseFloat(attrs.market_cap_usd) || 0,
       fdv: parseFloat(attrs.fdv_usd) || 0,
       totalSupply: attrs.total_supply,
-      coingeckoId: attrs.coingecko_coin_id,
-      defaultLinks: Object.keys(defaultLinks).length > 0 ? defaultLinks : null
+      coingeckoId: attrs.coingecko_coin_id
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenInfo error:', error.message);
@@ -438,8 +428,7 @@ async function getTokenOverview(mintAddress) {
       totalSupply: null, // Helius provides supply
       holder: null,
       pairCreatedAt: topPool.pool_created_at || null,
-      dexIds,
-      defaultLinks: null // Pools endpoint doesn't have social data; Helius provides these
+      dexIds
     };
   } catch (error) {
     console.error('[GeckoTerminal] getTokenOverview error:', error.message);
@@ -1089,6 +1078,92 @@ async function getNewPoolsByDex(dexId, page = 1) {
   }
 }
 
+/**
+ * Get social links for a token from CoinGecko Coin API (not the onchain/DEX API).
+ * Requires coingeckoId (e.g. "bitcoin", "solana").
+ * The onchain endpoints (/networks/solana/tokens/...) do NOT return social data —
+ * only the coin endpoint (/coins/{id}) does.
+ */
+const coinSocialCache = new Map();
+const COIN_SOCIAL_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — social links rarely change
+
+async function getCoinSocialLinks(coingeckoId) {
+  if (!coingeckoId) return null;
+
+  // Check local cache first (24h TTL)
+  const cached = coinSocialCache.get(coingeckoId);
+  if (cached && Date.now() < cached.expiry) {
+    return cached.data;
+  }
+
+  // CoinGecko Coin API — different base URL from the onchain/DEX API
+  const coinBaseUrl = COINGECKO_API_KEY
+    ? 'https://pro-api.coingecko.com/api/v3'
+    : 'https://api.coingecko.com/api/v3';
+
+  try {
+    const headers = { 'Accept': 'application/json' };
+    if (COINGECKO_API_KEY) {
+      headers['x-cg-pro-api-key'] = COINGECKO_API_KEY;
+    }
+
+    const response = await rateLimitedRequest('geckoTerminal', () =>
+      axios.get(`${coinBaseUrl}/coins/${encodeURIComponent(coingeckoId)}`, {
+        params: {
+          localization: false,
+          tickers: false,
+          market_data: false,
+          community_data: false,
+          developer_data: false,
+          sparkline: false
+        },
+        headers,
+        httpsAgent,
+        timeout: 10000
+      })
+    );
+
+    const links = response.data?.links;
+    if (!links) {
+      coinSocialCache.set(coingeckoId, { data: null, expiry: Date.now() + COIN_SOCIAL_CACHE_TTL });
+      return null;
+    }
+
+    const result = {};
+
+    // Website — homepage is an array, take first non-empty
+    if (Array.isArray(links.homepage)) {
+      const site = links.homepage.find(u => typeof u === 'string' && u.length > 0);
+      if (site) result.website = site;
+    }
+
+    // Twitter
+    if (typeof links.twitter_screen_name === 'string' && links.twitter_screen_name) {
+      result.twitter = `https://x.com/${links.twitter_screen_name}`;
+    }
+
+    // Telegram
+    if (typeof links.telegram_channel_identifier === 'string' && links.telegram_channel_identifier) {
+      result.telegram = `https://t.me/${links.telegram_channel_identifier}`;
+    }
+
+    // Discord — check chat_url array for discord links
+    if (Array.isArray(links.chat_url)) {
+      const discord = links.chat_url.find(u => typeof u === 'string' && (u.includes('discord.gg') || u.includes('discord.com')));
+      if (discord) result.discord = discord;
+    }
+
+    const data = Object.keys(result).length > 0 ? result : null;
+    coinSocialCache.set(coingeckoId, { data, expiry: Date.now() + COIN_SOCIAL_CACHE_TTL });
+    return data;
+  } catch (error) {
+    console.error('[GeckoTerminal] getCoinSocialLinks error:', error.message);
+    // Cache errors for 1 hour to avoid hammering the API
+    coinSocialCache.set(coingeckoId, { data: null, expiry: Date.now() + 60 * 60 * 1000 });
+    return null;
+  }
+}
+
 function stopCleanup() { clearInterval(_cacheCleanupTimer); }
 
 module.exports = {
@@ -1106,5 +1181,6 @@ module.exports = {
   getOHLCV,
   getPriceHistory,
   getTokenPools,
+  getCoinSocialLinks,
   stopCleanup
 };

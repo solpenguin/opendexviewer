@@ -1261,16 +1261,17 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       // Fetch data in parallel
       // Strategy: Use Helius for metadata (name, symbol, decimals, supply, basic price)
       // Use GeckoTerminal only for market data Helius can't provide (volume, price change, liquidity)
-      // GeckoTerminal token info fetched separately for social links (pools endpoint doesn't have them)
+      // GeckoTerminal token info provides coingeckoId (needed for social links lookup)
       const fetchPromises = [
         // Helius provides: metadata, supply, price (for top 10k tokens)
         solanaService.isHeliusConfigured()
           ? solanaService.getTokenMetadata(mint).catch(catchUnlessOverloaded(null))
           : Promise.resolve(null),
-        // GeckoTerminal provides: volume, price change, liquidity (data Helius can't provide)
+        // GeckoTerminal pools: volume, price change, liquidity
         geckoService.getTokenOverview(mint),
         db.getApprovedSubmissions(mint).catch(() => []),
-        // GeckoTerminal token info: has social links (websites, twitter, telegram, discord)
+        // GeckoTerminal token endpoint: provides coingeckoId for social links lookup
+        // Deduplicated — if getTokenOverview falls back to this internally, only one HTTP call
         geckoService.getTokenInfo(mint).catch(() => null)
       ];
 
@@ -1327,28 +1328,27 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         circulatingSupply = supply;
       }
 
-      // If neither Helius nor GeckoTerminal have the name, try Jupiter as last resort
-      let jupiterMeta = null;
-      if (!helius.name && !gecko.name) {
-        try {
-          jupiterMeta = await jupiterService.getTokenInfo(mint);
-        } catch { /* non-critical */ }
-      }
+      // Second pass: fetch social links (needs coingeckoId) and Jupiter fallback in parallel
+      // coingeckoId comes from token endpoint (geckoTokenInfo), not pools (gecko)
+      const coingeckoId = (geckoTokenInfo || {}).coingeckoId || null;
+      const [coinSocialLinks, jupiterMeta] = await Promise.all([
+        // CoinGecko Coin API has social links (website, twitter, telegram, discord)
+        // This is cached for 24h locally so subsequent loads are instant
+        coingeckoId
+          ? geckoService.getCoinSocialLinks(coingeckoId).catch(() => null)
+          : Promise.resolve(null),
+        // If neither Helius nor GeckoTerminal have the name, try Jupiter as last resort
+        (!helius.name && !gecko.name)
+          ? jupiterService.getTokenInfo(mint).catch(() => null)
+          : Promise.resolve(null)
+      ]);
       const jup = jupiterMeta || {};
 
-      // Merge data with priority:
-      // - Metadata (name, symbol, decimals, logo): Helius > GeckoTerminal > Jupiter
-      // - Price: GeckoTerminal (more accurate/fresh) > Helius (only top 10k, may be stale)
-      // - Market data (volume, price change, liquidity): GeckoTerminal only
-      // Merge default social links from metadata sources
-      // GeckoTerminal token info (not pools) has websites/twitter/telegram/discord
-      // Helius has external_url and metadata extensions
-      const mergedDefaultLinks = {};
-      const geckoSocial = (geckoTokenInfo || {}).defaultLinks || {};
+      // Merge default social links: CoinGecko Coin API > Helius metadata extensions
       const heliusLinks = helius.defaultLinks || {};
-      // GeckoTerminal token endpoint is the most reliable source; Helius fills gaps
+      const mergedDefaultLinks = {};
       for (const key of ['website', 'twitter', 'telegram', 'discord']) {
-        if (geckoSocial[key]) mergedDefaultLinks[key] = geckoSocial[key];
+        if (coinSocialLinks && coinSocialLinks[key]) mergedDefaultLinks[key] = coinSocialLinks[key];
         else if (heliusLinks[key]) mergedDefaultLinks[key] = heliusLinks[key];
       }
 
@@ -1378,7 +1378,7 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
         // Token age (first pool creation timestamp from GeckoTerminal)
         pairCreatedAt: gecko.pairCreatedAt || null,
         // Additional metadata
-        coingeckoId: gecko.coingeckoId || null,
+        coingeckoId: coingeckoId,
         // Default social links from token metadata (not community-submitted)
         defaultLinks: Object.keys(mergedDefaultLinks).length > 0 ? mergedDefaultLinks : null,
         // Submissions
