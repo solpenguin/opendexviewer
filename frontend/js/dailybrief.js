@@ -211,9 +211,10 @@ var dailyBrief = (function() {
   }
 
   function sortTokens(tokens, field, order) {
+    var isDate = field === 'createdAt';
     return tokens.slice().sort(function(a, b) {
-      var va = a[field] || 0;
-      var vb = b[field] || 0;
+      var va = isDate ? (a[field] ? new Date(a[field]).getTime() : 0) : (a[field] || 0);
+      var vb = isDate ? (b[field] ? new Date(b[field]).getTime() : 0) : (b[field] || 0);
       return order === 'desc' ? vb - va : va - vb;
     });
   }
@@ -247,8 +248,8 @@ var dailyBrief = (function() {
       html += '<span class="token-symbol">' + escapeHtml(t.symbol || addr.slice(0, 5).toUpperCase()) + '</span>';
       html += '</div></div></td>';
 
-      // Price
-      html += '<td class="cell-price">' + formatPrice(t.price) + '</td>';
+      // MCap
+      html += '<td class="cell-mcap">' + formatUsd(t.marketCap) + '</td>';
 
       // 24h change
       html += '<td class="cell-change"><span class="' + changeClass + '">' + changeSign + change.toFixed(2) + '%</span></td>';
@@ -256,8 +257,9 @@ var dailyBrief = (function() {
       // Volume
       html += '<td class="cell-volume">' + formatUsd(t.volume24h) + '</td>';
 
-      // MCap
-      html += '<td class="cell-mcap">' + formatUsd(t.marketCap) + '</td>';
+      // Token Age (time since creation on PumpFun)
+      var ageTime = t.createdAt ? new Date(t.createdAt).getTime() : null;
+      html += '<td class="cell-age">' + (ageTime ? formatTimeAgo(ageTime) : '--') + '</td>';
 
       // Holders
       html += '<td class="cell-holders">' + (t.holders > 0 ? formatNumber(t.holders) : '--') + '</td>';
@@ -410,10 +412,10 @@ var dailyBrief = (function() {
     if (headerRow) {
       var headers = headerRow.querySelectorAll('th');
       var sortMap = {
-        'cell-price': 'price',
+        'cell-mcap': 'marketCap',
         'cell-change': 'priceChange24h',
         'cell-volume': 'volume24h',
-        'cell-mcap': 'marketCap',
+        'cell-age': 'createdAt',
         'cell-holders': 'holders',
         'cell-volratio': 'volMcapRatio'
       };

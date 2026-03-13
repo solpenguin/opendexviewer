@@ -56,25 +56,57 @@ function computeDerivedFields(token) {
  * Batch-enrich tokens with market data using getMultiTokenInfo (30 tokens/call).
  * Falls back to individual getTokenOverview for any tokens missing from batch.
  */
+/**
+ * Enrich tokens with market data AND graduation time in a single batch call
+ * via GeckoTerminal /pools/multi/ endpoint. This replaces two separate calls
+ * (/tokens/multi/ + /pools/multi/) with one that returns all needed fields:
+ * price, volume, mcap, liquidity, priceChange24h, and pool_created_at.
+ * Processes up to 30 pools per API call (GeckoTerminal batch limit).
+ */
 async function enrichMarketDataBatched(tokens) {
   if (tokens.length === 0) return;
 
-  for (let i = 0; i < tokens.length; i += GECKO_MULTI_BATCH_SIZE) {
-    const batch = tokens.slice(i, i + GECKO_MULTI_BATCH_SIZE);
-    try {
-      const addresses = batch.map(t => t.address);
-      const multiData = await geckoService.getMultiTokenInfo(addresses);
+  // Build a map of poolAddress -> tokens
+  const poolToTokens = new Map();
+  const tokensWithoutPool = [];
+  for (const token of tokens) {
+    if (token.poolAddress) {
+      if (!poolToTokens.has(token.poolAddress)) poolToTokens.set(token.poolAddress, []);
+      poolToTokens.get(token.poolAddress).push(token);
+    } else {
+      tokensWithoutPool.push(token);
+    }
+  }
 
-      for (const token of batch) {
-        const info = multiData[token.address];
-        if (info) {
-          token.price = info.price || 0;
-          token.priceChange24h = info.priceChange24h || 0;
-          token.volume24h = info.volume24h || 0;
-          token.marketCap = info.marketCap || info.fdv || token.marketCap || 0;
-          if (info.logoUri && !token.logoUri) token.logoUri = info.logoUri;
-          if (info.name && (!token.name || token.name === token.symbol)) token.name = info.name;
-          if (info.symbol && !token.symbol) token.symbol = info.symbol;
+  // Batch pool lookups (30 per call)
+  const poolAddresses = [...poolToTokens.keys()];
+  for (let i = 0; i < poolAddresses.length; i += 30) {
+    const batch = poolAddresses.slice(i, i + 30);
+    try {
+      const poolData = await geckoService.getMultiPoolInfo(batch);
+
+      for (const [poolAddr, info] of Object.entries(poolData)) {
+        const matchedTokens = poolToTokens.get(poolAddr);
+        if (!matchedTokens) continue;
+
+        for (const token of matchedTokens) {
+          // Market data
+          if (info.price) token.price = info.price;
+          if (info.priceChange24h) token.priceChange24h = info.priceChange24h;
+          if (info.volume24h) token.volume24h = info.volume24h;
+          if (info.marketCap || info.fdv) token.marketCap = info.marketCap || info.fdv || token.marketCap;
+          if (info.liquidity) token.liquidity = info.liquidity;
+
+          // Graduation time (pool creation)
+          if (info.poolCreatedAt) {
+            token.graduatedAt = info.poolCreatedAt;
+            const gradMs = new Date(info.poolCreatedAt).getTime();
+            token._graduatedAtMs = gradMs;
+            token.gradVelocityHours = computeGradVelocity(
+              token.createdAt ? new Date(token.createdAt).getTime() : null,
+              gradMs
+            );
+          }
         }
       }
     } catch (err) {
@@ -82,35 +114,27 @@ async function enrichMarketDataBatched(tokens) {
       /* non-critical — tokens keep their defaults */
     }
   }
-}
 
-/**
- * Enrich tokens with pool creation time (= graduation time) via individual
- * GeckoTerminal pool lookups. Also backfills priceChange24h and liquidity
- * which the batch /tokens/multi/ endpoint often returns null for new tokens.
- */
-async function enrichGraduationTime(tokens) {
-  for (const token of tokens) {
-    try {
-      const overview = await geckoService.getTokenOverview(token.address);
-      if (overview) {
-        if (overview.pairCreatedAt) {
-          token.graduatedAt = overview.pairCreatedAt;
-          // Recompute grad velocity now that we have the real graduation time
-          const gradMs = new Date(overview.pairCreatedAt).getTime();
-          token._graduatedAtMs = gradMs;
-          token.gradVelocityHours = computeGradVelocity(
-            token.createdAt ? new Date(token.createdAt).getTime() : null,
-            gradMs
-          );
+  // Fallback: tokens without a pool address use the token batch endpoint
+  if (tokensWithoutPool.length > 0) {
+    for (let i = 0; i < tokensWithoutPool.length; i += GECKO_MULTI_BATCH_SIZE) {
+      const batch = tokensWithoutPool.slice(i, i + GECKO_MULTI_BATCH_SIZE);
+      try {
+        const addresses = batch.map(t => t.address);
+        const multiData = await geckoService.getMultiTokenInfo(addresses);
+
+        for (const token of batch) {
+          const info = multiData[token.address];
+          if (info) {
+            token.price = info.price || 0;
+            token.priceChange24h = info.priceChange24h || 0;
+            token.volume24h = info.volume24h || 0;
+            token.marketCap = info.marketCap || info.fdv || token.marketCap || 0;
+          }
         }
-        // Backfill fields the batch endpoint often misses on new tokens
-        if (overview.priceChange24h && !token.priceChange24h) token.priceChange24h = overview.priceChange24h;
-        if (overview.liquidity && !token.liquidity) token.liquidity = overview.liquidity;
+      } catch (err) {
+        if (err.isOverloaded || err.isCircuitBreakerError) throw err;
       }
-    } catch (err) {
-      if (err.isOverloaded || err.isCircuitBreakerError) throw err;
-      /* non-critical — graduatedAt stays null, COALESCE(NULL, NOW()) in DB */
     }
   }
 }
@@ -648,8 +672,12 @@ const jobProcessors = {
       if (newTokens.length > 0) {
         console.log(`[DailyBrief] ${newTokens.length} new PumpSwap graduates found`);
 
+        // enrichMarketDataBatched uses /pools/multi/ which returns market data
+        // AND pool_created_at in a single call, so it must run first (sequential).
+        // Holders + Helius metadata are independent and can run in parallel after.
+        await enrichMarketDataBatched(newTokens);
+
         const enrichResults = await Promise.allSettled([
-          enrichMarketDataBatched(newTokens),
           enrichHoldersBatched(newTokens),
           enrichWithHelius(newTokens)
         ]);
@@ -658,11 +686,6 @@ const jobProcessors = {
             console.warn('[DailyBrief] Enrichment batch failed:', r.reason?.message || r.reason);
           }
         }
-
-        // Fetch pool creation time (= real graduation time) via individual
-        // GeckoTerminal pool lookups. Runs after batch enrichment to avoid
-        // competing for the same rate-limited queue.
-        await enrichGraduationTime(newTokens);
 
         for (const t of newTokens) {
           computeDerivedFields(t);

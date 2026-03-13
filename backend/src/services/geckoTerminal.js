@@ -297,6 +297,60 @@ async function getMultiTokenInfo(addresses) {
 }
 
 /**
+ * Get multiple pool details in one request
+ * Endpoint: /networks/{network}/pools/multi/{pool_addresses}
+ * Returns pool_created_at and market data for each pool.
+ * Max 30 pool addresses per request.
+ * @param {string[]} poolAddresses - Array of pool addresses
+ * @returns {Object} Map of pool address -> { poolCreatedAt, price, volume24h, ... }
+ */
+async function getMultiPoolInfo(poolAddresses) {
+  if (!poolAddresses || poolAddresses.length === 0) return {};
+
+  console.log(`[GeckoTerminal] getMultiPoolInfo: fetching ${poolAddresses.length} pools`);
+
+  try {
+    const addressList = poolAddresses.slice(0, 30).join(',');
+
+    const response = await geckoRequest(() =>
+      geckoAxios.get(`/networks/${NETWORK}/pools/multi/${addressList}`),
+      'getMultiPoolInfo'
+    );
+
+    const pools = response.data.data || [];
+    const result = {};
+    const safeFloat = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+
+    for (const pool of pools) {
+      const attrs = pool.attributes || {};
+      const poolAddr = attrs.address;
+      if (!poolAddr) continue;
+
+      // Extract the base token address from relationships
+      const baseTokenId = pool.relationships?.base_token?.data?.id || '';
+      const tokenAddress = baseTokenId.replace('solana_', '');
+
+      result[poolAddr] = {
+        tokenAddress,
+        poolCreatedAt: attrs.pool_created_at || null,
+        price: safeFloat(attrs.base_token_price_usd),
+        priceChange24h: safeFloat(attrs.price_change_percentage?.h24),
+        volume24h: safeFloat(attrs.volume_usd?.h24),
+        liquidity: safeFloat(attrs.reserve_in_usd),
+        fdv: safeFloat(attrs.fdv_usd),
+        marketCap: safeFloat(attrs.market_cap_usd)
+      };
+    }
+
+    console.log(`[GeckoTerminal] multi pool response: ${Object.keys(result).length} pools`);
+    return result;
+  } catch (error) {
+    console.error('[GeckoTerminal] getMultiPoolInfo error:', error.message);
+    return {};
+  }
+}
+
+/**
  * Get token overview with price and market data
  * Optimized: Only fetches pools endpoint which includes price data
  * Metadata comes from Helius, so we only need market data from GeckoTerminal
@@ -1030,6 +1084,7 @@ module.exports = {
   getTokenInfo,
   getTokenPrice,
   getMultiTokenInfo,
+  getMultiPoolInfo,
   getTokenOverview,
   getMarketData,
   getTrendingTokens,
