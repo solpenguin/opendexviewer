@@ -11,39 +11,37 @@
   style.textContent = `
     #announcement-banner {
       display: none;
-      position: sticky;
-      top: 0;
-      z-index: 1100;
+      position: fixed;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      z-index: 900;
       padding: 6px 14px;
       box-sizing: border-box;
       width: fit-content;
-      max-width: 560px;
-      border-radius: 0 0 10px 0;
+      max-width: 420px;
+      border-radius: 10px;
       font-size: 0.82rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
     #announcement-banner[data-type="info"] {
       background: #0d2140;
       color: #7ec8e3;
-      border-bottom: 2px solid #1e5a8a;
-      border-right: 2px solid #1e5a8a;
+      border: 1px solid #1e5a8a;
     }
     #announcement-banner[data-type="warning"] {
       background: #2d1f00;
       color: #ffc107;
-      border-bottom: 2px solid #a07800;
-      border-right: 2px solid #a07800;
+      border: 1px solid #a07800;
     }
     #announcement-banner[data-type="success"] {
       background: #071f0f;
       color: #4caf50;
-      border-bottom: 2px solid #1b5e20;
-      border-right: 2px solid #1b5e20;
+      border: 1px solid #1b5e20;
     }
     #announcement-banner[data-type="error"] {
       background: #1f0707;
       color: #ef5350;
-      border-bottom: 2px solid #b71c1c;
-      border-right: 2px solid #b71c1c;
+      border: 1px solid #b71c1c;
     }
     .announcement-inner {
       display: flex;
