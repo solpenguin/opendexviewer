@@ -14348,6 +14348,164 @@ body.landscape .hero h1 {
   }
 }
 
+/* --- Welcome Banner (tokens page top bar) --- */
+.welcome-banner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0.5rem 1.5rem 0;
+}
+
+.welcome-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 0.5rem 1rem;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.welcome-banner-btn:hover {
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.welcome-banner-logo {
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.welcome-banner-subtitle {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.welcome-banner-chevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* --- Welcome Modal --- */
+.welcome-modal {
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  padding: 1.5rem 2rem 2rem;
+}
+
+.welcome-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.welcome-modal-close:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.welcome-modal .landing-hero {
+  padding: 2rem 0 1.5rem;
+  overflow: visible;
+}
+
+.welcome-modal .landing-hero-glow {
+  display: none;
+}
+
+.welcome-modal .landing-hero-logo {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 1rem;
+}
+
+.welcome-modal .landing-hero-title {
+  font-size: 2.5rem;
+}
+
+.welcome-modal .landing-hero-subtitle {
+  font-size: 0.9375rem;
+  margin-bottom: 1.5rem;
+}
+
+.welcome-modal .landing-features {
+  padding: 1rem 0 1.5rem;
+}
+
+.welcome-modal .landing-features-heading {
+  font-size: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.welcome-features-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 0.75rem !important;
+}
+
+.welcome-modal .landing-feature-card {
+  padding: 1.25rem;
+  animation: none;
+}
+
+.welcome-modal .landing-feature-icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0.75rem;
+}
+
+.welcome-modal .landing-feature-card h3 {
+  font-size: 0.9375rem;
+}
+
+.welcome-modal .landing-feature-card p {
+  font-size: 0.8125rem;
+}
+
+.welcome-modal .landing-token-preview {
+  padding: 1rem 0;
+  max-width: 100%;
+}
+
+.welcome-modal .landing-token-card {
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .welcome-modal {
+    padding: 1.25rem;
+    max-height: 85vh;
+  }
+
+  .welcome-features-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .welcome-modal .landing-hero-title {
+    font-size: 2rem;
+  }
+
+  .welcome-banner-subtitle {
+    display: none;
+  }
+}
+
 /* =============================================
    MOBILE HAMBURGER MENU & NAVIGATION
    ============================================= */

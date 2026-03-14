@@ -50,8 +50,7 @@
         <svg class="icon-close" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <nav class="nav">
-        <a href="/" class="nav-link active">Home</a>
-        <a href="tokens.html" class="nav-link">Tokens</a>
+        <a href="/" class="nav-link active">Tokens</a>
         <a href="submit.html" class="nav-link">Submit</a>
         <div class="nav-dropdown">
           <a href="#" class="nav-link nav-dropdown-toggle">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
@@ -95,118 +94,346 @@
   </header>
   <div id="announcement-banner"></div>
 
-  <main class="main landing-page">
-    <!-- Hero Section -->
-    <section class="landing-hero">
-      <div class="landing-hero-glow"></div>
-      <img src="OpenDEX_Logo.png" alt="OpenDEX" class="landing-hero-logo">
-      <h1 class="landing-hero-title">OpenDex</h1>
-      <p class="landing-hero-tagline">OPEN SOURCE SOLANA EXPLORER</p>
-      <p class="landing-hero-subtitle">Real-time token data, community-driven insights, and powerful tools — all free and open source.</p>
-      <div class="landing-hero-buttons">
-        <a href="tokens.html" class="btn btn-primary landing-btn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  <!-- Welcome Modal -->
+  <div id="welcome-modal-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal-content welcome-modal">
+      <button class="welcome-modal-close" id="welcome-modal-close" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
+      <section class="landing-hero" style="padding: 2rem 0 1.5rem;">
+        <img src="OpenDEX_Logo.png" alt="OpenDEX" class="landing-hero-logo">
+        <h1 class="landing-hero-title" style="font-size: 2.5rem;">OpenDex</h1>
+        <p class="landing-hero-tagline">OPEN SOURCE SOLANA EXPLORER</p>
+        <p class="landing-hero-subtitle" style="margin-bottom: 1.5rem;">Real-time token data, community-driven insights, and powerful tools — all free and open source.</p>
+        <div class="landing-hero-buttons">
+          <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener" class="btn btn-ghost landing-btn">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+      </section>
+
+      <section class="landing-features" style="padding: 1rem 0 1.5rem;">
+        <h2 class="landing-features-heading" style="font-size: 1.25rem; margin-bottom: 1.25rem;">Everything you need</h2>
+        <div class="landing-features-grid welcome-features-grid">
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </div>
+            <h3>Real-Time Data</h3>
+            <p>Live prices, market caps, and volume from top Solana data providers.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/>
+                <path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+              </svg>
+            </div>
+            <h3>Community Voting</h3>
+            <p>Upvote tokens, submit content, and shape what the community sees.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+              </svg>
+            </div>
+            <h3>Watchlists</h3>
+            <p>Track your favorite tokens with a personal, wallet-connected watchlist.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+            <h3>OG Finder</h3>
+            <p>Discover the oldest PumpFun tokens by name or ticker — find the originals.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </div>
+            <h3>Open Source</h3>
+            <p>Fully transparent codebase. Audit it, fork it, contribute to it.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+              </svg>
+            </div>
+            <h3>Free Forever</h3>
+            <p>No fees, no ads, no premium tiers. Built for the community.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-token-preview" style="padding: 1rem 0;">
+        <h2 class="landing-features-heading" style="font-size: 1.25rem; margin-bottom: 1rem;">$OD Token</h2>
+        <div class="landing-token-card" id="platform-token-card">
+          <div class="landing-token-card-loading">
+            <div class="loading-spinner small"></div>
+            <span>Loading token data...</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <main class="main">
+    <!-- Welcome Banner -->
+    <div class="welcome-banner" id="welcome-banner">
+      <button class="welcome-banner-btn" id="welcome-banner-btn">
+        <img src="OpenDEX_Logo.png" alt="" width="20" height="20" class="welcome-banner-logo">
+        <span>Welcome to OpenDex</span>
+        <span class="welcome-banner-subtitle">— Open Source Solana Explorer</span>
+        <svg class="welcome-banner-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+    </div>
+
+    <section class="hero">
+      <div class="hero-brand">
+        <div class="hero-brand-name">
+          <img src="OpenDEX_Logo.png" alt="OpenDEX" class="hero-logo-img">
+          <h1>OpenDEX</h1>
+        </div>
+        <p class="hero-subtitle">Solana Token Explorer</p>
+      </div>
+      <p>Free, open-source &middot; Real-time prices, charts &amp; community insights</p>
+
+      <div class="search-container">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
           </svg>
-          Explore Tokens
-        </a>
-        <a href="https://github.com/SolPenguin/opendexviewer" target="_blank" rel="noopener" class="btn btn-ghost landing-btn">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          <input
+            type="text"
+            id="search-input"
+            class="search-input"
+            placeholder="Search by token name, symbol, or mint address..."
+            autocomplete="off"
+          >
+          <button id="search-clear" class="search-clear" style="display: none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <button id="search-btn" class="btn btn-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
           </svg>
-          View on GitHub
-        </a>
+          Search
+        </button>
+      </div>
+      <div class="search-filters">
+        <label class="dex-filter-toggle" id="dex-filter-toggle" title="Only show tokens from Pumpfun, Pumpswap, and Raydium">
+          <input type="checkbox" id="dex-filter-checkbox" checked>
+          <span class="dex-filter-track">
+            <span class="dex-filter-thumb"></span>
+          </span>
+          <span class="dex-filter-label">Major DEXes only</span>
+        </label>
       </div>
     </section>
 
-    <!-- Feature Grid -->
-    <section class="landing-features">
-      <h2 class="landing-features-heading">Everything you need</h2>
-      <div class="landing-features-grid">
-        <div class="landing-feature-card" style="animation-delay: 0.1s">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    <section class="filters">
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="trending">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.66 11.2C17.43 10.9 17.15 10.64 16.89 10.38C16.22 9.78 15.46 9.35 14.82 8.72C13.33 7.26 13 4.85 13.95 3C13 3.23 12.17 3.75 11.46 4.32C8.87 6.4 7.85 10.07 9.07 13.22C9.11 13.32 9.15 13.42 9.15 13.55C9.15 13.77 9 13.97 8.8 14.05C8.57 14.15 8.33 14.09 8.14 13.93C8.08 13.88 8.04 13.83 8 13.76C6.87 12.33 6.69 10.28 7.45 8.64C5.78 10 4.87 12.3 5 14.47C5.06 14.97 5.12 15.47 5.29 15.97C5.43 16.57 5.7 17.17 6 17.7C7.08 19.43 8.95 20.67 10.96 20.92C13.1 21.19 15.39 20.8 17.03 19.32C18.86 17.66 19.5 15 18.56 12.72L18.43 12.46C18.22 12 17.66 11.2 17.66 11.2Z"/>
             </svg>
-          </div>
-          <h3>Real-Time Data</h3>
-          <p>Live prices, market caps, and volume from top Solana data providers.</p>
-        </div>
-        <div class="landing-feature-card" style="animation-delay: 0.2s">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/>
-              <path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+          </span>
+          Trending
+        </button>
+        <button class="filter-tab" data-filter="new">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
             </svg>
-          </div>
-          <h3>Community Voting</h3>
-          <p>Upvote tokens, submit content, and shape what the community sees.</p>
-        </div>
-        <div class="landing-feature-card" style="animation-delay: 0.3s">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+          </span>
+          New
+        </button>
+        <button class="filter-tab" data-filter="gainers">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+              <polyline points="16 7 22 7 22 13"/>
             </svg>
-          </div>
-          <h3>Watchlists</h3>
-          <p>Track your favorite tokens with a personal, wallet-connected watchlist.</p>
-        </div>
-        <div class="landing-feature-card" style="animation-delay: 0.4s">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </span>
+          Gainers
+        </button>
+        <button class="filter-tab" data-filter="losers">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/>
+              <polyline points="16 17 22 17 22 11"/>
             </svg>
-          </div>
-          <h3>OG Finder</h3>
-          <p>Discover the oldest PumpFun tokens by name or ticker — find the originals.</p>
-        </div>
-        <div class="landing-feature-card" style="animation-delay: 0.5s">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
+          </span>
+          Losers
+        </button>
+        <button class="filter-tab" data-filter="tech">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
             </svg>
-          </div>
-          <h3>Open Source</h3>
-          <p>Fully transparent codebase. Audit it, fork it, contribute to it.</p>
-        </div>
-        <div class="landing-feature-card" style="animation-delay: 0.6s">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+          </span>
+          Tech
+        </button>
+        <button class="filter-tab" data-filter="meme">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+              <line x1="9" y1="9" x2="9.01" y2="9"/>
+              <line x1="15" y1="9" x2="15.01" y2="9"/>
             </svg>
-          </div>
-          <h3>Free Forever</h3>
-          <p>No fees, no ads, no premium tiers. Built for the community.</p>
-        </div>
+          </span>
+          Meme
+        </button>
+        <button class="filter-tab" data-filter="most_viewed">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </span>
+          Most Viewed
+        </button>
+        <button class="filter-tab" data-filter="watchlist" id="watchlist-tab">
+          <span class="filter-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </span>
+          Watchlist
+          <span id="watchlist-count" class="watchlist-badge" style="display: none;">0</span>
+        </button>
       </div>
-    </section>
 
-    <!-- Platform Token Preview -->
-    <section class="landing-token-preview">
-      <h2 class="landing-features-heading">$OD Token</h2>
-      <div class="landing-token-card" id="platform-token-card">
-        <div class="landing-token-card-loading">
-          <div class="loading-spinner small"></div>
-          <span>Loading token data...</span>
+      <div class="filter-info">
+        <span id="result-count"></span>
+        <div id="data-freshness" class="data-freshness" title="Data refresh status">
+          <span class="freshness-dot"></span>
+          <span class="freshness-text">Updated just now</span>
+          <span class="countdown"></span>
         </div>
-      </div>
-    </section>
-
-    <!-- Closing CTA -->
-    <section class="landing-cta">
-      <div class="landing-cta-card">
-        <h2>Ready to explore?</h2>
-        <p>Dive into real-time Solana token data with the tools the community built.</p>
-        <a href="tokens.html" class="btn btn-primary landing-btn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+        <button id="refresh-btn" class="btn-icon" title="Refresh data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
           </svg>
-          Get Started
-        </a>
+        </button>
       </div>
     </section>
+
+    <section class="token-list-section">
+      <div class="token-table-container">
+        <table class="token-table">
+          <thead>
+            <tr>
+              <th class="th-rank">#</th>
+              <th class="th-token">Token</th>
+              <th class="th-price sortable" data-sort="price">
+                Price
+                <span class="sort-icon"></span>
+              </th>
+              <th class="th-change sortable" data-sort="change">
+                24h
+                <span class="sort-icon"></span>
+              </th>
+              <th class="th-volume sortable" data-sort="volume">
+                Volume
+                <span class="sort-icon"></span>
+              </th>
+              <th class="th-mcap sortable" data-sort="mcap">
+                Market Cap
+                <span class="sort-icon"></span>
+              </th>
+              <th class="th-views sortable" data-sort="views">
+                Views
+                <span class="sort-icon"></span>
+              </th>
+              <th class="th-sentiment sortable" data-sort="sentiment" title="Community sentiment score (Bullish − Bearish votes)">
+                Sentiment
+                <span class="sort-icon"></span>
+              </th>
+              <th class="th-watchlist" title="Watchlist">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="token-list">
+            <tr class="loading-row">
+              <td colspan="9">
+                <div class="loading-state">
+                  <div class="loading-spinner large"></div>
+                  <span>Loading tokens...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <div class="pagination-left">
+          <!-- Static 15 entries per page -->
+        </div>
+
+        <div class="pagination-center">
+          <button id="prev-page" class="pagination-arrow" disabled title="Previous page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+          <div id="page-tabs" class="page-tabs">
+            <button class="page-tab active" data-page="1">1</button>
+          </div>
+          <button id="next-page" class="pagination-arrow" title="Next page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="pagination-right">
+          <span id="page-info" class="page-info-text">Page 1</span>
+          <span id="total-info" class="text-muted"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Status Banner -->
+    <div id="api-status" class="api-status" style="display: none;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span class="status-message">Unable to connect to API. Retrying...</span>
+    </div>
   </main>
 
   <footer class="footer">
@@ -235,6 +462,8 @@
   <script defer src="js/bugReport.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script defer src="js/wallet.js"></script>
+  <script defer src="js/watchlist.js"></script>
+  <script defer src="js/tokens.js"></script>
   <script defer src="js/announcements.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
@@ -244,12 +473,9 @@
       if (!installBtn) return;
       if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
 
-      // Detect iOS/iPadOS Safari (no beforeinstallprompt support)
+      // Detect iOS/iPadOS (no beforeinstallprompt support)
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      var isSafari = /Safari/.test(navigator.userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
-
       if (isIOS) {
-        // Always show the button on iOS — guide user to Add to Home Screen
         installBtn.style.display = '';
         installBtn.addEventListener('click', function() {
           if (typeof toast !== 'undefined') {
@@ -275,89 +501,120 @@
     })();
     /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
 
-    // Platform token preview — must wait for deferred api.js to load
-    document.addEventListener('DOMContentLoaded', function() {
-      var PLATFORM_MINT = '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump';
-      var card = document.getElementById('platform-token-card');
-      if (!card) return;
+    // Welcome modal logic
+    (function() {
+      var overlay = document.getElementById('welcome-modal-overlay');
+      var closeBtn = document.getElementById('welcome-modal-close');
+      var openBtn = document.getElementById('welcome-banner-btn');
 
-      function escapeHtml(str) {
-        var d = document.createElement('div');
-        d.textContent = str;
-        return d.innerHTML;
+      function openModal() {
+        overlay.style.display = '';
+        document.body.style.overflow = 'hidden';
+        loadPlatformToken();
       }
 
-      function formatPrice(n) {
-        if (n == null || isNaN(n)) return '--';
-        if (n < 0.00001) return '$' + Number(n).toExponential(2);
-        if (n < 0.01) return '$' + Number(n).toFixed(6);
-        if (n < 1) return '$' + Number(n).toFixed(4);
-        return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      function closeModal() {
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
       }
 
-      function formatNumber(n) {
-        if (n == null || isNaN(n)) return '--';
-        if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-        if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-        if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K';
-        return '$' + Number(n).toFixed(2);
-      }
-
-      function formatCount(n) {
-        if (n == null || isNaN(n)) return '--';
-        n = parseFloat(n);
-        if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-        if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-        return Number(n).toLocaleString();
-      }
-
-      Promise.all([
-        api.tokens.get(PLATFORM_MINT),
-        api.burnCredits.getPlatformStats().catch(function() { return null; })
-      ]).then(function(results) {
-        var t = results[0];
-        var burnStats = results[1];
-        if (!t) { card.innerHTML = '<p class="landing-token-card-error">Token data unavailable</p>'; return; }
-
-        var logo = t.logoUri || t.logoURI || t.logo || '';
-        var name = t.name || '$OD';
-        var symbol = t.symbol || 'OD';
-        var change = t.priceChange24h || 0;
-        var isPos = change >= 0;
-
-        var html = '<div class="landing-token-header">';
-        if (logo) {
-          html += '<img src="' + escapeHtml(logo) + '" width="40" height="40" class="landing-token-logo" alt="">';
-        }
-        html += '<div class="landing-token-info">';
-        html += '<span class="landing-token-name">' + escapeHtml(name) + ' <span class="landing-token-symbol">' + escapeHtml(symbol) + '</span></span>';
-        html += '<span class="landing-token-price">' + formatPrice(t.price);
-        html += '<span class="landing-token-change ' + (isPos ? 'positive' : 'negative') + '">' + (isPos ? '+' : '') + Number(change).toFixed(2) + '%</span>';
-        html += '</span>';
-        html += '</div></div>';
-
-        var burned = burnStats && burnStats.totalOdBurned ? formatCount(burnStats.totalOdBurned) + ' $OD' : '--';
-
-        html += '<div class="landing-token-stats">';
-        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Market Cap</span><span class="landing-token-stat-value">' + formatNumber(t.marketCap) + '</span></div>';
-        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">24h Volume</span><span class="landing-token-stat-value">' + formatNumber(t.volume24h) + '</span></div>';
-        html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Tokens Burned</span><span class="landing-token-stat-value">' + burned + '</span></div>';
-        if (t.holders) {
-          html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Holders</span><span class="landing-token-stat-value">' + Number(t.holders).toLocaleString() + '</span></div>';
-        }
-        html += '</div>';
-
-        html += '<div class="landing-token-actions">';
-        html += '<a href="token.html?mint=' + PLATFORM_MINT + '" class="btn btn-primary landing-btn landing-token-btn">View Token</a>';
-        html += '<a href="burn.html" class="btn btn-ghost landing-btn landing-token-btn">Burn Credits</a>';
-        html += '</div>';
-
-        card.innerHTML = html;
-      }).catch(function() {
-        card.innerHTML = '<p class="landing-token-card-error">Failed to load token data</p>';
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
       });
-    });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && overlay.style.display !== 'none') closeModal();
+      });
+
+      // Platform token preview — loads on modal open
+      var tokenLoaded = false;
+      function loadPlatformToken() {
+        if (tokenLoaded) return;
+        tokenLoaded = true;
+
+        var PLATFORM_MINT = '8pNbASzvHB19Skw1zK9rb97QnAVSmenrgvqpRNbppump';
+        var card = document.getElementById('platform-token-card');
+        if (!card || typeof api === 'undefined') return;
+
+        function escapeHtml(str) {
+          var d = document.createElement('div');
+          d.textContent = str;
+          return d.innerHTML;
+        }
+
+        function formatPrice(n) {
+          if (n == null || isNaN(n)) return '--';
+          if (n < 0.00001) return '$' + Number(n).toExponential(2);
+          if (n < 0.01) return '$' + Number(n).toFixed(6);
+          if (n < 1) return '$' + Number(n).toFixed(4);
+          return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function formatNumber(n) {
+          if (n == null || isNaN(n)) return '--';
+          if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+          if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+          if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K';
+          return '$' + Number(n).toFixed(2);
+        }
+
+        function formatCount(n) {
+          if (n == null || isNaN(n)) return '--';
+          n = parseFloat(n);
+          if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+          if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+          if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+          return Number(n).toLocaleString();
+        }
+
+        Promise.all([
+          api.tokens.get(PLATFORM_MINT),
+          api.burnCredits.getPlatformStats().catch(function() { return null; })
+        ]).then(function(results) {
+          var t = results[0];
+          var burnStats = results[1];
+          if (!t) { card.innerHTML = '<p class="landing-token-card-error">Token data unavailable</p>'; return; }
+
+          var logo = t.logoUri || t.logoURI || t.logo || '';
+          var name = t.name || '$OD';
+          var symbol = t.symbol || 'OD';
+          var change = t.priceChange24h || 0;
+          var isPos = change >= 0;
+
+          var html = '<div class="landing-token-header">';
+          if (logo) {
+            html += '<img src="' + escapeHtml(logo) + '" width="40" height="40" class="landing-token-logo" alt="">';
+          }
+          html += '<div class="landing-token-info">';
+          html += '<span class="landing-token-name">' + escapeHtml(name) + ' <span class="landing-token-symbol">' + escapeHtml(symbol) + '</span></span>';
+          html += '<span class="landing-token-price">' + formatPrice(t.price);
+          html += '<span class="landing-token-change ' + (isPos ? 'positive' : 'negative') + '">' + (isPos ? '+' : '') + Number(change).toFixed(2) + '%</span>';
+          html += '</span>';
+          html += '</div></div>';
+
+          var burned = burnStats && burnStats.totalOdBurned ? formatCount(burnStats.totalOdBurned) + ' $OD' : '--';
+
+          html += '<div class="landing-token-stats">';
+          html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Market Cap</span><span class="landing-token-stat-value">' + formatNumber(t.marketCap) + '</span></div>';
+          html += '<div class="landing-token-stat"><span class="landing-token-stat-label">24h Volume</span><span class="landing-token-stat-value">' + formatNumber(t.volume24h) + '</span></div>';
+          html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Tokens Burned</span><span class="landing-token-stat-value">' + burned + '</span></div>';
+          if (t.holders) {
+            html += '<div class="landing-token-stat"><span class="landing-token-stat-label">Holders</span><span class="landing-token-stat-value">' + Number(t.holders).toLocaleString() + '</span></div>';
+          }
+          html += '</div>';
+
+          html += '<div class="landing-token-actions">';
+          html += '<a href="token.html?mint=' + PLATFORM_MINT + '" class="btn btn-primary landing-btn landing-token-btn">View Token</a>';
+          html += '<a href="burn.html" class="btn btn-ghost landing-btn landing-token-btn">Burn Credits</a>';
+          html += '</div>';
+
+          card.innerHTML = html;
+        }).catch(function() {
+          card.innerHTML = '<p class="landing-token-card-error">Failed to load token data</p>';
+        });
+      }
+    })();
   </script>
 </body>
 </html>
