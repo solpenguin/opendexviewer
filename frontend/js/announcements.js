@@ -14,40 +14,45 @@
       position: sticky;
       top: 0;
       z-index: 1100;
-      padding: 10px 20px;
+      padding: 6px 14px;
       box-sizing: border-box;
-      width: 100%;
+      width: fit-content;
+      max-width: 560px;
+      border-radius: 0 0 10px 0;
+      font-size: 0.82rem;
     }
     #announcement-banner[data-type="info"] {
       background: #0d2140;
       color: #7ec8e3;
       border-bottom: 2px solid #1e5a8a;
+      border-right: 2px solid #1e5a8a;
     }
     #announcement-banner[data-type="warning"] {
       background: #2d1f00;
       color: #ffc107;
       border-bottom: 2px solid #a07800;
+      border-right: 2px solid #a07800;
     }
     #announcement-banner[data-type="success"] {
       background: #071f0f;
       color: #4caf50;
       border-bottom: 2px solid #1b5e20;
+      border-right: 2px solid #1b5e20;
     }
     #announcement-banner[data-type="error"] {
       background: #1f0707;
       color: #ef5350;
       border-bottom: 2px solid #b71c1c;
+      border-right: 2px solid #b71c1c;
     }
     .announcement-inner {
-      max-width: 960px;
-      margin: 0 auto;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
     .announcement-icon {
       flex-shrink: 0;
-      font-size: 1rem;
+      font-size: 0.85rem;
       line-height: 1;
     }
     .announcement-title {
@@ -60,7 +65,7 @@
     }
     .announcement-message {
       flex: 1;
-      line-height: 1.4;
+      line-height: 1.3;
     }
     .announcement-dismiss {
       flex-shrink: 0;
@@ -68,7 +73,7 @@
       border: none;
       cursor: pointer;
       opacity: 0.65;
-      font-size: 1.25rem;
+      font-size: 1rem;
       line-height: 1;
       padding: 0 4px;
       color: inherit;
