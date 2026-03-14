@@ -120,7 +120,13 @@
       "WebFetch(domain:public-api-v2.bags.fm)",
       "Bash(node -e \"require\\(''./src/routes/bags''\\)\")",
       "Bash(grep -r -l -i \"bags\" c:/VS/OPENDEX/opendexviewer/frontend/*.html)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(grep -n \"getUrlParam\\\\|location.search\\\\|URLSearchParams\" /c/VS/OPENDEX/opendexviewer/frontend/js/*.js)",
+      "Bash(sort -t: -k3 -n)",
+      "Bash(cat:*)",
+      "Bash(grep \"\\\\.js$\")",
+      "Bash(grep \"\\\\.css$\")",
+      "Bash(python3 -c \"from PIL import Image; img = Image.open\\(''c:/VS/OPENDEX/opendexviewer/frontend/OpenDexColoredBanner.png''\\); print\\(f''{img.width}x{img.height}''\\)\")"
     ]
   }
 }

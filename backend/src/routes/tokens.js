@@ -1401,6 +1401,15 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
       // Set hasCommunityUpdates flag (used by frontend for green checkmark)
       tokenResult.hasCommunityUpdates = submissions.length > 0;
 
+      // Include view count so the frontend can display it immediately
+      try {
+        const dbViews = await db.getTokenViews(mint);
+        const buffered = jobQueue.getBufferedViewCounts([mint]);
+        tokenResult.views = dbViews + (buffered[mint] || 0);
+      } catch {
+        tokenResult.views = 0;
+      }
+
       // Also save to database for future reference
       const tokenName = helius.name || gecko.name;
       const tokenSymbol = helius.symbol || gecko.symbol;

@@ -665,6 +665,11 @@ const tokenDetail = {
       }
     }
 
+    // Views - display initial count from token data (updated later by recordView POST)
+    if (token.views != null) {
+      this.updateViewCount(token.views);
+    }
+
     // Trade links - Jupiter with proper URL format
     const jupiterLink = document.getElementById('jupiter-link');
     if (jupiterLink) {

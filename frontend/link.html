@@ -7,6 +7,19 @@
   <meta name="description" content="Link your mobile device to your OpenDex wallet.">
   <meta name="theme-color" content="#07080a">
 
+  <!-- Social Media Preview -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="OpenDex">
+  <meta property="og:title" content="Link Device - OpenDex">
+  <meta property="og:description" content="Link your mobile device to your OpenDex wallet.">
+  <meta property="og:image" content="https://opendex.online/OpenDexColoredBanner.png">
+  <meta property="og:url" content="https://opendex.online/link">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Link Device - OpenDex">
+  <meta name="twitter:description" content="Link your mobile device to your OpenDex wallet.">
+  <meta name="twitter:image" content="https://opendex.online/OpenDexColoredBanner.png">
+
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="OpenDEX_Logo.png">
   <link rel="apple-touch-icon" href="OpenDEX_Logo.png">
@@ -168,22 +181,30 @@
         return;
       }
 
-      // Verify and activate the token
-      fetch(API_BASE_URL + '/api/auth/device-session/verify?token=' + encodeURIComponent(token))
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-          if (!data.success) {
-            showError(data.message || 'This link has expired or is invalid. Please generate a new one from your desktop.');
-            return;
-          }
-          // Store session in localStorage
-          localStorage.setItem('opendex_device_session', token);
-          localStorage.setItem('opendex_device_wallet', data.data.walletAddress);
-          showSuccess(data.data.walletAddress);
-        })
-        .catch(function() {
-          showError('Could not verify the link. Please check your connection and try again.');
-        });
+      // Wait for deferred scripts (config.js, api.js) before using API_BASE_URL
+      document.addEventListener('DOMContentLoaded', function() {
+        var baseUrl = (typeof API_BASE_URL !== 'undefined' && API_BASE_URL)
+          ? API_BASE_URL
+          : (typeof config !== 'undefined' && config.api && config.api.baseUrl)
+            ? config.api.baseUrl
+            : 'https://opendex-api-dy30.onrender.com';
+
+        fetch(baseUrl + '/api/auth/device-session/verify?token=' + encodeURIComponent(token))
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            if (!data.success) {
+              showError(data.message || 'This link has expired or is invalid. Please generate a new one from your desktop.');
+              return;
+            }
+            // Store session in localStorage
+            localStorage.setItem('opendex_device_session', token);
+            localStorage.setItem('opendex_device_wallet', data.data.walletAddress);
+            showSuccess(data.data.walletAddress);
+          })
+          .catch(function() {
+            showError('Could not verify the link. Please check your connection and try again.');
+          });
+      });
     })();
     /* Dropdown toggles handled by utils.initHamburgerMenu() in api.js */
   </script>
