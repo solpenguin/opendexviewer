@@ -66,28 +66,8 @@ async function getBagsMintSet(apiKey) {
 // ---------------------------------------------------------------------------
 let _listFetchPromise = null;
 
-router.get('/list', defaultLimiter, asyncHandler(async (req, res) => {
-  const apiKey = getBagsApiKey();
-  if (!apiKey) {
-    return res.json({ success: false, tokens: [], error: 'Bags API not configured' });
-  }
-
-  const cacheKey = 'bags:list';
-  const cached = await cache.get(cacheKey);
-  if (cached) return res.json(cached);
-
-  if (!_listFetchPromise) {
-    _listFetchPromise = buildBagsList(apiKey).finally(() => { _listFetchPromise = null; });
-  }
-
-  try {
-    const result = await _listFetchPromise;
-    res.json(result);
-  } catch (err) {
-    console.error('[Bags] List failed:', err.message);
-    res.status(500).json({ success: false, tokens: [], error: 'Failed to fetch Bags tokens' });
-  }
-}));
+// Disabled — Bags listing page hidden for now. Re-enable when ready.
+// router.get('/list', defaultLimiter, asyncHandler(async (req, res) => { ... }));
 
 // ---------------------------------------------------------------------------
 // Pipeline: GeckoTerminal DEX pools → filter by Bags membership → enrich
