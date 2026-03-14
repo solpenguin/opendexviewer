@@ -349,7 +349,7 @@
     // Footer
     html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 1rem;border-top:1px solid ' + borderCol + ';font-size:0.625rem;opacity:0.4;">';
     html += '<a href="' + SITE_BASE + '" target="_blank" rel="noopener" style="color:' + text + ';text-decoration:none;">Powered by OpenDex</a>';
-    html += '<a href="' + SITE_BASE + '/token.html?address=' + escapeHtml(cfg.mint) + '" target="_blank" rel="noopener" style="color:' + accent + ';text-decoration:none;font-weight:500;">View Full Page</a>';
+    html += '<a href="' + SITE_BASE + '/token.html?mint=' + escapeHtml(cfg.mint) + '" target="_blank" rel="noopener" style="color:' + accent + ';text-decoration:none;font-weight:500;">View Full Page</a>';
     html += '</div>';
 
     html += '</div>';

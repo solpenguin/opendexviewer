@@ -475,7 +475,7 @@ const widgetBuilder = {
     // Footer
     html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 1rem;border-top:1px solid ${borderCol};font-size:0.625rem;opacity:0.4;">`;
     html += `<span>Powered by OpenDex</span>`;
-    html += `<a href="https://opendex.online/token.html?address=${this.escapeHtml(cfg.mint)}" target="_blank" rel="noopener" style="color:${accent};text-decoration:none;font-weight:500;">View Full Page</a>`;
+    html += `<a href="https://opendex.online/token.html?mint=${this.escapeHtml(cfg.mint)}" target="_blank" rel="noopener" style="color:${accent};text-decoration:none;font-weight:500;">View Full Page</a>`;
     html += `</div>`;
 
     html += `</div>`;
