@@ -119,7 +119,8 @@
       "WebFetch(domain:docs.bags.fm)",
       "WebFetch(domain:public-api-v2.bags.fm)",
       "Bash(node -e \"require\\(''./src/routes/bags''\\)\")",
-      "Bash(grep -r -l -i \"bags\" c:/VS/OPENDEX/opendexviewer/frontend/*.html)"
+      "Bash(grep -r -l -i \"bags\" c:/VS/OPENDEX/opendexviewer/frontend/*.html)",
+      "Bash(xargs cat:*)"
     ]
   }
 }

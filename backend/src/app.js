@@ -142,9 +142,13 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   const normalizedOrigin = origin ? origin.replace(/\/$/, '') : null;
 
+  // Widget embeds: allow any origin for public API requests (authenticated by API key)
+  const isWidgetRequest = req.headers['x-api-key'] || (req.method === 'OPTIONS' && (req.headers['access-control-request-headers'] || '').toLowerCase().includes('x-api-key'));
+
   const allowed = !normalizedOrigin                                  // non-browser / server-to-server
     || process.env.NODE_ENV !== 'production'                         // development: allow all
-    || corsOrigins.includes(normalizedOrigin);                       // production: exact match
+    || corsOrigins.includes(normalizedOrigin)                        // production: exact match
+    || isWidgetRequest;                                              // production: widget embeds with API key
 
   if (allowed && normalizedOrigin) {
     res.setHeader('Access-Control-Allow-Origin', normalizedOrigin);
