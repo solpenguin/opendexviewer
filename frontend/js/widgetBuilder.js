@@ -432,13 +432,18 @@ const widgetBuilder = {
     if (cfg.show.diamondHands) {
       const dhData = this.diamondHandsData;
       const dist = (dhData && dhData.distribution) || {};
+      const tokenAgeMs = this.tokenData?.pairCreatedAt
+        ? Date.now() - new Date(this.tokenData.pairCreatedAt).getTime() : 0;
       const dhBuckets = [
         { key: '6h', label: '> 6h' },
         { key: '24h', label: '> 24h' },
         { key: '3d', label: '> 3d' },
         { key: '1w', label: '> 1w' },
         { key: '1m', label: '> 1m' },
-      ].filter(b => dist[b.key] != null);
+        { key: '3m', label: '> 3m', minAge: 90 * 86400000 },
+        { key: '6m', label: '> 6m', minAge: 180 * 86400000 },
+        { key: '9m', label: '> 9m', minAge: 270 * 86400000 },
+      ].filter(b => dist[b.key] != null && (!b.minAge || tokenAgeMs >= b.minAge));
 
       if (dhBuckets.length > 0) {
         html += `<div style="padding:0.625rem 1rem;">`;

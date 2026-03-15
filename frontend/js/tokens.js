@@ -704,10 +704,21 @@ const tokenList = {
     );
     if (hasPlatform) return;
     try {
-      // Use detail endpoint (not batch) to get full market data from GeckoTerminal
+      // Use detail endpoint to get full market data from GeckoTerminal
       const detail = await api.tokens.get(this.PLATFORM_TOKEN);
       if (detail && (detail.address || detail.mintAddress)) {
         this.tokens.push(detail);
+        this._platformTokenInjected = true;
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback: use batch endpoint (pulls from local DB / Helius) if detail fails
+    // This ensures the platform token always appears even when GeckoTerminal is down
+    try {
+      const batch = await api.tokens.getBatch([this.PLATFORM_TOKEN]);
+      if (batch && batch.length > 0 && (batch[0].address || batch[0].mintAddress)) {
+        this.tokens.push(batch[0]);
         this._platformTokenInjected = true;
       }
     } catch (_) {}
@@ -838,7 +849,7 @@ const tokenList = {
           <td class="cell-price" data-navigate="${safeAddress}">${token.price ? utils.formatPrice(token.price, 6) : '--'}</td>
           <td class="cell-change ${changeClass}" data-navigate="${safeAddress}">${change == null || !token.price ? '--' : utils.formatChange(change)}</td>
           <td class="cell-volume" data-navigate="${safeAddress}">${token.volume24h ? utils.formatNumber(token.volume24h, '$') : '--'}</td>
-          <td class="cell-mcap" data-navigate="${safeAddress}">${token.marketCap ? utils.formatNumber(token.marketCap, '$') : '--'}</td>
+          <td class="cell-mcap" data-navigate="${safeAddress}">${token.marketCap != null && token.marketCap > 0 ? utils.formatNumber(token.marketCap, '$') : '--'}</td>
           <td class="cell-views" data-navigate="${safeAddress}">${token.views > 0 ? token.views.toLocaleString() : '0'}</td>
           <td class="cell-sentiment" data-navigate="${safeAddress}">${(() => {
             const s = token.sentimentScore || 0;

@@ -1746,6 +1746,9 @@ const tokenDetail = {
     metrics.dh3d = dist['3d'] ?? 0;
     metrics.dh1w = dist['1w'] ?? 0;
     metrics.dh1m = dist['1m'] ?? 0;
+    metrics.dh3m = dist['3m'] ?? 0;
+    metrics.dh6m = dist['6m'] ?? 0;
+    metrics.dh9m = dist['9m'] ?? 0;
     metrics.sampleSize = dh ? dh.sampleSize || 0 : 0;
     metrics.analyzed = dh ? dh.analyzed || 0 : 0;
 
@@ -2111,12 +2114,32 @@ const tokenDetail = {
       }
     }
 
+    // Determine token age in ms to conditionally show long-term buckets
+    const tokenAgeMs = this.token?.pairCreatedAt
+      ? Date.now() - new Date(this.token.pairCreatedAt).getTime()
+      : 0;
+
+    // Age-gated buckets: only show if token is old enough
+    const AGE_GATED = {
+      '3m': 90 * 86400000,
+      '6m': 180 * 86400000,
+      '9m': 270 * 86400000,
+    };
+
     // Update each bar
-    const buckets = ['6h', '24h', '3d', '1w', '1m'];
+    const buckets = ['6h', '24h', '3d', '1w', '1m', '3m', '6m', '9m'];
     for (const key of buckets) {
       const pct = data.distribution[key] ?? 0;
       const fillEl = document.getElementById(`dh-fill-${key}`);
       const pctEl = document.getElementById(`dh-pct-${key}`);
+
+      // Show/hide age-gated rows
+      if (AGE_GATED[key]) {
+        const rowEl = document.getElementById(`dh-row-${key}`);
+        if (rowEl) {
+          rowEl.style.display = tokenAgeMs >= AGE_GATED[key] ? '' : 'none';
+        }
+      }
 
       if (fillEl) {
         fillEl.style.width = pct + '%';

@@ -2223,6 +2223,9 @@ const DIAMOND_HANDS_BUCKETS = [
   { key: '3d',  label: '>3d',  ms: 3 * 86400000 },
   { key: '1w',  label: '>1w',  ms: 7 * 86400000 },
   { key: '1m',  label: '>1m',  ms: 30 * 86400000 },
+  { key: '3m',  label: '>3m',  ms: 90 * 86400000 },
+  { key: '6m',  label: '>6m',  ms: 180 * 86400000 },
+  { key: '9m',  label: '>9m',  ms: 270 * 86400000 },
 ];
 
 router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req, res) => {
@@ -2460,7 +2463,7 @@ Concentration (% of supply held by top N holders — lower=more distributed):
 top1=${num(m.top1)}% top5=${num(m.top5)}% top10=${num(m.top10)}% top20=${num(m.top20)}%
 Avg hold time across all tokens: ${safe(m.avgHold)}
 Fresh wallets (<24h old) in top holders: ${safe(m.freshWallets)}
-Conviction (% of sampled holders held for): >6h=${num(m.dh6h)}% >24h=${num(m.dh24h)}% >3d=${num(m.dh3d)}% >1w=${num(m.dh1w)}% >1M=${num(m.dh1m)}%
+Conviction (% of sampled holders held for): >6h=${num(m.dh6h)}% >24h=${num(m.dh24h)}% >3d=${num(m.dh3d)}% >1w=${num(m.dh1w)}% >1M=${num(m.dh1m)}% >3M=${num(m.dh3m)}% >6M=${num(m.dh6m)}% >9M=${num(m.dh9m)}%
 Sample: ${num(m.analyzed, 0, 1000)} analyzed of ${num(m.sampleSize, 0, 1000)}
 Risk level: ${safe(m.riskLevel)}`;
 

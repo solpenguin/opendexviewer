@@ -311,13 +311,18 @@
     if (show.diamondHands) {
       var dhData = data.diamondHands;
       var dist = (dhData && dhData.distribution) || {};
+      var tokenAgeMs = (data.token && data.token.pairCreatedAt)
+        ? Date.now() - new Date(data.token.pairCreatedAt).getTime() : 0;
       var dhBuckets = [
         { key: '6h', label: '> 6h' },
         { key: '24h', label: '> 24h' },
         { key: '3d', label: '> 3d' },
         { key: '1w', label: '> 1w' },
-        { key: '1m', label: '> 1m' }
-      ].filter(function (b) { return dist[b.key] != null; });
+        { key: '1m', label: '> 1m' },
+        { key: '3m', label: '> 3m', minAge: 90 * 86400000 },
+        { key: '6m', label: '> 6m', minAge: 180 * 86400000 },
+        { key: '9m', label: '> 9m', minAge: 270 * 86400000 }
+      ].filter(function (b) { return dist[b.key] != null && (!b.minAge || tokenAgeMs >= b.minAge); });
 
       if (dhBuckets.length > 0) {
         html += '<div style="padding:0.625rem 1rem;">';
