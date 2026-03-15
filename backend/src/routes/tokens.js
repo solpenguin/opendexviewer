@@ -140,7 +140,8 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       if (stillMissing.length > 0) {
         const cacheChecks = await Promise.all(
           stillMissing.map(async (mint) => {
-            const cachedMeta = await cache.getWithMeta(keys.tokenInfo(mint));
+            const cachedMeta = await cache.getWithMeta(keys.tokenInfo(mint))
+              || await cache.getWithMeta(`batch:${mint}`);
             return { mint, value: cachedMeta?.value };
           })
         );
@@ -280,8 +281,8 @@ router.get('/', validatePagination, asyncHandler(async (req, res) => {
       if (stillMissing.length > 0) {
         const cacheLookups = await Promise.all(
           stillMissing.map(async (mint) => {
-            const tokenCacheKey = keys.tokenInfo(mint);
-            const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+            const cachedMeta = await cache.getWithMeta(keys.tokenInfo(mint))
+              || await cache.getWithMeta(`batch:${mint}`);
             return [mint, cachedMeta?.value];
           })
         );
@@ -524,9 +525,11 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
 
     const cacheChecks = await Promise.all(
       validMints.map(async (mint) => {
-        const cacheKey = keys.tokenInfo(mint);
-        const cached = await cache.getWithMeta(cacheKey);
-        return { mint, cached };
+        // Check full detail cache first, then batch-specific cache
+        const detailCached = await cache.getWithMeta(keys.tokenInfo(mint));
+        if (detailCached && detailCached.value) return { mint, cached: detailCached };
+        const batchCached = await cache.getWithMeta(`batch:${mint}`);
+        return { mint, cached: batchCached };
       })
     );
 
@@ -638,10 +641,11 @@ router.post('/batch', searchLimiter, asyncHandler(async (req, res) => {
           };
         }
 
-        // Cache the result
+        // Cache under a batch-specific key so partial data doesn't pollute the
+        // full token detail cache (which includes liquidity, holders, supply, etc.)
         if (tokenData) {
-          const cacheKey = keys.tokenInfo(mint);
-          cachePromises.push(cache.setWithTimestamp(cacheKey, tokenData, TTL.PRICE_DATA));
+          const batchCacheKey = `batch:${mint}`;
+          cachePromises.push(cache.setWithTimestamp(batchCacheKey, tokenData, TTL.PRICE_DATA));
           results.push({ mint, data: tokenData, cached: false });
         }
       }
@@ -1250,6 +1254,14 @@ router.get('/:mint', validateMint, asyncHandler(async (req, res) => {
   // Privacy: Don't log token addresses
 
   try {
+    // Evict partial data left by the batch endpoint (which shares the same cache key).
+    // Batch-cached tokens lack detail-only fields like submissions, pairCreatedAt, etc.
+    // Without this check the detail endpoint returns incomplete data to the frontend.
+    const existing = await cache.getWithMeta(cacheKey);
+    if (existing && existing.value && !existing.value.submissions) {
+      await cache.delete(cacheKey);
+    }
+
     // Use getOrSetWithFreshness for stampede prevention
     // If multiple requests come in for the same token, they share one API fetch
     const result = await cache.getOrSetWithFreshness(cacheKey, async () => {
@@ -1742,7 +1754,8 @@ router.get('/:mint/holder/:wallet', validateMint, asyncHandler(async (req, res) 
 
     // Try to get token info for supply data
     // Token info is stored via setWithTimestamp — use getWithMeta to unwrap correctly
-    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(mint));
+    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(mint))
+      || await cache.getWithMeta(`batch:${mint}`);
     const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo) {
       totalSupply = tokenInfo.supply || tokenInfo.totalSupply;
@@ -2671,8 +2684,8 @@ router.get('/:mint/similar', validateMint, asyncHandler(async (req, res) => {
     let tokenSymbol = null;
 
     // Try token-info cache first (fast), then fall back to DB
-    const tokenCacheKey = keys.tokenInfo(mint);
-    const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+    const cachedMeta = await cache.getWithMeta(keys.tokenInfo(mint))
+      || await cache.getWithMeta(`batch:${mint}`);
     if (cachedMeta && cachedMeta.value) {
       tokenName = cachedMeta.value.name;
       tokenSymbol = cachedMeta.value.symbol;

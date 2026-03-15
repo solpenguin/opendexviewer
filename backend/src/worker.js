@@ -313,9 +313,9 @@ const jobProcessors = {
     let tokenName = null;
     let tokenSymbol = null;
 
-    // Check token info cache first
-    const tokenCacheKey = keys.tokenInfo(mint);
-    const cachedMeta = await cache.getWithMeta(tokenCacheKey);
+    // Check token info cache first (detail cache, then batch cache)
+    const cachedMeta = await cache.getWithMeta(keys.tokenInfo(mint))
+      || await cache.getWithMeta(`batch:${mint}`);
     if (cachedMeta && cachedMeta.value) {
       tokenName = cachedMeta.value.name;
       tokenSymbol = cachedMeta.value.symbol;

@@ -419,9 +419,13 @@ const api = {
       const cachedResults = [];
 
       for (const mint of mints) {
-        const cached = apiCache.get(`tokens:detail:${mint}`);
-        if (cached) {
-          cachedResults.push(cached.data);
+        // Check both detail cache (full data) and batch cache (partial data)
+        const detail = apiCache.get(`tokens:detail:${mint}`);
+        const batch = apiCache.get(`tokens:batch:${mint}`);
+        if (detail) {
+          cachedResults.push(detail.data);
+        } else if (batch) {
+          cachedResults.push(batch.data);
         } else {
           uncached.push(mint);
         }
@@ -441,10 +445,11 @@ const api = {
           body: JSON.stringify({ mints: uncached })
         });
 
-        // Cache each result
+        // Cache each result under a batch-specific key to avoid polluting the
+        // detail cache (batch tokens lack liquidity, holders, supply, age, etc.)
         for (const token of batchData) {
           if (token && (token.address || token.mintAddress)) {
-            apiCache.set(`tokens:detail:${token.address || token.mintAddress}`, token, apiCache.TTL.tokenDetail);
+            apiCache.set(`tokens:batch:${token.address || token.mintAddress}`, token, apiCache.TTL.tokenDetail);
           }
         }
 

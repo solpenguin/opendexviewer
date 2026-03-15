@@ -539,7 +539,7 @@ async function warmCache() {
     let alreadyCached = 0;
     for (const token of topTokens) {
       const mint = token.token_mint;
-      const existing = await cache.get(keys.tokenInfo(mint));
+      const existing = await cache.get(keys.tokenInfo(mint)) || await cache.get(`batch:${mint}`);
       if (existing) { alreadyCached++; } else { needsWarm.push(mint); }
     }
 
@@ -550,7 +550,8 @@ async function warmCache() {
         const batchInfo = await geckoService.getMultiTokenInfo(needsWarm);
         for (const mint of needsWarm) {
           if (batchInfo[mint]) {
-            await cache.set(keys.tokenInfo(mint), batchInfo[mint], TTL.PRICE_DATA);
+            // Use batch-specific key to avoid polluting the full token detail cache
+            await cache.set(`batch:${mint}`, batchInfo[mint], TTL.PRICE_DATA);
             warmed++;
           }
         }

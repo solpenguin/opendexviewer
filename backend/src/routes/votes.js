@@ -47,7 +47,8 @@ async function verifyHolderStatus(wallet, tokenMint) {
     let percentageHeld = null;
 
     // Try to get token info from cache for supply data
-    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(tokenMint));
+    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(tokenMint))
+      || await cache.getWithMeta(`batch:${tokenMint}`);
     const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo && tokenInfo.circulatingSupply) {
       circulatingSupply = tokenInfo.circulatingSupply;
@@ -179,7 +180,8 @@ router.post('/', walletLimiter, validateVote, validateVoteSignature, asyncHandle
   // Try cache first, then fetch from GeckoTerminal
   let marketCap = null;
   try {
-    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint));
+    const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint))
+      || await cache.getWithMeta(`batch:${submission.token_mint}`);
     const tokenInfo = tokenInfoMeta?.value ?? null;
     if (tokenInfo && tokenInfo.marketCap) {
       marketCap = tokenInfo.marketCap;
@@ -296,7 +298,8 @@ router.post('/batch', walletLimiter, validateBatchVotes, validateBatchVoteSignat
   const uniqueMarketCapMints = [...new Set([...submissionMap.values()].map(s => s.token_mint))];
   await Promise.all(uniqueMarketCapMints.map(async (mint) => {
     try {
-      const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(mint));
+      const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(mint))
+        || await cache.getWithMeta(`batch:${mint}`);
       const tokenInfo = tokenInfoMeta?.value ?? null;
       if (tokenInfo && tokenInfo.marketCap) {
         marketCapMap.set(mint, tokenInfo.marketCap);
@@ -475,7 +478,8 @@ router.get('/submission/:id', asyncHandler(async (req, res) => {
 
     // Fetch market cap for tiered threshold display
     try {
-      const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint));
+      const tokenInfoMeta = await cache.getWithMeta(keys.tokenInfo(submission.token_mint))
+        || await cache.getWithMeta(`batch:${submission.token_mint}`);
       const tokenInfo = tokenInfoMeta?.value ?? null;
       if (tokenInfo && tokenInfo.marketCap) {
         marketCap = tokenInfo.marketCap;
