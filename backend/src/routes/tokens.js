@@ -1029,6 +1029,93 @@ router.get('/leaderboard/calls', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// GET /api/tokens/leaderboard/conviction - Top tokens by >1M holder conviction
+// Scans cached diamond-hands results to build a ranked list.
+// Only includes tokens that have computed conviction data.
+router.get('/leaderboard/conviction', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 25), 100);
+  const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+  const resultCacheKey = `leaderboard:conviction:${limit}:${offset}`;
+  const cached = await cache.get(resultCacheKey);
+  if (cached) return res.json(cached);
+
+  // Scan all cached diamond-hands results
+  const dhKeys = await cache.scanKeys('diamond-hands:*');
+  // Filter out wallet-level and pending keys
+  const mintKeys = dhKeys.filter(k => !k.includes(':wallets:') && !k.includes('-wallets:') && !k.includes('-pending:') && k.startsWith('diamond-hands:'));
+
+  // Fetch all cached conviction data
+  const entries = [];
+  await Promise.all(mintKeys.map(async (key) => {
+    const data = await cache.get(key);
+    if (!data || !data.distribution || !data.computed) return;
+    const oneMonth = data.distribution['1m'];
+    if (oneMonth == null || oneMonth <= 0) return;
+    const mint = key.replace('diamond-hands:', '');
+    entries.push({
+      mint,
+      distribution: data.distribution,
+      sampleSize: data.sampleSize || 0,
+      analyzed: data.analyzed || 0,
+      conviction1m: oneMonth
+    });
+  }));
+
+  // Sort by >1M conviction descending
+  entries.sort((a, b) => b.conviction1m - a.conviction1m);
+  const total = entries.length;
+  const page = entries.slice(offset, offset + limit);
+
+  if (page.length === 0) {
+    const empty = { tokens: [], total };
+    await cache.set(resultCacheKey, empty, TTL.MEDIUM);
+    return res.json(empty);
+  }
+
+  // Enrich with token metadata from DB
+  const mints = page.map(e => e.mint);
+  const dbTokens = await db.getTokensBatch(mints).catch(() => []);
+  const dbMap = {};
+  dbTokens.forEach(row => {
+    dbMap[row.mint_address] = row;
+  });
+
+  // Fetch metadata for tokens not in DB
+  const missingMints = mints.filter(m => !dbMap[m]);
+  let heliusMetadata = {};
+  if (missingMints.length > 0 && solanaService.isHeliusConfigured()) {
+    try {
+      heliusMetadata = await solanaService.getTokenMetadataBatch(missingMints);
+    } catch { /* continue without */ }
+  }
+
+  const tokens = page.map(entry => {
+    const db_row = dbMap[entry.mint];
+    const helius = heliusMetadata[entry.mint];
+    return {
+      mintAddress: entry.mint,
+      address: entry.mint,
+      name: db_row?.name || helius?.name || `${entry.mint.slice(0, 4)}...${entry.mint.slice(-4)}`,
+      symbol: db_row?.symbol || helius?.symbol || entry.mint.slice(0, 5).toUpperCase(),
+      price: parseFloat(db_row?.price) || 0,
+      priceChange24h: db_row?.price_change_24h != null ? parseFloat(db_row.price_change_24h) : null,
+      volume24h: parseFloat(db_row?.volume_24h) || 0,
+      marketCap: parseFloat(db_row?.market_cap) || 0,
+      logoUri: db_row?.logo_uri || helius?.logoUri || null,
+      logoURI: db_row?.logo_uri || helius?.logoUri || null,
+      conviction: entry.distribution,
+      conviction1m: entry.conviction1m,
+      sampleSize: entry.sampleSize,
+      analyzed: entry.analyzed
+    };
+  });
+
+  const result = { tokens, total };
+  await cache.set(resultCacheKey, result, TTL.MEDIUM);
+  res.json(result);
+}));
+
 // GET /api/tokens/spikes - Detect established tokens (>1d old) with unusual activity spikes
 // Scans trending pools, filters to tokens older than 1 day, and scores by spike indicators:
 // - Volume/MCap ratio (high ratio = unusual volume relative to size)

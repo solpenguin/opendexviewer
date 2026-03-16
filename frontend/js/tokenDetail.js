@@ -656,6 +656,7 @@ const tokenDetail = {
     if (circulatingEl) circulatingEl.textContent = token.circulatingSupply ? utils.formatNumber(token.circulatingSupply, '') : '--';
 
     const ageEl = document.getElementById('stat-age');
+    const holdersAgeEl = document.getElementById('holders-token-age');
     if (ageEl) {
       if (token.pairCreatedAt) {
         ageEl.textContent = utils.formatAge(token.pairCreatedAt);
@@ -663,6 +664,12 @@ const tokenDetail = {
       } else {
         ageEl.textContent = 'N/A';
       }
+    }
+    // Keep Holder Analytics token age in sync (may load before full token data arrives)
+    if (holdersAgeEl) {
+      holdersAgeEl.textContent = token.pairCreatedAt
+        ? utils.formatAge(token.pairCreatedAt)
+        : 'N/A';
     }
 
     // Views - display initial count from token data (updated later by recordView POST)
@@ -1626,7 +1633,7 @@ const tokenDetail = {
       titleBar.style.cssText = 'display:flex;align-items:center;gap:0.5rem;padding-bottom:0.75rem;margin-bottom:0.75rem;border-bottom:1px solid var(--border-subtle);';
       const tokenName = this.token?.name || '';
       const tokenSymbol = this.token?.symbol || '';
-      titleBar.innerHTML = `<span style="font-size:0.875rem;font-weight:700;color:var(--text-primary);">Holder Analytics</span><span style="font-size:1.125rem;font-weight:800;color:var(--accent-primary);background:var(--accent-muted);padding:0.25rem 0.75rem;border-radius:var(--radius-sm);letter-spacing:0.02em;">${utils.escapeHtml(tokenSymbol ? '$' + tokenSymbol : tokenName)}</span>`;
+      titleBar.innerHTML = `<span style="font-size:0.875rem;font-weight:700;color:var(--text-primary);">Holder Analytics</span><span style="font-size:1.5rem;font-weight:900;color:var(--accent-primary);background:var(--accent-muted);padding:0.3rem 0.875rem;border-radius:var(--radius-sm);letter-spacing:0.03em;line-height:1.2;">${utils.escapeHtml(tokenSymbol ? '$' + tokenSymbol : tokenName)}</span>`;
       graphic.insertBefore(titleBar, graphic.firstChild);
 
       const canvas = await html2canvas(graphic, {

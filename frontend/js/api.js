@@ -613,6 +613,17 @@ const api = {
         apiCache.TTL.tokenList,
         true
       );
+    },
+
+    async leaderboardConviction(params = {}) {
+      const query = new URLSearchParams(params).toString();
+      const cacheKey = `tokens:leaderboard:conviction:${query}`;
+      return apiCache.getOrFetch(
+        cacheKey,
+        () => api.request(`/api/tokens/leaderboard/conviction?${query}`),
+        apiCache.TTL.tokenList,
+        true
+      );
     }
   },
 

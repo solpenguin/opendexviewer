@@ -126,7 +126,13 @@
       "Bash(cat:*)",
       "Bash(grep \"\\\\.js$\")",
       "Bash(grep \"\\\\.css$\")",
-      "Bash(python3 -c \"from PIL import Image; img = Image.open\\(''c:/VS/OPENDEX/opendexviewer/frontend/OpenDexColoredBanner.png''\\); print\\(f''{img.width}x{img.height}''\\)\")"
+      "Bash(python3 -c \"from PIL import Image; img = Image.open\\(''c:/VS/OPENDEX/opendexviewer/frontend/OpenDexColoredBanner.png''\\); print\\(f''{img.width}x{img.height}''\\)\")",
+      "Bash(grep -l 'nav-dropdown-item.*Community' frontend/*.html)",
+      "Bash(grep -c 'conviction.html' frontend/*.html)",
+      "Bash(grep -rn 'nav-dropdown-item.*>Conviction<' frontend/*.html)",
+      "Bash(for file:*)",
+      "Bash(sed -i 's|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item\"\">Conviction</a>|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item\"\">💎 Diamond Hands</a>|g' \"$file\")",
+      "Bash(sed -i 's|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item active\"\">Conviction</a>|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item active\"\">💎 Diamond Hands</a>|g' \"$file\")"
     ]
   }
 }

@@ -2867,14 +2867,15 @@ a:hover {
 }
 
 .holders-ticker {
-  font-size: 1.125rem;
-  font-weight: 800;
+  font-size: 1.5rem;
+  font-weight: 900;
   color: var(--accent-primary);
   background: var(--accent-muted);
-  padding: 0.25rem 0.75rem;
+  padding: 0.3rem 0.875rem;
   border-radius: var(--radius-sm);
-  margin-left: 0.375rem;
-  letter-spacing: 0.02em;
+  margin-left: 0.5rem;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
 }
 
 .holders-header-actions {
@@ -12470,6 +12471,131 @@ body.landscape .hero h1 {
   .community-table .cell-volume,
   .community-table .cell-mcap {
     display: none;
+  }
+}
+
+/* ===== Conviction / Diamond Hands Page ===== */
+
+.conviction-hero {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(139, 92, 246, 0.06));
+  border-color: rgba(56, 189, 248, 0.15);
+}
+
+.conviction-hero h1 {
+  background: linear-gradient(135deg, #38bdf8, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.conviction-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.conviction-info svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.conviction-table .cell-conviction {
+  text-align: right;
+  min-width: 90px;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.conviction-table .cell-conviction.conviction-high .conviction-pct {
+  color: #38bdf8;
+}
+
+.conviction-table .cell-conviction.conviction-medium .conviction-pct {
+  color: var(--yellow, #f59e0b);
+}
+
+.conviction-table .cell-conviction.conviction-low .conviction-pct {
+  color: var(--text-muted);
+}
+
+.conviction-table .cell-conviction-bars {
+  min-width: 120px;
+}
+
+.conviction-table .cell-updated {
+  text-align: right;
+  min-width: 90px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.conviction-sample {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* Mini bar chart for conviction distribution */
+.conviction-mini-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 36px;
+  padding-bottom: 12px;
+  position: relative;
+}
+
+.conviction-mini-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  width: 18px;
+  height: 24px;
+  position: relative;
+}
+
+.conviction-mini-fill {
+  width: 100%;
+  background: linear-gradient(to top, #38bdf8, #a78bfa);
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
+}
+
+.conviction-mini-bar:hover .conviction-mini-fill {
+  opacity: 1;
+}
+
+.conviction-mini-label {
+  font-size: 0.5625rem;
+  color: var(--text-dim);
+  position: absolute;
+  bottom: -11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .conviction-table .cell-mcap,
+  .conviction-table .cell-conviction-bars,
+  .conviction-table .cell-updated {
+    display: none;
+  }
+
+  .conviction-table .cell-conviction {
+    min-width: 70px;
+  }
+
+  .conviction-info {
+    font-size: 0.75rem;
   }
 }
 
