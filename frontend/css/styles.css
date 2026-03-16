@@ -2867,13 +2867,14 @@ a:hover {
 }
 
 .holders-ticker {
-  font-size: 0.8125rem;
-  font-weight: 700;
+  font-size: 1.125rem;
+  font-weight: 800;
   color: var(--accent-primary);
   background: var(--accent-muted);
-  padding: 0.2rem 0.625rem;
+  padding: 0.25rem 0.75rem;
   border-radius: var(--radius-sm);
-  margin-left: 0.25rem;
+  margin-left: 0.375rem;
+  letter-spacing: 0.02em;
 }
 
 .holders-header-actions {
