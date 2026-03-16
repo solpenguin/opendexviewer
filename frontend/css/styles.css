@@ -2830,15 +2830,15 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.35rem;
+  gap: 0.4rem;
   padding-top: 0.625rem;
   margin-top: 0.5rem;
   border-top: 1px solid var(--border-subtle);
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  opacity: 0.35;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  opacity: 0.5;
   user-select: none;
 }
 
@@ -2867,11 +2867,11 @@ a:hover {
 }
 
 .holders-ticker {
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
+  font-weight: 700;
   color: var(--accent-primary);
   background: var(--accent-muted);
-  padding: 0.125rem 0.5rem;
+  padding: 0.2rem 0.625rem;
   border-radius: var(--radius-sm);
   margin-left: 0.25rem;
 }
