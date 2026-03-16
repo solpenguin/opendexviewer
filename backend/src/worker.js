@@ -510,6 +510,48 @@ const jobProcessors = {
     // Clear unified pending flag
     await cache.delete(`holder-metrics-pending:${mint}`);
 
+    // Rebuild diamond hands distribution and persist to DB
+    try {
+      const allWallets = await cache.get(`diamond-hands-wallets:${mint}`) || [];
+      if (allWallets.length > 0) {
+        const holdTimes = {};
+        let analyzedCount = 0;
+        for (const w of allWallets) {
+          const val = await cache.get(`wallet-token-hold:${w}:${mint}`);
+          if (val != null) {
+            analyzedCount++;
+            if (val > 0) holdTimes[w] = val;
+          }
+        }
+        if (analyzedCount === allWallets.length) {
+          // Compute distribution using same bucket logic as the endpoint
+          const BUCKETS = [
+            { key: '6h', ms: 6 * 3600000 },
+            { key: '24h', ms: 24 * 3600000 },
+            { key: '3d', ms: 3 * 86400000 },
+            { key: '1w', ms: 7 * 86400000 },
+            { key: '1m', ms: 30 * 86400000 },
+            { key: '3m', ms: 90 * 86400000 },
+            { key: '6m', ms: 180 * 86400000 },
+            { key: '9m', ms: 270 * 86400000 },
+          ];
+          const values = Object.values(holdTimes);
+          if (values.length > 0) {
+            const distribution = {};
+            for (const b of BUCKETS) {
+              distribution[b.key] = Math.round((values.filter(ms => ms >= b.ms).length / values.length) * 1000) / 10;
+            }
+            const finalResult = { distribution, sampleSize: allWallets.length, analyzed: analyzedCount, computed: true };
+            await cache.set(`diamond-hands:${mint}`, finalResult, 3 * TTL.HOUR);
+            await db.upsertConviction(mint, distribution, allWallets.length, analyzedCount);
+            console.log(`[Worker] Diamond hands persisted for ${mint}: ${distribution['1m']}% >1M`);
+          }
+        }
+      }
+    } catch (persistErr) {
+      console.warn(`[Worker] Diamond hands persist failed for ${mint}:`, persistErr.message);
+    }
+
     console.log(`[Worker] Holder metrics for ${mint}: ${computed} computed, ${skipped} no data`);
     return { computed, skipped };
   },

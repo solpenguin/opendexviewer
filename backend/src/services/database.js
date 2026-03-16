@@ -156,6 +156,12 @@ async function initializeDatabase() {
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS volume_24h DECIMAL;
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS price_change_24h DECIMAL;
 
+      -- Conviction / Diamond Hands persistence
+      ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_1m DECIMAL;
+      ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_data JSONB;
+      ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_sample_size INTEGER;
+      ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_computed_at TIMESTAMP;
+
       CREATE TABLE IF NOT EXISTS submissions (
         id SERIAL PRIMARY KEY,
         token_mint VARCHAR(44) NOT NULL,
@@ -596,6 +602,55 @@ async function getTokensBatch(mintAddresses) {
     [mintAddresses]
   );
   return result.rows;
+}
+
+// Save conviction (diamond hands) data for a token
+async function upsertConviction(mintAddress, distribution, sampleSize, analyzed) {
+  if (!pool || !mintAddress || !distribution) return null;
+  const conviction1m = distribution['1m'] ?? null;
+  const result = await pool.query(
+    `UPDATE tokens SET
+       conviction_1m = $2,
+       conviction_data = $3,
+       conviction_sample_size = $4,
+       conviction_computed_at = NOW()
+     WHERE mint_address = $1
+     RETURNING mint_address`,
+    [mintAddress, conviction1m, JSON.stringify(distribution), analyzed || sampleSize]
+  );
+  // If token doesn't exist in DB yet, insert a minimal row
+  if (result.rows.length === 0) {
+    await pool.query(
+      `INSERT INTO tokens (mint_address, conviction_1m, conviction_data, conviction_sample_size, conviction_computed_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (mint_address) DO UPDATE SET
+         conviction_1m = EXCLUDED.conviction_1m,
+         conviction_data = EXCLUDED.conviction_data,
+         conviction_sample_size = EXCLUDED.conviction_sample_size,
+         conviction_computed_at = NOW()`,
+      [mintAddress, conviction1m, JSON.stringify(distribution), analyzed || sampleSize]
+    );
+  }
+}
+
+// Get top tokens by conviction (>1M diamond hands percentage)
+async function getTopConvictionTokens(limit = 25, offset = 0) {
+  if (!pool) return { tokens: [], total: 0 };
+  const countResult = await pool.query(
+    'SELECT COUNT(*) FROM tokens WHERE conviction_1m IS NOT NULL AND conviction_1m > 0'
+  );
+  const total = parseInt(countResult.rows[0].count) || 0;
+
+  const result = await pool.query(
+    `SELECT mint_address, name, symbol, logo_uri, price, market_cap, volume_24h, price_change_24h,
+            conviction_1m, conviction_data, conviction_sample_size, conviction_computed_at
+     FROM tokens
+     WHERE conviction_1m IS NOT NULL AND conviction_1m > 0
+     ORDER BY conviction_1m DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+  return { tokens: result.rows, total };
 }
 
 // Search tokens by name, symbol, or mint address
@@ -3539,6 +3594,9 @@ module.exports = {
   getMostViewedTokens,
   getTokensByCategory,
   getApprovalThreshold,
+  // Conviction / Diamond Hands
+  upsertConviction,
+  getTopConvictionTokens,
   // Community leaderboards
   getMostWatchlistedTokens,
   getTopSentimentTokens,

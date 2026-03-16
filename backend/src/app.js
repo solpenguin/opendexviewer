@@ -565,6 +565,55 @@ async function warmCache() {
   }
 }
 
+// Periodically trigger diamond-hands computation for popular tokens
+// that don't have conviction data yet (or have stale data > 6 hours).
+// Runs every 10 minutes, processes up to 3 tokens per cycle to avoid API overload.
+async function warmConviction() {
+  try {
+    const { cache, TTL } = require('./services/cache');
+    const topTokens = await db.getMostViewedTokens(30);
+    if (!topTokens || topTokens.length === 0) return;
+
+    let triggered = 0;
+    const MAX_PER_CYCLE = 3;
+    const STALE_MS = 6 * 3600000; // 6 hours
+
+    for (const token of topTokens) {
+      if (triggered >= MAX_PER_CYCLE) break;
+      const mint = token.token_mint;
+
+      // Skip if already cached (fresh)
+      const existing = await cache.get(`diamond-hands:${mint}`);
+      if (existing) continue;
+
+      // Skip if already pending
+      const pending = await cache.get(`holder-metrics-pending:${mint}`);
+      if (pending) continue;
+
+      // Check DB — skip if computed recently
+      const dbRow = await db.getToken(mint).catch(() => null);
+      if (dbRow && dbRow.conviction_computed_at) {
+        const age = Date.now() - new Date(dbRow.conviction_computed_at).getTime();
+        if (age < STALE_MS) continue;
+      }
+
+      // Trigger by making an internal request to the diamond-hands endpoint
+      try {
+        const http = require('http');
+        const url = `http://127.0.0.1:${PORT}/api/tokens/${encodeURIComponent(mint)}/holders/diamond-hands`;
+        http.get(url, (res) => { res.resume(); }); // fire and forget
+        triggered++;
+      } catch { /* non-critical */ }
+    }
+
+    if (triggered > 0) {
+      console.log(`[ConvictionWarm] Triggered diamond-hands for ${triggered} tokens`);
+    }
+  } catch (err) {
+    console.error('[ConvictionWarm] Failed (non-critical):', err.message);
+  }
+}
+
 // Start server
 // Privacy: Don't log which API keys are configured - reveals infrastructure details
 httpServer = app.listen(PORT, () => {
@@ -580,6 +629,12 @@ httpServer = app.listen(PORT, () => {
 
   // Warm cache after server is ready (non-blocking)
   warmCache();
+
+  // Start conviction warmer — first run after 2 min, then every 10 min
+  setTimeout(() => {
+    warmConviction();
+    setInterval(warmConviction, 10 * 60 * 1000);
+  }, 2 * 60 * 1000);
 });
 
 module.exports = app;

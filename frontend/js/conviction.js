@@ -101,10 +101,18 @@ const convictionPage = {
       const dist = token.conviction || {};
       const barsHtml = this.renderMiniBars(dist);
 
-      // Last updated: use cachedAt from response, or show sample info
-      const updatedHtml = token.sampleSize
-        ? `<span class="conviction-sample">${token.analyzed || token.sampleSize} wallets</span>`
-        : '--';
+      // Last updated timestamp and sample info
+      let updatedHtml = '--';
+      if (token.convictionUpdatedAt) {
+        const ago = Date.now() - new Date(token.convictionUpdatedAt).getTime();
+        const hours = Math.floor(ago / 3600000);
+        const days = Math.floor(hours / 24);
+        const timeStr = days > 0 ? `${days}d ago` : hours > 0 ? `${hours}h ago` : 'just now';
+        const wallets = token.analyzed || token.sampleSize || 0;
+        updatedHtml = `<span class="conviction-sample" title="${new Date(token.convictionUpdatedAt).toLocaleString()}">${timeStr}<br>${wallets} wallets</span>`;
+      } else if (token.sampleSize) {
+        updatedHtml = `<span class="conviction-sample">${token.analyzed || token.sampleSize} wallets</span>`;
+      }
 
       return `
         <tr class="token-row" data-mint="${safeAddress}">

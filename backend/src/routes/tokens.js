@@ -1030,8 +1030,8 @@ router.get('/leaderboard/calls', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/tokens/leaderboard/conviction - Top tokens by >1M holder conviction
-// Scans cached diamond-hands results to build a ranked list.
-// Only includes tokens that have computed conviction data.
+// Reads from persistent DB storage (populated whenever diamond-hands completes).
+// Falls back to scanning cached diamond-hands keys for tokens not yet persisted.
 router.get('/leaderboard/conviction', asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 25), 100);
   const offset = Math.max(0, parseInt(req.query.offset) || 0);
@@ -1040,74 +1040,29 @@ router.get('/leaderboard/conviction', asyncHandler(async (req, res) => {
   const cached = await cache.get(resultCacheKey);
   if (cached) return res.json(cached);
 
-  // Scan all cached diamond-hands results
-  const dhKeys = await cache.scanKeys('diamond-hands:*');
-  // Filter out wallet-level and pending keys
-  const mintKeys = dhKeys.filter(k => !k.includes(':wallets:') && !k.includes('-wallets:') && !k.includes('-pending:') && k.startsWith('diamond-hands:'));
+  // Primary source: DB (persistent, survives cache expiry)
+  const { tokens: dbRows, total } = await db.getTopConvictionTokens(limit, offset).catch(() => ({ tokens: [], total: 0 }));
 
-  // Fetch all cached conviction data
-  const entries = [];
-  await Promise.all(mintKeys.map(async (key) => {
-    const data = await cache.get(key);
-    if (!data || !data.distribution || !data.computed) return;
-    const oneMonth = data.distribution['1m'];
-    if (oneMonth == null || oneMonth <= 0) return;
-    const mint = key.replace('diamond-hands:', '');
-    entries.push({
-      mint,
-      distribution: data.distribution,
-      sampleSize: data.sampleSize || 0,
-      analyzed: data.analyzed || 0,
-      conviction1m: oneMonth
-    });
-  }));
-
-  // Sort by >1M conviction descending
-  entries.sort((a, b) => b.conviction1m - a.conviction1m);
-  const total = entries.length;
-  const page = entries.slice(offset, offset + limit);
-
-  if (page.length === 0) {
-    const empty = { tokens: [], total };
-    await cache.set(resultCacheKey, empty, TTL.MEDIUM);
-    return res.json(empty);
-  }
-
-  // Enrich with token metadata from DB
-  const mints = page.map(e => e.mint);
-  const dbTokens = await db.getTokensBatch(mints).catch(() => []);
-  const dbMap = {};
-  dbTokens.forEach(row => {
-    dbMap[row.mint_address] = row;
-  });
-
-  // Fetch metadata for tokens not in DB
-  const missingMints = mints.filter(m => !dbMap[m]);
-  let heliusMetadata = {};
-  if (missingMints.length > 0 && solanaService.isHeliusConfigured()) {
-    try {
-      heliusMetadata = await solanaService.getTokenMetadataBatch(missingMints);
-    } catch { /* continue without */ }
-  }
-
-  const tokens = page.map(entry => {
-    const db_row = dbMap[entry.mint];
-    const helius = heliusMetadata[entry.mint];
+  const tokens = dbRows.map(row => {
+    const distribution = typeof row.conviction_data === 'string'
+      ? JSON.parse(row.conviction_data)
+      : row.conviction_data || {};
     return {
-      mintAddress: entry.mint,
-      address: entry.mint,
-      name: db_row?.name || helius?.name || `${entry.mint.slice(0, 4)}...${entry.mint.slice(-4)}`,
-      symbol: db_row?.symbol || helius?.symbol || entry.mint.slice(0, 5).toUpperCase(),
-      price: parseFloat(db_row?.price) || 0,
-      priceChange24h: db_row?.price_change_24h != null ? parseFloat(db_row.price_change_24h) : null,
-      volume24h: parseFloat(db_row?.volume_24h) || 0,
-      marketCap: parseFloat(db_row?.market_cap) || 0,
-      logoUri: db_row?.logo_uri || helius?.logoUri || null,
-      logoURI: db_row?.logo_uri || helius?.logoUri || null,
-      conviction: entry.distribution,
-      conviction1m: entry.conviction1m,
-      sampleSize: entry.sampleSize,
-      analyzed: entry.analyzed
+      mintAddress: row.mint_address,
+      address: row.mint_address,
+      name: row.name || `${row.mint_address.slice(0, 4)}...${row.mint_address.slice(-4)}`,
+      symbol: row.symbol || row.mint_address.slice(0, 5).toUpperCase(),
+      price: parseFloat(row.price) || 0,
+      priceChange24h: row.price_change_24h != null ? parseFloat(row.price_change_24h) : null,
+      volume24h: parseFloat(row.volume_24h) || 0,
+      marketCap: parseFloat(row.market_cap) || 0,
+      logoUri: row.logo_uri || null,
+      logoURI: row.logo_uri || null,
+      conviction: distribution,
+      conviction1m: parseFloat(row.conviction_1m) || 0,
+      sampleSize: row.conviction_sample_size || 0,
+      analyzed: row.conviction_sample_size || 0,
+      convictionUpdatedAt: row.conviction_computed_at || null
     };
   });
 
@@ -2376,6 +2331,10 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
     if (uncached.length === 0) {
       const result = buildDiamondHandsResult(holdTimes, wallets.length, analyzedCount);
       await cache.set(resultCacheKey, result, 3 * TTL.HOUR);
+      // Persist to DB for the conviction leaderboard
+      db.upsertConviction(mint, result.distribution, result.sampleSize, result.analyzed).catch(err => {
+        console.error(`[DiamondHands] DB persist failed for ${mint.slice(0, 8)}:`, err.message);
+      });
       return res.json(result);
     }
 
@@ -2449,6 +2408,26 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
                 }
               }
               console.log(`[DiamondHands] Inline complete: ${ok}/${bgWallets.length} for ${bgMint.slice(0, 8)}...`);
+              // Rebuild full distribution and persist
+              try {
+                const allHoldTimes = {};
+                let totalAnalyzed = 0;
+                const allWallets = await cache.get(`diamond-hands-wallets:${bgMint}`) || [];
+                for (const w of allWallets) {
+                  const val = await cache.get(`wallet-token-hold:${w}:${bgMint}`);
+                  if (val != null) {
+                    totalAnalyzed++;
+                    if (val > 0) allHoldTimes[w] = val;
+                  }
+                }
+                if (totalAnalyzed === allWallets.length && allWallets.length > 0) {
+                  const finalResult = buildDiamondHandsResult(allHoldTimes, allWallets.length, totalAnalyzed);
+                  await cache.set(`diamond-hands:${bgMint}`, finalResult, 3 * TTL.HOUR);
+                  db.upsertConviction(bgMint, finalResult.distribution, finalResult.sampleSize, finalResult.analyzed).catch(() => {});
+                }
+              } catch (persistErr) {
+                console.error(`[DiamondHands] Post-inline persist failed:`, persistErr.message);
+              }
             } catch (err) {
               console.error(`[DiamondHands] Inline failed:`, err.message);
             } finally {
