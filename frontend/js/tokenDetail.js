@@ -1600,8 +1600,8 @@ const tokenDetail = {
 
   // Share holder analytics as a screenshot image
   async _shareHolderAnalytics() {
-    const section = document.getElementById('holders-section');
-    if (!section) return;
+    const graphic = document.getElementById('holders-graphic');
+    if (!graphic) return;
 
     const btn = document.getElementById('holders-share');
     if (btn) { btn.disabled = true; btn.classList.add('spinning'); }
@@ -1618,15 +1618,30 @@ const tokenDetail = {
         });
       }
 
-      const canvas = await html2canvas(section, {
+      // Temporarily boost watermark opacity for screenshot
+      const watermark = graphic.querySelector('.holders-watermark');
+      if (watermark) watermark.style.opacity = '0.6';
+
+      // Build a token title header for the screenshot
+      const titleBar = document.createElement('div');
+      titleBar.style.cssText = 'display:flex;align-items:center;gap:0.5rem;padding-bottom:0.75rem;margin-bottom:0.75rem;border-bottom:1px solid var(--border-subtle);';
+      const tokenName = this.token?.name || '';
+      const tokenSymbol = this.token?.symbol || '';
+      titleBar.innerHTML = `<span style="font-size:0.875rem;font-weight:700;color:var(--text-primary);">Holder Analytics</span><span style="font-size:0.75rem;font-weight:500;color:var(--accent-primary);background:var(--accent-muted);padding:0.125rem 0.5rem;border-radius:var(--radius-sm);">${utils.escapeHtml(tokenSymbol ? '$' + tokenSymbol : tokenName)}</span>`;
+      graphic.insertBefore(titleBar, graphic.firstChild);
+
+      const canvas = await html2canvas(graphic, {
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim() || '#07080a',
         scale: 2,
         useCORS: true,
         logging: false,
-        ignoreElements: (el) => el.classList && el.classList.contains('ai-analysis-overlay'),
         scrollY: -window.scrollY,
-        windowHeight: section.scrollHeight,
+        windowHeight: graphic.scrollHeight,
       });
+
+      // Clean up temporary elements
+      graphic.removeChild(titleBar);
+      if (watermark) watermark.style.opacity = '';
 
       const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
 
@@ -1660,6 +1675,9 @@ const tokenDetail = {
       console.error('Share holder analytics error:', err);
       if (typeof toast !== 'undefined') toast.error('Failed to capture screenshot');
     } finally {
+      // Restore watermark opacity and re-enable button
+      const watermark = document.querySelector('#holders-graphic .holders-watermark');
+      if (watermark) watermark.style.opacity = '';
       if (btn) { btn.disabled = false; btn.classList.remove('spinning'); }
     }
   },

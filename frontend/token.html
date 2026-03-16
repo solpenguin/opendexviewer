@@ -358,21 +358,6 @@
             </h2>
             <div class="holders-header-actions">
               <span class="holders-updated" id="holders-updated"></span>
-              <button class="ai-analysis-btn" id="ai-analysis-btn" disabled title="Waiting for holder data...">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-                </svg>
-                <span class="ai-analysis-btn-label">AI Analysis</span>
-                <span class="ai-analysis-btn-cost">25 BC</span>
-              </button>
-              <button class="ai-analysis-btn ai-advanced-btn" id="ai-advanced-btn" disabled title="Waiting for holder data...">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-                  <line x1="2" y1="2" x2="22" y2="22" stroke="none"/>
-                </svg>
-                <span class="ai-analysis-btn-label">Advanced AI</span>
-                <span class="ai-analysis-btn-cost ai-advanced-cost">75 BC</span>
-              </button>
               <button class="holders-share-btn" id="holders-share" disabled title="Waiting for holder data...">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
@@ -388,6 +373,8 @@
               </button>
             </div>
           </div>
+          <!-- Shareable Graphic Area -->
+          <div class="holders-graphic" id="holders-graphic">
           <!-- Risk Rating -->
           <div class="holders-risk-row" id="holders-risk-row" style="display:none;">
             <span class="holders-risk-label">Concentration Risk</span>
@@ -476,6 +463,30 @@
                 <span class="diamond-bar-pct" id="dh-pct-9m">...</span>
               </div>
             </div>
+          </div>
+          <!-- Watermark -->
+          <div class="holders-watermark">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            OpenDEX
+          </div>
+          </div><!-- /holders-graphic -->
+          <!-- AI Action Bar -->
+          <div class="holders-ai-bar" id="holders-ai-bar">
+              <button class="ai-analysis-btn" id="ai-analysis-btn" disabled title="Waiting for holder data...">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                </svg>
+                <span class="ai-analysis-btn-label">AI Analysis</span>
+                <span class="ai-analysis-btn-cost">25 BC</span>
+              </button>
+              <button class="ai-analysis-btn ai-advanced-btn" id="ai-advanced-btn" disabled title="Waiting for holder data...">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                  <line x1="2" y1="2" x2="22" y2="22" stroke="none"/>
+                </svg>
+                <span class="ai-analysis-btn-label">Advanced AI</span>
+                <span class="ai-analysis-btn-cost ai-advanced-cost">75 BC</span>
+              </button>
           </div>
           <!-- AI Analysis Modal -->
           <div class="ai-analysis-overlay" id="ai-analysis-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Holder Analysis">
