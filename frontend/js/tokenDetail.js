@@ -1249,18 +1249,16 @@ const tokenDetail = {
         const t10 = document.getElementById('holders-top10');
         const t20 = document.getElementById('holders-top20');
         const avgHoldTimeEl = document.getElementById('holders-avg-hold-time');
-        const avg = document.getElementById('holders-avg');
+        const tokenAgeEl = document.getElementById('holders-token-age');
         if (t5) t5.textContent = metrics.top5Pct.toFixed(1) + '%';
         if (t10) t10.textContent = metrics.top10Pct.toFixed(1) + '%';
         if (t20) t20.textContent = metrics.top20Pct.toFixed(1) + '%';
         // Avg Hold Time metric is populated by _updateAvgHoldTimeMetric after hold times load
         if (avgHoldTimeEl) avgHoldTimeEl.textContent = '...';
-        if (avg) {
-          const ab = metrics.avgBalance;
-          avg.textContent = ab >= 1e9 ? (ab / 1e9).toFixed(1) + 'B'
-            : ab >= 1e6 ? (ab / 1e6).toFixed(1) + 'M'
-            : ab >= 1e3 ? (ab / 1e3).toFixed(1) + 'K'
-            : ab.toFixed(1);
+        if (tokenAgeEl) {
+          tokenAgeEl.textContent = this.token?.pairCreatedAt
+            ? utils.formatAge(this.token.pairCreatedAt)
+            : 'N/A';
         }
 
         // Color-code percentage metrics (green = distributed, red = concentrated)
@@ -1606,6 +1604,7 @@ const tokenDetail = {
     const btn = document.getElementById('holders-share');
     if (btn) { btn.disabled = true; btn.classList.add('spinning'); }
 
+    let titleBar = null;
     try {
       // Dynamically load html2canvas if not already loaded
       if (typeof html2canvas === 'undefined') {
@@ -1623,11 +1622,11 @@ const tokenDetail = {
       if (watermark) watermark.style.opacity = '0.6';
 
       // Build a token title header for the screenshot
-      const titleBar = document.createElement('div');
+      titleBar = document.createElement('div');
       titleBar.style.cssText = 'display:flex;align-items:center;gap:0.5rem;padding-bottom:0.75rem;margin-bottom:0.75rem;border-bottom:1px solid var(--border-subtle);';
       const tokenName = this.token?.name || '';
       const tokenSymbol = this.token?.symbol || '';
-      titleBar.innerHTML = `<span style="font-size:0.875rem;font-weight:700;color:var(--text-primary);">Holder Analytics</span><span style="font-size:0.75rem;font-weight:500;color:var(--accent-primary);background:var(--accent-muted);padding:0.125rem 0.5rem;border-radius:var(--radius-sm);">${utils.escapeHtml(tokenSymbol ? '$' + tokenSymbol : tokenName)}</span>`;
+      titleBar.innerHTML = `<span style="font-size:0.875rem;font-weight:700;color:var(--text-primary);">OpenDEX Holder Analytics</span><span style="font-size:0.75rem;font-weight:500;color:var(--accent-primary);background:var(--accent-muted);padding:0.125rem 0.5rem;border-radius:var(--radius-sm);">${utils.escapeHtml(tokenSymbol ? '$' + tokenSymbol : tokenName)}</span>`;
       graphic.insertBefore(titleBar, graphic.firstChild);
 
       const canvas = await html2canvas(graphic, {
@@ -1639,8 +1638,9 @@ const tokenDetail = {
         windowHeight: graphic.scrollHeight,
       });
 
-      // Clean up temporary elements
-      graphic.removeChild(titleBar);
+      // Clean up temporary elements before sharing
+      titleBar.remove();
+      titleBar = null;
       if (watermark) watermark.style.opacity = '';
 
       const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
@@ -1650,7 +1650,12 @@ const tokenDetail = {
         const file = new File([blob], 'holder-analytics.png', { type: 'image/png' });
         const shareData = { files: [file] };
         if (navigator.canShare(shareData)) {
-          await navigator.share(shareData);
+          try {
+            await navigator.share(shareData);
+          } catch (shareErr) {
+            // User cancelled the share dialog — not an error
+            if (shareErr.name !== 'AbortError') throw shareErr;
+          }
           return;
         }
       }
@@ -1675,7 +1680,8 @@ const tokenDetail = {
       console.error('Share holder analytics error:', err);
       if (typeof toast !== 'undefined') toast.error('Failed to capture screenshot');
     } finally {
-      // Restore watermark opacity and re-enable button
+      // Always clean up: remove titleBar if still in DOM, restore watermark
+      if (titleBar && titleBar.parentNode) titleBar.remove();
       const watermark = document.querySelector('#holders-graphic .holders-watermark');
       if (watermark) watermark.style.opacity = '';
       if (btn) { btn.disabled = false; btn.classList.remove('spinning'); }
