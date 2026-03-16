@@ -20,14 +20,18 @@ const convictionPage = {
 
   async loadData() {
     const tbody = document.getElementById('conviction-table-body');
-    if (!tbody) return;
+    if (!tbody || this._loading) return;
+    this._loading = true;
+
+    const _t0 = performance.now();
+    let _ok = true;
 
     tbody.innerHTML = `
       <tr class="loading-row">
         <td colspan="7">
           <div class="loading-state">
             <div class="loading-spinner"></div>
-            <span>Loading conviction leaderboard...</span>
+            <span>Loading diamond hands leaderboard...</span>
           </div>
         </td>
       </tr>
@@ -46,16 +50,20 @@ const convictionPage = {
       this.render();
       this.updatePagination();
     } catch (error) {
+      _ok = false;
       console.error('Conviction load error:', error);
       tbody.innerHTML = `
         <tr class="empty-row">
           <td colspan="7">
             <div class="empty-state">
-              <span>Failed to load conviction leaderboard. Please try again.</span>
+              <span>Failed to load diamond hands leaderboard. Please try again.</span>
             </div>
           </td>
         </tr>
       `;
+    } finally {
+      this._loading = false;
+      if (typeof latencyTracker !== 'undefined') latencyTracker.record('conviction.loadData', performance.now() - _t0, _ok, 'frontend');
     }
   },
 
@@ -104,12 +112,15 @@ const convictionPage = {
       // Last updated timestamp and sample info
       let updatedHtml = '--';
       if (token.convictionUpdatedAt) {
-        const ago = Date.now() - new Date(token.convictionUpdatedAt).getTime();
+        const agoMs = Date.now() - new Date(token.convictionUpdatedAt).getTime();
+        const ago = Math.max(0, agoMs); // guard against future dates / clock drift
         const hours = Math.floor(ago / 3600000);
         const days = Math.floor(hours / 24);
         const timeStr = days > 0 ? `${days}d ago` : hours > 0 ? `${hours}h ago` : 'just now';
         const wallets = token.analyzed || token.sampleSize || 0;
-        updatedHtml = `<span class="conviction-sample" title="${new Date(token.convictionUpdatedAt).toLocaleString()}">${timeStr}<br>${wallets} wallets</span>`;
+        let titleDate = '';
+        try { titleDate = new Date(token.convictionUpdatedAt).toLocaleString(); } catch { /* */ }
+        updatedHtml = `<span class="conviction-sample" title="${utils.escapeHtml(titleDate)}">${timeStr}<br>${wallets} wallets</span>`;
       } else if (token.sampleSize) {
         updatedHtml = `<span class="conviction-sample">${token.analyzed || token.sampleSize} wallets</span>`;
       }

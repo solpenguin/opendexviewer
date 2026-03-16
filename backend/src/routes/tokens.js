@@ -1044,9 +1044,12 @@ router.get('/leaderboard/conviction', asyncHandler(async (req, res) => {
   const { tokens: dbRows, total } = await db.getTopConvictionTokens(limit, offset).catch(() => ({ tokens: [], total: 0 }));
 
   const tokens = dbRows.map(row => {
-    const distribution = typeof row.conviction_data === 'string'
-      ? JSON.parse(row.conviction_data)
-      : row.conviction_data || {};
+    let distribution = {};
+    try {
+      distribution = typeof row.conviction_data === 'string'
+        ? JSON.parse(row.conviction_data)
+        : row.conviction_data || {};
+    } catch { /* malformed JSON — use empty */ }
     return {
       mintAddress: row.mint_address,
       address: row.mint_address,
@@ -2423,7 +2426,9 @@ router.get('/:mint/holders/diamond-hands', validateMint, asyncHandler(async (req
                 if (totalAnalyzed === allWallets.length && allWallets.length > 0) {
                   const finalResult = buildDiamondHandsResult(allHoldTimes, allWallets.length, totalAnalyzed);
                   await cache.set(`diamond-hands:${bgMint}`, finalResult, 3 * TTL.HOUR);
-                  db.upsertConviction(bgMint, finalResult.distribution, finalResult.sampleSize, finalResult.analyzed).catch(() => {});
+                  db.upsertConviction(bgMint, finalResult.distribution, finalResult.sampleSize, finalResult.analyzed).catch(err => {
+                    console.error(`[DiamondHands] Inline DB persist failed for ${bgMint.slice(0, 8)}:`, err.message);
+                  });
                 }
               } catch (persistErr) {
                 console.error(`[DiamondHands] Post-inline persist failed:`, persistErr.message);

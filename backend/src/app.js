@@ -601,7 +601,9 @@ async function warmConviction() {
       try {
         const http = require('http');
         const url = `http://127.0.0.1:${PORT}/api/tokens/${encodeURIComponent(mint)}/holders/diamond-hands`;
-        http.get(url, (res) => { res.resume(); }); // fire and forget
+        const req = http.get(url, (res) => { res.resume(); });
+        req.on('error', () => {}); // suppress socket errors (non-critical)
+        req.setTimeout(15000, () => req.destroy()); // 15s timeout
         triggered++;
       } catch { /* non-critical */ }
     }

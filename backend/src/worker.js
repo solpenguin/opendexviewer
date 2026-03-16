@@ -516,13 +516,14 @@ const jobProcessors = {
       if (allWallets.length > 0) {
         const holdTimes = {};
         let analyzedCount = 0;
-        for (const w of allWallets) {
-          const val = await cache.get(`wallet-token-hold:${w}:${mint}`);
+        const vals = await Promise.all(allWallets.map(w => cache.get(`wallet-token-hold:${w}:${mint}`)));
+        allWallets.forEach((w, i) => {
+          const val = vals[i];
           if (val != null) {
             analyzedCount++;
             if (val > 0) holdTimes[w] = val;
           }
-        }
+        });
         if (analyzedCount === allWallets.length) {
           // Compute distribution using same bucket logic as the endpoint
           const BUCKETS = [

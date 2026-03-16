@@ -161,6 +161,7 @@ async function initializeDatabase() {
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_data JSONB;
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_sample_size INTEGER;
       ALTER TABLE tokens ADD COLUMN IF NOT EXISTS conviction_computed_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_tokens_conviction_1m ON tokens(conviction_1m DESC NULLS LAST) WHERE conviction_1m IS NOT NULL AND conviction_1m > 0;
 
       CREATE TABLE IF NOT EXISTS submissions (
         id SERIAL PRIMARY KEY,
@@ -616,7 +617,7 @@ async function upsertConviction(mintAddress, distribution, sampleSize, analyzed)
        conviction_computed_at = NOW()
      WHERE mint_address = $1
      RETURNING mint_address`,
-    [mintAddress, conviction1m, JSON.stringify(distribution), analyzed || sampleSize]
+    [mintAddress, conviction1m, JSON.stringify(distribution), analyzed != null ? analyzed : sampleSize]
   );
   // If token doesn't exist in DB yet, insert a minimal row
   if (result.rows.length === 0) {
@@ -628,7 +629,7 @@ async function upsertConviction(mintAddress, distribution, sampleSize, analyzed)
          conviction_data = EXCLUDED.conviction_data,
          conviction_sample_size = EXCLUDED.conviction_sample_size,
          conviction_computed_at = NOW()`,
-      [mintAddress, conviction1m, JSON.stringify(distribution), analyzed || sampleSize]
+      [mintAddress, conviction1m, JSON.stringify(distribution), analyzed != null ? analyzed : sampleSize]
     );
   }
 }
