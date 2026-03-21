@@ -4,12 +4,16 @@ const { circuitBreakers } = require('./circuitBreaker');
 const { httpsAgent } = require('./httpAgent');
 
 // GeckoTerminal / CoinGecko Onchain API
-// Free tier: https://api.geckoterminal.com/api/v2 (30 req/min, no key)
-// Paid tier: https://pro-api.coingecko.com/api/v3/onchain (higher limits, key required)
+// Free (no key): https://api.geckoterminal.com/api/v2 (30 req/min)
+// Demo (free key): https://api.coingecko.com/api/v3/onchain (30 req/min, x-cg-demo-api-key)
+// Pro (paid key): https://pro-api.coingecko.com/api/v3/onchain (higher limits, x-cg-pro-api-key)
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || '';
+const COINGECKO_DEMO_API_KEY = process.env.COINGECKO_DEMO_API_KEY || '';
 const GECKO_API = COINGECKO_API_KEY
   ? 'https://pro-api.coingecko.com/api/v3/onchain'
-  : 'https://api.geckoterminal.com/api/v2';
+  : COINGECKO_DEMO_API_KEY
+    ? 'https://api.coingecko.com/api/v3/onchain'
+    : 'https://api.geckoterminal.com/api/v2';
 const NETWORK = 'solana';
 
 /** Ensure no token leaves with null name/symbol — use truncated address as fallback */
@@ -24,6 +28,8 @@ function ensureTokenMetadata(tokens) {
 
 if (COINGECKO_API_KEY) {
   console.log('[GeckoTerminal] Using CoinGecko Pro API (paid tier)');
+} else if (COINGECKO_DEMO_API_KEY) {
+  console.log('[GeckoTerminal] Using CoinGecko Demo API (free tier with key)');
 } else {
   console.log('[GeckoTerminal] Using free GeckoTerminal API (30 req/min)');
 }
@@ -32,6 +38,8 @@ if (COINGECKO_API_KEY) {
 const geckoHeaders = { 'Accept': 'application/json' };
 if (COINGECKO_API_KEY) {
   geckoHeaders['x-cg-pro-api-key'] = COINGECKO_API_KEY;
+} else if (COINGECKO_DEMO_API_KEY) {
+  geckoHeaders['x-cg-demo-api-key'] = COINGECKO_DEMO_API_KEY;
 }
 
 const geckoAxios = axios.create({
