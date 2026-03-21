@@ -1632,11 +1632,11 @@ router.get('/:mint/pools', validateMint, asyncHandler(async (req, res) => {
       return geckoService.getTokenPools(mint, { limit: parseInt(limit) });
     }, TTL.POOLS);
 
-    res.json(pools);
+    if (!res.headersSent) res.json(pools);
   } catch (error) {
     if (error.isOverloaded || error.isCircuitBreakerError) throw error;
     // Privacy: Don't log error details
-    res.status(500).json({ error: 'Failed to fetch pools data' });
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to fetch pools data' });
   }
 }));
 
