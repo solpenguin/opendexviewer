@@ -109,9 +109,12 @@ async function rpcCall(method, params = [], retryCount = 0) {
   const MAX_RETRIES = 2;
 
   try {
-    // Use 429 retry + rate limiter + circuit breaker for each individual RPC attempt
-    return await withRpcRetry(() => rateLimitedRequest('solana', () => circuitBreakers.solanaRpc.execute(async () => {
-      const rpcUrl = getCurrentRpcUrl();
+    // Pick rate limiter key: use 'helius' when talking to a Helius endpoint so all
+    // Helius traffic (RPC + DAS) shares one queue and respects a single rate limit.
+    const rpcUrl = getCurrentRpcUrl();
+    const rateLimiterKey = rpcUrl.includes('helius') ? 'helius' : 'solana';
+
+    return await withRpcRetry(() => rateLimitedRequest(rateLimiterKey, () => circuitBreakers.solanaRpc.execute(async () => {
 
       try {
         const response = await axios.post(rpcUrl, {

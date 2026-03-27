@@ -85,16 +85,24 @@ const RATE_LIMITS = {
     burstWindow: 1000
   },
   helius: {
-    minInterval: 50,     // Minimum 50ms between requests (20 req/sec max)
-    maxJitter: 25,
-    burstLimit: 10,
-    burstWindow: 1000
+    minInterval: 110,    // ~9 req/sec — conservative for Helius shared key
+    maxJitter: 30,
+    burstLimit: 8,
+    burstWindow: 1000,
+    useQueue: true,      // Queue-based to prevent burst overload from parallel DAS calls
+    maxQueueSize: 500,
+    queueTimeout: 20000
   },
   solana: {
-    minInterval: 50,     // Minimum 50ms between requests (20 req/sec max)
-    maxJitter: 25,
-    burstLimit: 10,
-    burstWindow: 1000
+    // NOTE: When using Helius as RPC, callers should use 'helius' key instead
+    // to share the rate limiter. This config is only for public Solana RPC fallback.
+    minInterval: 100,    // 10 req/sec — public Solana RPC is heavily rate-limited
+    maxJitter: 50,
+    burstLimit: 5,
+    burstWindow: 1000,
+    useQueue: true,
+    maxQueueSize: 200,
+    queueTimeout: 15000
   },
   default: {
     minInterval: 100,
