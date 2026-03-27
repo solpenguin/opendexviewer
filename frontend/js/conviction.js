@@ -5,9 +5,17 @@ const convictionPage = {
   pageSize: 25,
   totalItems: 0,
   tokens: [],
+  _searchTimeout: null,
+  _sortField: 'conviction',
+  _sortDir: 'desc',
+  _activeTier: 'all',
+  _activeMcap: null,
 
   init() {
     this.bindPagination();
+    this.bindFilters();
+    this.bindQuickFilters();
+    this.bindSortHeaders();
     this.loadData();
   },
 
@@ -18,10 +26,201 @@ const convictionPage = {
     if (next) next.addEventListener('click', () => this.goToPage(this.currentPage + 1));
   },
 
+  bindFilters() {
+    const search = document.getElementById('conviction-search');
+    const minPct = document.getElementById('conviction-min-pct');
+    const minPctVal = document.getElementById('conviction-min-pct-val');
+    const minSample = document.getElementById('conviction-min-sample');
+    const resetBtn = document.getElementById('conviction-filter-reset');
+
+    if (search) {
+      search.addEventListener('input', () => {
+        clearTimeout(this._searchTimeout);
+        this._searchTimeout = setTimeout(() => this.applyFilters(), 350);
+      });
+      // Focus search on / key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement !== search) {
+          e.preventDefault();
+          search.focus();
+        }
+      });
+    }
+    if (minPct) {
+      minPct.addEventListener('input', () => {
+        if (minPctVal) minPctVal.textContent = `${minPct.value}%`;
+      });
+      minPct.addEventListener('change', () => this.applyFilters());
+    }
+    if (minSample) minSample.addEventListener('change', () => this.applyFilters());
+    if (resetBtn) resetBtn.addEventListener('click', () => this.resetFilters());
+  },
+
+  bindQuickFilters() {
+    const container = document.getElementById('terminal-quick-filters');
+    if (!container) return;
+
+    container.addEventListener('click', (e) => {
+      const pill = e.target.closest('.terminal-pill');
+      if (!pill) return;
+
+      const tier = pill.dataset.tier;
+      const mcap = pill.dataset.mcap;
+
+      if (tier) {
+        // Tier pills are exclusive within their group
+        container.querySelectorAll('[data-tier]').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        this._activeTier = tier;
+
+        // Set the min conviction slider based on tier
+        const minPct = document.getElementById('conviction-min-pct');
+        const minPctVal = document.getElementById('conviction-min-pct-val');
+        const tierMap = { all: 0, elite: 75, high: 50, mid: 25, low: 0 };
+        if (minPct) {
+          minPct.value = tierMap[tier] || 0;
+          if (minPctVal) minPctVal.textContent = `${minPct.value}%`;
+        }
+        // For "low" tier, we need special handling (maxConviction)
+        this.applyFilters();
+      }
+
+      if (mcap) {
+        // MCap pills toggle
+        const isActive = pill.classList.contains('active');
+        container.querySelectorAll('[data-mcap]').forEach(p => p.classList.remove('active'));
+
+        const mcapSelect = document.getElementById('conviction-mcap');
+        if (isActive) {
+          // Deactivate
+          this._activeMcap = null;
+          if (mcapSelect) mcapSelect.value = '';
+        } else {
+          pill.classList.add('active');
+          this._activeMcap = mcap;
+          const mcapMap = {
+            micro: '0-100000',
+            small: '100000-1000000',
+            mid: '1000000-10000000',
+            large: '10000000-'
+          };
+          if (mcapSelect) mcapSelect.value = mcapMap[mcap] || '';
+        }
+        this.applyFilters();
+      }
+    });
+  },
+
+  bindSortHeaders() {
+    document.querySelectorAll('.terminal-table th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const field = th.dataset.sort;
+        if (this._sortField === field) {
+          this._sortDir = this._sortDir === 'desc' ? 'asc' : 'desc';
+        } else {
+          this._sortField = field;
+          this._sortDir = 'desc';
+        }
+        this.updateSortIndicators();
+        this.sortAndRender();
+      });
+    });
+  },
+
+  updateSortIndicators() {
+    document.querySelectorAll('.terminal-table th.sortable').forEach(th => {
+      const arrow = th.querySelector('.sort-arrow');
+      th.classList.remove('active-sort');
+      if (arrow) {
+        arrow.classList.remove('asc', 'desc');
+      }
+      if (th.dataset.sort === this._sortField) {
+        th.classList.add('active-sort');
+        if (arrow) arrow.classList.add(this._sortDir);
+      }
+    });
+  },
+
+  sortAndRender() {
+    const field = this._sortField;
+    const dir = this._sortDir === 'asc' ? 1 : -1;
+
+    this.tokens.sort((a, b) => {
+      let va, vb;
+      switch (field) {
+        case 'rank': return 0; // Server-sorted, use original order
+        case 'price': va = a.price || 0; vb = b.price || 0; break;
+        case 'mcap': va = a.marketCap || 0; vb = b.marketCap || 0; break;
+        case 'conviction': va = a.conviction1m || 0; vb = b.conviction1m || 0; break;
+        case 'sample': va = a.analyzed || a.sampleSize || 0; vb = b.analyzed || b.sampleSize || 0; break;
+        default: return 0;
+      }
+      return (va - vb) * dir;
+    });
+    this.render();
+  },
+
+  getFilters() {
+    const params = {};
+    const search = document.getElementById('conviction-search');
+    const minPct = document.getElementById('conviction-min-pct');
+    const mcap = document.getElementById('conviction-mcap');
+    const minSample = document.getElementById('conviction-min-sample');
+
+    if (search && search.value.trim()) params.search = search.value.trim();
+    if (minPct && parseInt(minPct.value) > 0) params.minConviction = minPct.value;
+    if (mcap && mcap.value) {
+      const [min, max] = mcap.value.split('-');
+      if (min) params.minMcap = min;
+      if (max) params.maxMcap = max;
+    }
+    if (minSample && minSample.value) params.minSample = minSample.value;
+    return params;
+  },
+
+  applyFilters() {
+    this.currentPage = 1;
+    this.loadData();
+    const resetBtn = document.getElementById('conviction-filter-reset');
+    const hasFilters = Object.keys(this.getFilters()).length > 0 || this._activeTier !== 'all' || this._activeMcap;
+    if (resetBtn) resetBtn.style.display = hasFilters ? '' : 'none';
+  },
+
+  resetFilters() {
+    const search = document.getElementById('conviction-search');
+    const minPct = document.getElementById('conviction-min-pct');
+    const minPctVal = document.getElementById('conviction-min-pct-val');
+    const mcap = document.getElementById('conviction-mcap');
+    const minSample = document.getElementById('conviction-min-sample');
+    const resetBtn = document.getElementById('conviction-filter-reset');
+
+    if (search) search.value = '';
+    if (minPct) { minPct.value = 0; if (minPctVal) minPctVal.textContent = '0%'; }
+    if (mcap) mcap.value = '';
+    if (minSample) minSample.value = '';
+    if (resetBtn) resetBtn.style.display = 'none';
+
+    // Reset pills
+    this._activeTier = 'all';
+    this._activeMcap = null;
+    const container = document.getElementById('terminal-quick-filters');
+    if (container) {
+      container.querySelectorAll('.terminal-pill').forEach(p => p.classList.remove('active'));
+      const allPill = container.querySelector('[data-tier="all"]');
+      if (allPill) allPill.classList.add('active');
+    }
+
+    this.currentPage = 1;
+    this.loadData();
+  },
+
   async loadData() {
     const tbody = document.getElementById('conviction-table-body');
     if (!tbody || this._loading) return;
     this._loading = true;
+
+    const statusEl = document.getElementById('terminal-status-text');
+    if (statusEl) { statusEl.textContent = 'LOADING...'; statusEl.parentElement.classList.add('loading'); }
 
     const _t0 = performance.now();
     let _ok = true;
@@ -31,7 +230,7 @@ const convictionPage = {
         <td colspan="7">
           <div class="loading-state">
             <div class="loading-spinner"></div>
-            <span>Loading diamond hands leaderboard...</span>
+            <span>Scanning blockchain data...</span>
           </div>
         </td>
       </tr>
@@ -40,23 +239,33 @@ const convictionPage = {
     try {
       const params = {
         limit: this.pageSize,
-        offset: (this.currentPage - 1) * this.pageSize
+        offset: (this.currentPage - 1) * this.pageSize,
+        ...this.getFilters()
       };
 
       const result = await api.tokens.leaderboardConviction(params);
       this.tokens = result.tokens || [];
       this.totalItems = result.total || 0;
 
-      this.render();
+      // Client-side filter for "low" tier (< 25%)
+      if (this._activeTier === 'low') {
+        this.tokens = this.tokens.filter(t => (t.conviction1m || 0) < 25);
+      }
+
+      this.updateTerminalStats();
+      this.sortAndRender();
       this.updatePagination();
+
+      if (statusEl) { statusEl.textContent = 'LIVE'; statusEl.parentElement.classList.remove('loading'); }
     } catch (error) {
       _ok = false;
       console.error('Conviction load error:', error);
+      if (statusEl) { statusEl.textContent = 'ERROR'; statusEl.parentElement.classList.add('error'); }
       tbody.innerHTML = `
         <tr class="empty-row">
           <td colspan="7">
             <div class="empty-state">
-              <span>Failed to load diamond hands leaderboard. Please try again.</span>
+              <span>Failed to load terminal data. Please try again.</span>
             </div>
           </td>
         </tr>
@@ -64,6 +273,32 @@ const convictionPage = {
     } finally {
       this._loading = false;
       if (typeof latencyTracker !== 'undefined') latencyTracker.record('conviction.loadData', performance.now() - _t0, _ok, 'frontend');
+    }
+  },
+
+  updateTerminalStats() {
+    const totalEl = document.getElementById('stat-total');
+    const avgEl = document.getElementById('stat-avg-conviction');
+    const pageEl = document.getElementById('stat-page');
+    const showingEl = document.getElementById('stat-showing');
+    const totalPages = Math.max(1, Math.ceil(this.totalItems / this.pageSize));
+
+    if (totalEl) totalEl.textContent = this.totalItems.toLocaleString();
+    if (pageEl) pageEl.textContent = `${this.currentPage}/${totalPages}`;
+
+    const start = (this.currentPage - 1) * this.pageSize + 1;
+    const end = Math.min(this.currentPage * this.pageSize, this.totalItems);
+    if (showingEl) showingEl.textContent = this.totalItems > 0 ? `${start}-${end}` : '0';
+
+    if (avgEl && this.tokens.length > 0) {
+      const avg = this.tokens.reduce((sum, t) => sum + (t.conviction1m || 0), 0) / this.tokens.length;
+      avgEl.textContent = `${avg.toFixed(1)}%`;
+      avgEl.className = 'terminal-stat-value';
+      if (avg >= 50) avgEl.classList.add('stat-high');
+      else if (avg >= 25) avgEl.classList.add('stat-mid');
+      else avgEl.classList.add('stat-low');
+    } else if (avgEl) {
+      avgEl.textContent = '--';
     }
   },
 
@@ -76,8 +311,8 @@ const convictionPage = {
         <tr class="empty-row">
           <td colspan="7">
             <div class="empty-state">
-              <span style="font-size: 2.5rem; margin-bottom: 0.75rem;">💎</span>
-              <span>No diamond hands data available yet. Visit token pages to trigger holder analysis.</span>
+              <span style="font-size: 1.5rem; margin-bottom: 0.5rem; opacity: 0.4;">NO DATA</span>
+              <span>No tokens match current filters. Adjust filters or visit token pages to trigger analysis.</span>
             </div>
           </td>
         </tr>
@@ -100,33 +335,43 @@ const convictionPage = {
 
       // Conviction percentage
       const conviction1m = token.conviction1m != null ? token.conviction1m : 0;
-      const convictionClass = conviction1m >= 50 ? 'conviction-high'
+      const convictionClass = conviction1m >= 75 ? 'conviction-elite'
+        : conviction1m >= 50 ? 'conviction-high'
         : conviction1m >= 25 ? 'conviction-medium'
         : 'conviction-low';
-      const diamondPrefix = conviction1m >= 75 ? '💎💎 ' : conviction1m >= 50 ? '💎 ' : '';
 
-      // Mini bar distribution for key buckets
+      // Conviction tier badge
+      const tierBadge = conviction1m >= 75 ? '<span class="tier-badge tier-elite">ELITE</span>'
+        : conviction1m >= 50 ? '<span class="tier-badge tier-high">HIGH</span>'
+        : conviction1m >= 25 ? '<span class="tier-badge tier-mid">MID</span>'
+        : '<span class="tier-badge tier-low">LOW</span>';
+
+      // Mini bar distribution
       const dist = token.conviction || {};
       const barsHtml = this.renderMiniBars(dist);
 
-      // Last updated timestamp and sample info
-      let updatedHtml = '--';
+      // Sample info
+      let sampleHtml = '--';
       if (token.convictionUpdatedAt) {
         const agoMs = Date.now() - new Date(token.convictionUpdatedAt).getTime();
-        const ago = Math.max(0, agoMs); // guard against future dates / clock drift
+        const ago = Math.max(0, agoMs);
         const hours = Math.floor(ago / 3600000);
         const days = Math.floor(hours / 24);
-        const timeStr = days > 0 ? `${days}d ago` : hours > 0 ? `${hours}h ago` : 'just now';
+        const timeStr = days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : 'now';
         const wallets = token.analyzed || token.sampleSize || 0;
         let titleDate = '';
         try { titleDate = new Date(token.convictionUpdatedAt).toLocaleString(); } catch { /* */ }
-        updatedHtml = `<span class="conviction-sample" title="${utils.escapeHtml(titleDate)}">${timeStr}<br>${wallets} wallets</span>`;
+        sampleHtml = `<span class="terminal-sample" title="${utils.escapeHtml(titleDate)}"><span class="sample-count">${wallets}</span> <span class="sample-time">${timeStr}</span></span>`;
       } else if (token.sampleSize) {
-        updatedHtml = `<span class="conviction-sample">${token.analyzed || token.sampleSize} wallets</span>`;
+        sampleHtml = `<span class="terminal-sample"><span class="sample-count">${token.analyzed || token.sampleSize}</span></span>`;
       }
 
+      // Format price with color
+      const priceStr = utils.formatPrice(token.price, 6);
+      const mcapStr = utils.formatNumber(token.marketCap, '$');
+
       return `
-        <tr class="token-row" data-mint="${safeAddress}">
+        <tr class="token-row terminal-row" data-mint="${safeAddress}">
           <td class="cell-rank">${rank}</td>
           <td class="cell-token cell-token-clickable" data-navigate="${safeAddress}">
             <div class="token-cell">
@@ -137,13 +382,16 @@ const convictionPage = {
               </div>
             </div>
           </td>
-          <td class="cell-price" data-navigate="${safeAddress}">${utils.formatPrice(token.price, 6)}</td>
-          <td class="cell-mcap" data-navigate="${safeAddress}">${utils.formatNumber(token.marketCap, '$')}</td>
+          <td class="cell-price mono-num" data-navigate="${safeAddress}">${priceStr}</td>
+          <td class="cell-mcap mono-num" data-navigate="${safeAddress}">${mcapStr}</td>
           <td class="cell-conviction ${convictionClass}" data-navigate="${safeAddress}">
-            <span class="conviction-pct">${diamondPrefix}${conviction1m.toFixed(1)}%</span>
+            <div class="conviction-cell">
+              <span class="conviction-pct">${conviction1m.toFixed(1)}%</span>
+              ${tierBadge}
+            </div>
           </td>
           <td class="cell-conviction-bars" data-navigate="${safeAddress}">${barsHtml}</td>
-          <td class="cell-updated" data-navigate="${safeAddress}">${updatedHtml}</td>
+          <td class="cell-updated" data-navigate="${safeAddress}">${sampleHtml}</td>
         </tr>
       `;
     }).join('');
@@ -172,13 +420,14 @@ const convictionPage = {
       { key: '1w', label: '1w' },
       { key: '1m', label: '1m' }
     ];
-    const maxH = 24; // px - matches .conviction-mini-bar height
+    const maxH = 28;
 
-    return `<div class="conviction-mini-bars">${buckets.map(b => {
+    return `<div class="conviction-mini-bars terminal-bars">${buckets.map(b => {
       const val = dist[b.key] || 0;
       const h = Math.max(1, Math.round((val / 100) * maxH));
+      const colorClass = val >= 50 ? 'bar-high' : val >= 25 ? 'bar-mid' : 'bar-low';
       return `<div class="conviction-mini-bar" title="${b.label}: ${val.toFixed(1)}%">
-        <div class="conviction-mini-fill" style="height:${h}px"></div>
+        <div class="conviction-mini-fill ${colorClass}" style="height:${h}px"></div>
         <span class="conviction-mini-label">${b.label}</span>
       </div>`;
     }).join('')}</div>`;

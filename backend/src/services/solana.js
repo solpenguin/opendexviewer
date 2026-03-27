@@ -68,13 +68,49 @@ const RPC_URL = RPC_ENDPOINTS[0];
 const HELIUS_HEADERS = HELIUS_API_KEY ? { 'x-api-key': HELIUS_API_KEY } : {};
 const HELIUS_DAS_URL = HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : null;
 
-// Make RPC call with circuit breaker, failover, and retry logic
+// 429 retry configuration for RPC and Helius DAS calls
+const RPC_RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 2000,       // 2s initial delay (faster than GeckoTerminal since RPC is critical path)
+  maxDelay: 15000,       // 15s max delay
+  backoffMultiplier: 2   // Exponential backoff: 2s → 4s → 8s
+};
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+/**
+ * Wrap a request function with 429 retry + exponential backoff.
+ * Non-429 errors are thrown immediately.
+ */
+async function withRpcRetry(requestFn, context = 'rpc') {
+  let lastError;
+  for (let attempt = 0; attempt <= RPC_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+      if (error.response?.status !== 429) throw error;
+      if (attempt === RPC_RETRY_CONFIG.maxRetries) {
+        console.error(`[Solana] ${context}: Max retries (${RPC_RETRY_CONFIG.maxRetries}) exceeded for 429`);
+        throw error;
+      }
+      const baseDelay = RPC_RETRY_CONFIG.baseDelay * Math.pow(RPC_RETRY_CONFIG.backoffMultiplier, attempt);
+      const jitter = Math.random() * 1000;
+      const delay = Math.min(baseDelay + jitter, RPC_RETRY_CONFIG.maxDelay);
+      console.log(`[Solana] ${context}: Rate limited (429), retry ${attempt + 1}/${RPC_RETRY_CONFIG.maxRetries} after ${Math.round(delay)}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
+// Make RPC call with circuit breaker, failover, retry, and 429 backoff
 async function rpcCall(method, params = [], retryCount = 0) {
   const MAX_RETRIES = 2;
 
   try {
-    // Use rate limiter + circuit breaker for each individual RPC attempt
-    return await rateLimitedRequest('solana', () => circuitBreakers.solanaRpc.execute(async () => {
+    // Use 429 retry + rate limiter + circuit breaker for each individual RPC attempt
+    return await withRpcRetry(() => rateLimitedRequest('solana', () => circuitBreakers.solanaRpc.execute(async () => {
       const rpcUrl = getCurrentRpcUrl();
 
       try {
@@ -111,7 +147,7 @@ async function rpcCall(method, params = [], retryCount = 0) {
 
         throw error;
       }
-    }));
+    })), method);
   } catch (error) {
     // Handle connection errors with failover OUTSIDE circuit breaker
     // to prevent double-counting failures on retry
@@ -237,7 +273,7 @@ async function getTokenHolderCount(mintAddress) {
     // Use Helius DAS API getTokenAccounts method
     // The 'total' field returns the count of all matching token accounts
     // Using limit: 1 to minimize response size while still getting the total
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.post(HELIUS_DAS_URL, {
         jsonrpc: '2.0',
         id: 'holder-count',
@@ -252,7 +288,7 @@ async function getTokenHolderCount(mintAddress) {
         headers: HELIUS_HEADERS,
         httpsAgent
       })
-    );
+    ), 'getTokenHolderCount');
 
     if (response.data.error) {
       console.error('[Solana] Helius DAS error:', response.data.error.message);
@@ -305,7 +341,7 @@ async function getTokenMetadata(mintAddress) {
   try {
     console.log(`[Solana] Fetching token metadata for ${mintAddress}`);
 
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.post(HELIUS_DAS_URL, {
         jsonrpc: '2.0',
         id: 'token-metadata',
@@ -321,7 +357,7 @@ async function getTokenMetadata(mintAddress) {
         headers: HELIUS_HEADERS,
         httpsAgent
       })
-    );
+    ), 'getTokenMetadata');
 
     if (response.data.error) {
       console.error('[Solana] Helius getAsset error:', response.data.error.message);
@@ -480,7 +516,7 @@ async function getTokenMetadataBatch(mintAddresses) {
     if (addresses.length === 0) return {};
     console.log(`[Solana] Fetching batch token metadata for ${addresses.length} tokens`);
 
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.post(HELIUS_DAS_URL, {
         jsonrpc: '2.0',
         id: 'token-metadata-batch',
@@ -496,7 +532,7 @@ async function getTokenMetadataBatch(mintAddresses) {
         headers: HELIUS_HEADERS,
         httpsAgent
       })
-    );
+    ), 'getTokenMetadataBatch');
 
     if (response.data.error) {
       console.error('[Solana] Helius getAssetBatch error:', response.data.error.message);
@@ -586,7 +622,7 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
   if (!HELIUS_DAS_URL) return null;
 
   try {
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.post(HELIUS_DAS_URL, {
         jsonrpc: '2.0',
         id: 'largest-holders',
@@ -602,7 +638,7 @@ async function getTokenLargestAccountsDAS(mintAddress, decimals = 0) {
         headers: HELIUS_HEADERS,
         httpsAgent
       })
-    );
+    ), 'getTokenLargestAccountsDAS');
 
     if (response.data.error) {
       console.error('[Solana] DAS getTokenAccounts error:', response.data.error.message);
@@ -645,7 +681,7 @@ async function getTokenHolderSample(mintAddress, count = 250, excludeAddresses =
   if (!HELIUS_DAS_URL) return null;
 
   try {
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.post(HELIUS_DAS_URL, {
         jsonrpc: '2.0',
         id: 'holder-sample',
@@ -661,7 +697,7 @@ async function getTokenHolderSample(mintAddress, count = 250, excludeAddresses =
         headers: HELIUS_HEADERS,
         httpsAgent
       })
-    );
+    ), 'getTokenHolderSample');
 
     if (response.data.error) {
       console.error('[Solana] getTokenHolderSample DAS error:', response.data.error.message);
@@ -701,14 +737,14 @@ async function getTokenHolderSample(mintAddress, count = 250, excludeAddresses =
 async function getTokenAuthorities(mintAddress) {
   if (!HELIUS_DAS_URL) return null;
   try {
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.post(HELIUS_DAS_URL, {
         jsonrpc: '2.0',
         id: 'token-auth',
         method: 'getAsset',
         params: { id: mintAddress }
       }, { timeout: 8000, headers: HELIUS_HEADERS, httpsAgent })
-    );
+    ), 'getTokenAuthorities');
 
     if (response.data.error || !response.data.result) return null;
     const asset = response.data.result;
@@ -742,12 +778,12 @@ async function getTransactionsForAddress(walletAddress, { limit = 100, type } = 
     const params = { 'api-key': HELIUS_API_KEY, limit };
     if (type) params.type = type;
 
-    const response = await rateLimitedRequest('helius', () =>
+    const response = await withRpcRetry(() => rateLimitedRequest('helius', () =>
       axios.get(
         `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions`,
         { params, timeout: 10000, httpsAgent }
       )
-    );
+    ), 'getTransactionsForAddress');
 
     if (!response.data || !Array.isArray(response.data)) {
       console.warn(`[Solana] getTransactionsForAddress: unexpected response for ${walletAddress.slice(0, 8)}...`);

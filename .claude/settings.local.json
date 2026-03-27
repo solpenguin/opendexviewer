@@ -132,7 +132,8 @@
       "Bash(grep -rn 'nav-dropdown-item.*>Conviction<' frontend/*.html)",
       "Bash(for file:*)",
       "Bash(sed -i 's|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item\"\">Conviction</a>|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item\"\">💎 Diamond Hands</a>|g' \"$file\")",
-      "Bash(sed -i 's|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item active\"\">Conviction</a>|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item active\"\">💎 Diamond Hands</a>|g' \"$file\")"
+      "Bash(sed -i 's|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item active\"\">Conviction</a>|<a href=\"\"conviction.html\"\" class=\"\"nav-dropdown-item active\"\">💎 Diamond Hands</a>|g' \"$file\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

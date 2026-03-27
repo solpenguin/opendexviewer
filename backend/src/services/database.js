@@ -635,10 +635,45 @@ async function upsertConviction(mintAddress, distribution, sampleSize, analyzed)
 }
 
 // Get top tokens by conviction (>1M diamond hands percentage)
-async function getTopConvictionTokens(limit = 25, offset = 0) {
+async function getTopConvictionTokens(limit = 25, offset = 0, filters = {}) {
   if (!pool) return { tokens: [], total: 0 };
+
+  const conditions = ['conviction_1m IS NOT NULL', 'conviction_1m > 0'];
+  const params = [];
+  let paramIndex = 1;
+
+  if (filters.minConviction != null) {
+    conditions.push(`conviction_1m >= $${paramIndex}`);
+    params.push(filters.minConviction);
+    paramIndex++;
+  }
+  if (filters.minMcap != null) {
+    conditions.push(`market_cap >= $${paramIndex}`);
+    params.push(filters.minMcap);
+    paramIndex++;
+  }
+  if (filters.maxMcap != null) {
+    conditions.push(`market_cap <= $${paramIndex}`);
+    params.push(filters.maxMcap);
+    paramIndex++;
+  }
+  if (filters.minSample != null) {
+    conditions.push(`conviction_sample_size >= $${paramIndex}`);
+    params.push(filters.minSample);
+    paramIndex++;
+  }
+  if (filters.search) {
+    conditions.push(`(LOWER(name) LIKE $${paramIndex} OR LOWER(symbol) LIKE $${paramIndex})`);
+    const escaped = filters.search.replace(/[%_\\]/g, '\\$&');
+    params.push(`%${escaped.toLowerCase()}%`);
+    paramIndex++;
+  }
+
+  const whereClause = conditions.join(' AND ');
+
   const countResult = await pool.query(
-    'SELECT COUNT(*) FROM tokens WHERE conviction_1m IS NOT NULL AND conviction_1m > 0'
+    `SELECT COUNT(*) FROM tokens WHERE ${whereClause}`,
+    params
   );
   const total = parseInt(countResult.rows[0].count) || 0;
 
@@ -646,10 +681,10 @@ async function getTopConvictionTokens(limit = 25, offset = 0) {
     `SELECT mint_address, name, symbol, logo_uri, price, market_cap, volume_24h, price_change_24h,
             conviction_1m, conviction_data, conviction_sample_size, conviction_computed_at
      FROM tokens
-     WHERE conviction_1m IS NOT NULL AND conviction_1m > 0
+     WHERE ${whereClause}
      ORDER BY conviction_1m DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
+     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+    [...params, limit, offset]
   );
   return { tokens: result.rows, total };
 }

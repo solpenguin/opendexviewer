@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Conviction - OpenDex</title>
-  <meta name="description" content="Top tokens ranked by holder conviction. See which Solana tokens have the strongest diamond hands.">
+  <title>Diamond Hands Terminal - OpenDex</title>
+  <meta name="description" content="Trading terminal for Diamond Hands conviction data. Filter, sort, and analyze Solana tokens by holder conviction.">
   <meta name="theme-color" content="#07080a">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OpenDex">
-  <meta property="og:title" content="Conviction - OpenDex">
-  <meta property="og:description" content="Top tokens ranked by holder conviction. See which Solana tokens have the strongest diamond hands.">
+  <meta property="og:title" content="Diamond Hands Terminal - OpenDex">
+  <meta property="og:description" content="Trading terminal for Diamond Hands conviction data. Filter, sort, and analyze Solana tokens by holder conviction.">
   <meta property="og:image" content="https://opendex.online/OpenDexColoredBanner.png">
   <meta property="og:url" content="https://opendex.online/conviction.html">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Conviction - OpenDex">
-  <meta name="twitter:description" content="Top tokens ranked by holder conviction. See which Solana tokens have the strongest diamond hands.">
+  <meta name="twitter:title" content="Diamond Hands Terminal - OpenDex">
+  <meta name="twitter:description" content="Trading terminal for Diamond Hands conviction data. Filter, sort, and analyze Solana tokens by holder conviction.">
   <meta name="twitter:image" content="https://opendex.online/OpenDexColoredBanner.png">
 
   <!-- Favicon -->
@@ -56,7 +56,7 @@
           <a href="#" class="nav-link nav-dropdown-toggle active">Utilities <svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
           <div class="nav-dropdown-menu">
             <a href="community.html" class="nav-dropdown-item">Community</a>
-            <a href="conviction.html" class="nav-dropdown-item active">💎 Diamond Hands</a>
+            <a href="conviction.html" class="nav-dropdown-item active">Diamond Hands</a>
             <a href="hackathon.html" class="nav-dropdown-item">Hackathon</a>
             <a href="ogfinder.html" class="nav-dropdown-item">OG Finder</a>
             <a href="spikes.html" class="nav-dropdown-item">Spike Detector</a>
@@ -95,34 +95,107 @@
   </header>
   <div id="announcement-banner"></div>
 
-  <main class="main conviction-page">
-    <!-- Hero -->
-    <section class="submit-hero conviction-hero">
-      <div class="submit-hero-icon">
-        <span style="font-size: 2.5rem; line-height: 1;">💎</span>
+  <main class="main conviction-page terminal-page">
+    <!-- Terminal Header -->
+    <div class="terminal-header">
+      <div class="terminal-title-row">
+        <div class="terminal-title">
+          <span class="terminal-diamond">&#x25C6;</span>
+          <span class="terminal-name">DIAMOND HANDS</span>
+          <span class="terminal-tag">TERMINAL</span>
+        </div>
+        <div class="terminal-status">
+          <span class="terminal-dot"></span>
+          <span id="terminal-status-text">CONNECTING...</span>
+        </div>
       </div>
-      <h1>💎 Diamond Hands 💎</h1>
-      <p>Tokens ranked by holder conviction &mdash; the percentage of sampled holders who have held for over 1 month</p>
-    </section>
+      <div class="terminal-stats" id="terminal-stats">
+        <div class="terminal-stat">
+          <span class="terminal-stat-label">TOKENS</span>
+          <span class="terminal-stat-value" id="stat-total">--</span>
+        </div>
+        <div class="terminal-stat">
+          <span class="terminal-stat-label">AVG CONVICTION</span>
+          <span class="terminal-stat-value" id="stat-avg-conviction">--</span>
+        </div>
+        <div class="terminal-stat">
+          <span class="terminal-stat-label">PAGE</span>
+          <span class="terminal-stat-value" id="stat-page">--</span>
+        </div>
+        <div class="terminal-stat">
+          <span class="terminal-stat-label">SHOWING</span>
+          <span class="terminal-stat-value" id="stat-showing">--</span>
+        </div>
+      </div>
+    </div>
 
-    <!-- Leaderboard -->
-    <section class="community-section conviction-section">
-      <div class="conviction-info">
-        <span>💎</span>
-        <span>Only tokens with computed holder conviction data appear here. Visit a token's page to trigger analysis.</span>
+    <!-- Terminal Controls -->
+    <section class="community-section conviction-section terminal-section">
+      <!-- Quick Filter Pills -->
+      <div class="terminal-quick-filters" id="terminal-quick-filters">
+        <button class="terminal-pill active" data-tier="all">ALL</button>
+        <button class="terminal-pill pill-elite" data-tier="elite">ELITE 75%+</button>
+        <button class="terminal-pill pill-high" data-tier="high">HIGH 50%+</button>
+        <button class="terminal-pill pill-mid" data-tier="mid">MID 25%+</button>
+        <button class="terminal-pill pill-low" data-tier="low">LOW &lt;25%</button>
+        <div class="terminal-pill-separator"></div>
+        <button class="terminal-pill pill-mcap" data-mcap="micro">MICRO &lt;$100K</button>
+        <button class="terminal-pill pill-mcap" data-mcap="small">SMALL $100K-$1M</button>
+        <button class="terminal-pill pill-mcap" data-mcap="mid">MID $1M-$10M</button>
+        <button class="terminal-pill pill-mcap" data-mcap="large">LARGE $10M+</button>
       </div>
 
-      <div class="community-table-container">
-        <table class="token-table community-table conviction-table">
+      <!-- Search + Advanced Filters Row -->
+      <div class="terminal-controls">
+        <div class="terminal-search-wrap">
+          <svg class="terminal-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="conviction-search" placeholder="Search token..." maxlength="100" autocomplete="off" class="terminal-search">
+        </div>
+        <div class="terminal-filter-group">
+          <label>MIN CONVICTION</label>
+          <div class="terminal-range-wrap">
+            <input type="range" id="conviction-min-pct" min="0" max="100" step="5" value="0">
+            <span id="conviction-min-pct-val" class="terminal-range-val">0%</span>
+          </div>
+        </div>
+        <div class="terminal-filter-group">
+          <label>MIN SAMPLE</label>
+          <select id="conviction-min-sample" class="terminal-select">
+            <option value="">Any</option>
+            <option value="10">10+</option>
+            <option value="25">25+</option>
+            <option value="50">50+</option>
+            <option value="100">100+</option>
+          </select>
+        </div>
+        <button class="terminal-clear-btn" id="conviction-filter-reset" style="display:none;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          CLEAR
+        </button>
+      </div>
+
+      <!-- Hidden select for mcap (used by JS) -->
+      <select id="conviction-mcap" style="display:none;">
+        <option value="">Any</option>
+        <option value="0-100000">Under $100K</option>
+        <option value="100000-1000000">$100K - $1M</option>
+        <option value="1000000-10000000">$1M - $10M</option>
+        <option value="10000000-100000000">$10M - $100M</option>
+        <option value="100000000-">$100M+</option>
+      </select>
+
+      <!-- Data Table -->
+      <div class="community-table-container terminal-table-container">
+        <table class="token-table community-table conviction-table terminal-table">
           <thead>
             <tr>
-              <th class="cell-rank">#</th>
+              <th class="cell-rank sortable" data-sort="rank">#</th>
               <th class="cell-token">Token</th>
-              <th class="cell-price">Price</th>
-              <th class="cell-mcap">Market Cap</th>
-              <th class="cell-conviction">💎 &gt;1M</th>
+              <th class="cell-price sortable" data-sort="price">Price <span class="sort-arrow"></span></th>
+              <th class="cell-mcap sortable" data-sort="mcap">MCap <span class="sort-arrow"></span></th>
+              <th class="cell-conviction sortable active-sort" data-sort="conviction">CONVICTION <span class="sort-arrow desc"></span></th>
               <th class="cell-conviction-bars">Distribution</th>
-              <th class="cell-updated">Sample</th>
+              <th class="cell-updated sortable" data-sort="sample">Sample <span class="sort-arrow"></span></th>
             </tr>
           </thead>
           <tbody id="conviction-table-body">
@@ -130,7 +203,7 @@
               <td colspan="7">
                 <div class="loading-state">
                   <div class="loading-spinner"></div>
-                  <span>Loading conviction leaderboard...</span>
+                  <span>Initializing terminal...</span>
                 </div>
               </td>
             </tr>
@@ -139,7 +212,7 @@
       </div>
 
       <!-- Pagination -->
-      <div class="pagination" id="conviction-pagination" style="display: none;">
+      <div class="pagination terminal-pagination" id="conviction-pagination" style="display: none;">
         <div class="pagination-left"></div>
         <div class="pagination-center">
           <button id="conviction-prev" class="pagination-arrow" disabled title="Previous page">

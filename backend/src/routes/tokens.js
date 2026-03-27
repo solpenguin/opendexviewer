@@ -1036,12 +1036,20 @@ router.get('/leaderboard/conviction', asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 25), 100);
   const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
-  const resultCacheKey = `leaderboard:conviction:${limit}:${offset}`;
+  const filters = {};
+  if (req.query.minConviction != null) filters.minConviction = Math.max(0, Math.min(100, parseFloat(req.query.minConviction) || 0));
+  if (req.query.minMcap != null) filters.minMcap = Math.max(0, parseFloat(req.query.minMcap) || 0);
+  if (req.query.maxMcap != null) filters.maxMcap = Math.max(0, parseFloat(req.query.maxMcap) || 0);
+  if (req.query.minSample != null) filters.minSample = Math.max(0, parseInt(req.query.minSample) || 0);
+  if (req.query.search) filters.search = req.query.search.slice(0, 100);
+
+  const filterKey = JSON.stringify(filters);
+  const resultCacheKey = `leaderboard:conviction:${limit}:${offset}:${filterKey}`;
   const cached = await cache.get(resultCacheKey);
   if (cached) return res.json(cached);
 
   // Primary source: DB (persistent, survives cache expiry)
-  const { tokens: dbRows, total } = await db.getTopConvictionTokens(limit, offset).catch(() => ({ tokens: [], total: 0 }));
+  const { tokens: dbRows, total } = await db.getTopConvictionTokens(limit, offset, filters).catch(() => ({ tokens: [], total: 0 }));
 
   const tokens = dbRows.map(row => {
     let distribution = {};
